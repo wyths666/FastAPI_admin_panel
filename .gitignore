@@ -1,0 +1,38 @@
+# Project cache
+**/.idea/
+**/__pycache__/
+
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+docs/
+.junie/
+wheels/
+*.egg-info
+
+.DS_Store
+
+# Old versions and tests
+**/trash/
+
+# Environment
+**/.venv/
+**/node_modules/
+*.env
+!.env
+redis.conf
+
+# Logs folders
+logs/*
+!logs/.gitkeep
+
+# Envs folder
+secrets/envs/*
+!secrets/envs/.gitkeep
+
+# JWT Folder
+secrets/jwt/*
+!secrets/jwt/.gitkeep
+/.env

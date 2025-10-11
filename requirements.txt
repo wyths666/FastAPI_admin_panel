@@ -1,0 +1,21 @@
+# Bot
+aiogram~=3.18.0
+# Postgres
+SQLAlchemy~=2.0.38
+asyncpg~=0.30.0
+# Redis
+redis-om~=0.3.3
+redis~=5.2.1
+# Mongo
+beanie~=1.29.0
+motor~=3.7.0
+# Api
+fastapi~=0.112.4
+uvicorn~=0.34.0
+starlette~=0.38.6
+# Config
+pydantic-settings~=2.4.0
+# Another
+pydantic~=2.7.4
+aiohttp~=3.11.12
+aiomysql==0.2.0

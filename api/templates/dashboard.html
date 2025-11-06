@@ -1,0 +1,35 @@
+<!-- templates/dashboard.html -->
+{% extends "base.html" %}
+
+{% block content %}
+<div class="header-actions">
+    <div class="welcome">
+        👋 Добро пожаловать, <strong>{{ admin.login }}</strong>!
+    </div>
+    <a href="/auth/logout" class="btn btn-logout">🚪 Выйти</a>
+</div>
+
+<header>
+    <h1>🤖 Панель управления ботами</h1>
+    <p>Выберите бота для управления</p>
+</header>
+
+<div class="grid">
+    <div class="card" style="text-align: center;">
+        <h2 style="margin-bottom: 20px; color: var(--primary);">🤖 Бот 1</h2>
+        <p style="margin-bottom: 30px; color: var(--gray);">
+            Управление первым телеграм ботом
+        </p>
+        <a href="/bot1/" class="btn btn-bot1">📊 Управление Ботом 1</a>
+    </div>
+
+    <div class="card" style="text-align: center;">
+        <h2 style="margin-bottom: 20px; color: var(--success);">🤖 Бот 2</h2>
+        <p style="margin-bottom: 30px; color: var(--gray);">
+            Управление заявками на выплаты
+        </p>
+        <!-- Изменяем ссылку сразу на страницу заявок -->
+        <a href="/bot2/claims/" class="btn btn-bot2">📋 Заявки на выплаты</a>
+    </div>
+</div>
+{% endblock %}

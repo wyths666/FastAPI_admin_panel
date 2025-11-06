@@ -15,7 +15,7 @@ from db.beanie.models import document_models
 from beanie import init_beanie
 from motor.motor_asyncio import AsyncIOMotorClient
 from db.mysql.crud import init_mysql
-
+from utils.database import init_database
 
 dp = Dispatcher(
     bot=bot,
@@ -30,16 +30,18 @@ async def startup(bot: Bot) -> None:
     Активируется при запуске бота
     """
     # === Инициализация MongoDB (Beanie) ===
-    mongo_client = AsyncIOMotorClient(cnf.mongo.URL)
-    await init_beanie(
-        database=mongo_client[cnf.mongo.NAME],
-        document_models=document_models
-    )
+    await init_database()
+    # mongo_client = AsyncIOMotorClient(cnf.mongo.URL)
+    # await init_beanie(
+    #     database=mongo_client[cnf.mongo.NAME],
+    #     document_models=document_models
+    # )
     logger.info("✅ MongoDB (Beanie) подключена")
 
     # === Инициализация MySQL ===
     await init_mysql()
     logger.info("✅ MySQL подключена")
+
 
     # === Настройка команд бота ===
     await bot.delete_webhook()

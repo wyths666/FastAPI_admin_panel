@@ -1,0 +1,115 @@
+<!-- templates/bot2_claims.html -->
+{% extends "base.html" %}
+
+{% block content %}
+<div class="header-actions">
+    <a href="/bot2/" class="btn" style="background: var(--gray);">← Назад</a>
+    <a href="/auth/logout" class="btn btn-logout">🚪 Выйти</a>
+</div>
+
+<header>
+    <h1>📋 Заявки на выплаты</h1>
+    <p>Управление заявками пользователей</p>
+</header>
+
+<!-- Фильтры по статусу -->
+<div class="filters">
+    <div class="filter-row">
+        <div class="filter-group">
+            <label>Статус заявки:</label>
+            <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                <a href="?status=all"
+                   class="filter-button {% if not current_status or current_status == 'all' %}active{% endif %}">
+                   Все ({{ status_counts.all }})
+                </a>
+                <a href="?status=pending"
+                   class="filter-button {% if current_status == 'pending' %}active{% endif %}"
+                   style="background: #fff3cd; color: #856404;">
+                   ⏳ Ожидание ({{ status_counts.pending }})
+                </a>
+                <a href="?status=confirm"
+                   class="filter-button {% if current_status == 'confirm' %}active{% endif %}"
+                   style="background: #d4edda; color: #155724;">
+                   ✅ Подтверждены ({{ status_counts.confirm }})
+                </a>
+                <a href="?status=cancelled"
+                   class="filter-button {% if current_status == 'cancelled' %}active{% endif %}"
+                   style="background: #f8d7da; color: #721c24;">
+                   ❌ Отменены ({{ status_counts.cancelled }})
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Список заявок -->
+{% for item in claims %}
+<div class="order" onclick="window.location.href='/bot2/claims/{{ item.claim.claim_id }}'">
+    <div class="order-header">
+        <div class="order-number">
+            Заявка #{{ item.claim.claim_id }}
+            {% if item.has_unanswered %}
+            <span style="color: var(--danger); margin-left: 10px;">💬 Есть новые сообщения</span>
+            {% endif %}
+        </div>
+        <div>
+            <div class="order-status status-{{ item.claim.claim_status }}">
+                {% if item.claim.claim_status == 'pending' %}⏳ Ожидание
+                {% elif item.claim.claim_status == 'confirm' %}✅ Подтверждена
+                {% elif item.claim.claim_status == 'cancelled' %}❌ Отменена
+                {% else %}{{ item.claim.claim_status }}{% endif %}
+            </div>
+            <span class="toggle-icon">›</span>
+        </div>
+    </div>
+
+    <div class="order-details">
+        <p><strong>👤 Пользователь:</strong> {{ item.claim.user_id }}</p>
+        <p><strong>💰 Сумма:</strong> {{ "%.2f"|format(item.claim.amount) }} ₽</p>
+        <p><strong>📝 Метод оплаты:</strong>
+            {% if item.claim.payment_method == 'phone' %}📱 СБП
+            {% elif item.claim.payment_method == 'card' %}💳 Карта
+            {% else %}{{ item.claim.payment_method }}{% endif %}
+        </p>
+        <p><strong>🆔 Код:</strong> {{ item.claim.code }} ({{ item.claim.code_status }})</p>
+        <p><strong>📅 Создана:</strong> {{ item.claim.created_at.strftime('%d.%m.%Y %H:%M') }}</p>
+
+        <div style="margin-top: 15px;">
+            <a href="/bot2/claims/{{ item.claim.claim_id }}" class="btn">📋 Подробнее</a>
+        </div>
+    </div>
+</div>
+{% else %}
+<div style="text-align: center; padding: 40px; background: white; border-radius: var(--radius);">
+    <h3>📭 Нет заявок</h3>
+    <p>Заявки на выплаты пока не поступали.</p>
+</div>
+{% endfor %}
+
+<style>
+.filter-button {
+    padding: 8px 16px;
+    background: var(--light);
+    color: var(--dark);
+    text-decoration: none;
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+}
+
+.filter-button.active {
+    background: var(--primary);
+    color: white;
+    border-color: var(--primary);
+}
+
+.order {
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.order:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px var(--shadow);
+}
+</style>
+{% endblock %}

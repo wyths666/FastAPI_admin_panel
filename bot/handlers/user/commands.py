@@ -416,24 +416,24 @@ async def finalize_claim(user_tg_id: int, state: FSMContext):
     await state.clear()
 
 
-@router.callback_query(F.data.startswith("reply_"))
-async def reply_to_admin(call: CallbackQuery):
-    claim_id = call.data.replace("reply_", "")
-    claim = await Claim.get(claim_id=claim_id)
-    if not claim:
-        await call.answer("Заявка не найдена", show_alert=True)
-        return
-
-    # Сохраняем в ОБЩИЙ словарь
-    pending_actions[call.from_user.id] = {
-        "type": "user_reply",
-        "claim_id": claim_id
-    }
-
-
-
-    await call.message.answer(
-        "💬 Введите ваш ответ администратору:",
-        reply_markup=ForceReply(input_field_placeholder="Ваш ответ...")
-    )
-    await call.answer()
+# @router.callback_query(F.data.startswith("reply_"))
+# async def reply_to_admin(call: CallbackQuery):
+#     claim_id = call.data.replace("reply_", "")
+#     claim = await Claim.get(claim_id=claim_id)
+#     if not claim:
+#         await call.answer("Заявка не найдена", show_alert=True)
+#         return
+#
+#     # Сохраняем в ОБЩИЙ словарь
+#     pending_actions[call.from_user.id] = {
+#         "type": "user_reply",
+#         "claim_id": claim_id
+#     }
+#
+#
+#
+#     await call.message.answer(
+#         "💬 Введите ваш ответ администратору:",
+#         reply_markup=ForceReply(input_field_placeholder="Ваш ответ...")
+#     )
+#     await call.answer()

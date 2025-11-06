@@ -1,0 +1,31 @@
+<!-- templates/login.html -->
+{% extends "base.html" %}
+
+{% block content %}
+<header>
+    <h1>🔐 Авторизация</h1>
+    <p>Войдите в панель управления</p>
+</header>
+
+<div class="card" style="max-width: 400px; margin: 0 auto;">
+    {% if error %}
+    <div class="error">
+        {{ error }}
+    </div>
+    {% endif %}
+
+    <form method="post" action="/auth/login">
+        <div class="form-group">
+            <label for="username">👤 Логин:</label>
+            <input type="text" id="username" name="username" required value="{{ username or '' }}">
+        </div>
+
+        <div class="form-group">
+            <label for="password">🔒 Пароль:</label>
+            <input type="password" id="password" name="password" required>
+        </div>
+
+        <button type="submit" class="btn" style="width: 100%;">🚀 Войти</button>
+    </form>
+</div>
+{% endblock %}

@@ -9,7 +9,7 @@ from bot.templates.user.menu import user_reply_ikb
 from config import cnf
 from db.beanie.models import Claim, AdminMessage, KonsolPayment
 from core.bot import bot, bot_config
-from db.beanie.models.models import MOSCOW_TZ, ChatSession, UserMessage
+from db.beanie.models.models import MOSCOW_TZ, ChatSession, UserMessage, ChatMessage
 from utils.konsol_client import konsol_client
 from utils.pending_storage import pending_actions
 router = Router()
@@ -383,70 +383,64 @@ async def send_payment_request(call: CallbackQuery):
 
 
 @router.message(F.chat.type == "private")
-async def handle_all_user_messages(msg: Message):
-    """Автоматически обрабатывает ВСЕ сообщения пользователя в личке"""
-
-    # Ищем активную сессию для пользователя
-    session = await ChatSession.find_one(
-        ChatSession.user_id == msg.from_user.id,
-        ChatSession.is_active == True
-    )
-
-    if not session:
-        # Если нет активной сессии - стандартное поведение
-        await msg.answer("У Вас нет активных чатов с администратором.\nЕсли у Вас остались вопросы обратитесь в поддержку /help")
-        return
-
-    # Проверяем что заявка еще не обработана
-    claim = await Claim.get(claim_id=session.claim_id)
-    if claim.claim_status in ["confirm", "cancelled"]:
-        await session.set({ChatSession.is_active: False, ChatSession.closed_at: datetime.now()})
-        await msg.answer("Ваша заявка обработана, чат с администратором закрыт")
-        return
-
-    # ✅ ПРАВИЛЬНО ОПРЕДЕЛЯЕМ ТЕКСТ СООБЩЕНИЯ
-    if msg.text:
-        message_text = msg.text
-    elif msg.photo and msg.caption:
-        message_text = msg.caption
-    elif msg.photo:
-        message_text = "📷 Фото"
-    else:
-        message_text = "📎 Файл"
-
-    user_message = UserMessage(
-        user_id=msg.from_user.id,
-        claim_id=session.claim_id,
-        text=message_text,  # ✅ Теперь всегда строка
-        is_from_user=True,
-        has_media=bool(msg.photo),
-        photo_file_id=msg.photo[-1].file_id if msg.photo else None
-    )
-    await user_message.insert()
-
-    # ✅ Помечаем как неотвеченное
-    await session.set({ChatSession.has_unanswered: True})
-
-    # ✅ Пересылаем в группу с хештегом
+async def handle_all_user_messages(message: Message):
     try:
-        if msg.text:
-            await bot.send_message(
-                chat_id=cnf.bot.GROUP_ID,
-                text=f"Сообщение по заявке №{session.claim_id}\n👤 <b>Пользователь:</b>\n{msg.text}",
-                parse_mode="HTML"
-            )
-        elif msg.photo:
-            caption_text = msg.caption or "📷 Фото"
-            await bot.send_photo(
-                chat_id=cnf.bot.GROUP_ID,
-                photo=msg.photo[-1].file_id,
-                caption=f"Сообщение по заявке №{session.claim_id}\n👤 <b>Пользователь:</b>\n{msg.text}",
-                parse_mode="HTML"
-            )
-    except Exception as e:
-        print(f"Ошибка отправки в группу: {e}")
+        # Получаем текст сообщения или подпись к фото
+        if message.text:
+            text = message.text
+        elif message.caption:
+            text = message.caption
+        else:
+            text = ""
 
-    await msg.answer("✅ Сообщение отправлено администратору")
+        # Получаем file_id фото если есть
+        photo_file_id = None
+        has_photo = False
+        if message.photo:
+            photo_file_id = message.photo[-1].file_id
+            has_photo = True
+
+        # Нужно определить claim_id - можно из активной сессии или другим способом
+        # Например, ищем активную сессию для этого пользователя
+        chat_session = await ChatSession.find_one({
+            "user_id": message.from_user.id,
+            "is_active": True
+        })
+
+        if not chat_session:
+            print(f"❌ Нет активной сессии чата для пользователя {message.from_user.id}")
+            return
+
+        claim_id = chat_session.claim_id
+
+        # Сохраняем сообщение в chat_messages
+        chat_message = ChatMessage(
+            session_id=claim_id,  # используем claim_id как session_id
+            claim_id=claim_id,
+            user_id=message.from_user.id,
+            message=text,
+            is_bot=False,  # сообщение от пользователя
+            has_photo=has_photo,
+            photo_file_id=photo_file_id,
+            photo_caption=text if has_photo else None,
+            timestamp=datetime.now()
+        )
+
+        await chat_message.insert()
+
+        # Обновляем сессию - устанавливаем флаг неотвеченных сообщений
+        chat_session.has_unanswered = True
+        await chat_session.save()
+
+        print(f"✅ Сообщение пользователя {message.from_user.id} сохранено в chat_messages")
+
+        # Дальнейшая логика обработки (уведомления админам и т.д.)
+        # ...
+
+    except Exception as e:
+        print(f"❌ Ошибка сохранения сообщения пользователя: {e}")
+        import traceback
+        traceback.print_exc()
 
 
 @router.message(F.chat.id == cnf.bot.GROUP_ID)

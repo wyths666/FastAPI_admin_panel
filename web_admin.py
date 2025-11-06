@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
-from api.router.bot2_claims import router as bot2_claims_router
+from api.router.claims import router as claims_router
 
 from api.router import auth, main
 from db.beanie.models import Administrators
@@ -26,7 +26,8 @@ app = FastAPI(
 
 app.include_router(auth.router)
 app.include_router(main.router)
-app.include_router(bot2_claims_router)
+app.include_router(claims_router)
+
 
 # Эндпоинты для проверки
 @app.get("/health")

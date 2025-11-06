@@ -234,10 +234,10 @@ class UserMessage(Document):
     claim_id: str
     text: str
     is_from_user: bool
-    has_media: bool = False
-    photo_file_id: Optional[str] = None
     admin_id: Optional[int] = None
-    created_at: datetime = datetime.now(MOSCOW_TZ)
+    # ДОБАВЛЯЕМ ЗНАЧЕНИЕ ПО УМОЛЧАНИЮ
+    created_at: datetime = Field(default_factory=datetime.now)
+    photo_file_id: Optional[str] = None
 
     class Settings:
         name = "user_messages"
@@ -268,12 +268,22 @@ class ChatMessage(Document):
     session_id: str
     claim_id: str
     user_id: int
-    message: str
+    message: str = ""  # делаем по умолчанию пустую строку
     is_bot: bool = False
-    timestamp: datetime = Field(default_factory=lambda: datetime.now(MOSCOW_TZ))
+    has_photo: bool = False
+    photo_file_id: Optional[str] = None
+    photo_caption: Optional[str] = None
+    timestamp: datetime = Field(default_factory=datetime.now)
 
     class Settings:
         name = "chat_messages"
+        use_state_management = True
+
+    @classmethod
+    async def create(cls, **kwargs):
+        obj = cls(**kwargs)
+        await obj.insert()
+        return obj
 
 
 

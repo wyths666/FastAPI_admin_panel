@@ -385,6 +385,20 @@ async def send_payment_request(call: CallbackQuery):
 @router.message(F.chat.type == "private")
 async def handle_all_user_messages(message: Message):
     try:
+        user_id = message.from_user.id
+
+        # Ищем сессию с САМЫМ ПОСЛЕДНИМ взаимодействием
+        chat_session = await ChatSession.find_one(
+            {"user_id": user_id, "is_active": True},
+            sort=[("last_interaction", -1)]  # самая свежая по взаимодействию
+        )
+
+        if not chat_session:
+            await message.answer("❌ У вас нет активных чатов с поддержкой.")
+            return
+
+        claim_id = chat_session.claim_id
+
         # Получаем текст сообщения или подпись к фото
         if message.text:
             text = message.text
@@ -400,24 +414,11 @@ async def handle_all_user_messages(message: Message):
             photo_file_id = message.photo[-1].file_id
             has_photo = True
 
-        # Нужно определить claim_id - можно из активной сессии или другим способом
-        # Например, ищем активную сессию для этого пользователя
-        chat_session = await ChatSession.find_one({
-            "user_id": message.from_user.id,
-            "is_active": True
-        })
-
-        if not chat_session:
-            print(f"❌ Нет активной сессии чата для пользователя {message.from_user.id}")
-            return
-
-        claim_id = chat_session.claim_id
-
         # Сохраняем сообщение в chat_messages
         chat_message = ChatMessage(
-            session_id=claim_id,  # используем claim_id как session_id
+            session_id=claim_id,
             claim_id=claim_id,
-            user_id=message.from_user.id,
+            user_id=user_id,
             message=text,
             is_bot=False,  # сообщение от пользователя
             has_photo=has_photo,
@@ -428,19 +429,50 @@ async def handle_all_user_messages(message: Message):
 
         await chat_message.insert()
 
-        # Обновляем сессию - устанавливаем флаг неотвеченных сообщений
+        # ОБНОВЛЯЕМ время последнего взаимодействия и флаг неотвеченных
+        chat_session.last_interaction = datetime.now()
         chat_session.has_unanswered = True
         await chat_session.save()
 
-        print(f"✅ Сообщение пользователя {message.from_user.id} сохранено в chat_messages")
+        print(f"✅ Сообщение пользователя {user_id} сохранено в сессию {claim_id}")
 
-        # Дальнейшая логика обработки (уведомления админам и т.д.)
-        # ...
+        # Уведомляем админов о новом сообщении (если нужно)
+        await notify_admins_about_new_message(chat_session, chat_message)
 
     except Exception as e:
         print(f"❌ Ошибка сохранения сообщения пользователя: {e}")
         import traceback
         traceback.print_exc()
+
+
+async def notify_admins_about_new_message(chat_session: ChatSession, chat_message: ChatMessage):
+    """Уведомление админов о новом сообщении от пользователя"""
+    try:
+        # Здесь логика уведомления админов в админ-боте
+        # Например, отправка сообщения в админский чат
+
+        if chat_session.admin_chat_id:
+            # Отправляем уведомление конкретному админу
+            admin_message = f"📩 Новое сообщение в чате {chat_session.claim_id}:\n\n{chat_message.message}"
+
+            if chat_message.has_photo:
+                # Отправляем фото с подписью
+                await bot.send_photo(
+                    chat_id=chat_session.admin_chat_id,
+                    photo=chat_message.photo_file_id,
+                    caption=admin_message
+                )
+            else:
+                # Отправляем текстовое сообщение
+                await bot.send_message(
+                    chat_id=chat_session.admin_chat_id,
+                    text=admin_message
+                )
+
+        print(f"✅ Админ уведомлен о новом сообщении в сессии {chat_session.claim_id}")
+
+    except Exception as e:
+        print(f"❌ Ошибка уведомления админа: {e}")
 
 
 @router.message(F.chat.id == cnf.bot.GROUP_ID)

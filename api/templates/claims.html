@@ -206,7 +206,32 @@
             align-items: center;
             gap: 8px;
         }
-
+        .btn-confirm {
+            background: #28a745;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 500;
+            margin-bottom: 15px;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .btn-cancel {
+            background: #e31e1e;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 500;
+            margin-bottom: 15px;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
         .chat-container {
             display: none;
             background: #f8f9fa;
@@ -301,6 +326,29 @@
             .claim-status { margin-top: 10px; }
             .chat-input-form { flex-direction: column; }
         }
+        .message img {
+    max-width: 200px;
+    max-height: 200px;
+    border-radius: 8px;
+    border: 2px solid var(--primary);
+    transition: transform 0.2s ease;
+}
+
+.message img:hover {
+    transform: scale(1.05);
+}
+
+.photo-placeholder {
+    width: 200px;
+    height: 150px;
+    background: var(--light);
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--gray);
+    font-size: 3rem;
+}
     </style>
 </head>
 <body>
@@ -358,10 +406,11 @@
     <div class="claim" data-claim-id="{{ claim.claim_id }}" data-user-id="{{ claim.user_id }}">
         <div class="claim-header" onclick="toggleClaimDetails(this.parentElement)">
             <div class="claim-number">
+                {% if claim.has_unanswered %}
+                <span style="color: red; font-weight: bold;">📩 </span>
+                {% endif %}
                 Заявка №{{ claim.claim_id }} от {{ claim.created_at.strftime('%d.%m.%Y') }}
-                {% if claim.review_text %}⭐️{% endif %}
-                {% if claim.photo_count > 0 %}📸×{{ claim.photo_count }}{% endif %}
-            </div>
+                </div>
             <div>
                 <div class="claim-status status-{{ claim.claim_status }}">
                     {% if claim.claim_status == 'pending' %}✅ Подтверждёно
@@ -408,13 +457,14 @@
 
             <!-- СЕКЦИЯ ЧАТА -->
             <div class="chat-section">
+                {% if claim.claim_status == 'process' %}
                 <button class="chat-toggle" onclick="toggleChat(this, '{{ claim.claim_id }}', {{ claim.user_id }})">
                     💬 Чат с клиентом
                     {% if claim.is_chat_active %}
                     <span class="unread-badge" id="unread-badge-{{ claim.claim_id }}" style="display: none;">0</span>
                     {% endif %}
                 </button>
-
+                {% endif %}
                 <div class="chat-container" id="chat-{{ claim.claim_id }}">
                     <div class="chat-messages" id="messages-{{ claim.claim_id }}">
                         <!-- Сообщения загружаются JS -->
@@ -482,47 +532,34 @@
     }
 
     async function loadChatHistory(claimId) {
-    console.log(`📥 Загрузка истории чата для claimId: ${claimId}`);
+        console.log(`📥 Загрузка истории чата для claimId: ${claimId}`);
 
-    try {
-        const res = await fetch(`/claims/chat/history?claim_id=${claimId}`);
-        console.log(`📨 Статус ответа: ${res.status}`);
+        try {
+            const res = await fetch(`/claims/chat/history?claim_id=${claimId}`);
+            console.log(`📨 Статус ответа: ${res.status}`);
 
-        if (!res.ok) {
-            console.error(`❌ Ошибка HTTP: ${res.status}`);
-            return;
+            if (!res.ok) {
+                console.error(`❌ Ошибка HTTP: ${res.status}`);
+                return;
+            }
+
+            const messages = await res.json();
+            console.log(`✅ Загружено сообщений: ${messages.length}`, messages);
+
+            displayMessages(claimId, messages);
+            resetUnreadCount(claimId);
+        } catch (e) {
+            console.error('💥 Ошибка загрузки истории:', e);
         }
-
-        const messages = await res.json();
-        console.log(`✅ Загружено сообщений: ${messages.length}`, messages);
-
-        displayMessages(claimId, messages);
-        resetUnreadCount(claimId);
-    } catch (e) {
-        console.error('💥 Ошибка загрузки истории:', e);
     }
-}
 
-function displayMessages(claimId, messages) {
+    async function displayMessages(claimId, messages) {
     const container = document.getElementById(`messages-${claimId}`);
-    console.log(`🎯 Отображение сообщений в контейнере: messages-${claimId}`, container);
-
-    if (!container) {
-        console.error(`❌ Контейнер messages-${claimId} не найден!`);
-        return;
-    }
+    console.log('🎯 Отображение сообщений:', messages);
 
     container.innerHTML = '';
 
-    if (messages.length === 0) {
-        console.log('📭 Нет сообщений для отображения');
-        container.innerHTML = '<div style="text-align: center; color: var(--gray); padding: 20px;">Нет сообщений</div>';
-        return;
-    }
-
-    messages.forEach((msg, index) => {
-        console.log(`📝 Обработка сообщения ${index + 1}:`, msg);
-
+    for (const msg of messages) {
         const div = document.createElement('div');
         div.className = `message ${msg.is_bot ? 'bot' : 'user'}`;
         const time = new Date(msg.timestamp).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
@@ -530,17 +567,39 @@ function displayMessages(claimId, messages) {
         let content = '';
 
         if (msg.has_photo && msg.photo_file_id) {
-            content = `
-                <div style="margin-bottom: 8px;">
-                    <img src="/claims/chat/photo/${msg.id}"
-                         alt="Фото из чата"
-                         style="max-width: 200px; max-height: 200px; border-radius: 8px; cursor: pointer;"
-                         onclick="openChatPhoto('${msg.id}')"
-                         onerror="console.error('❌ Ошибка загрузки фото для сообщения ${msg.id}')">
-                </div>
-                ${msg.message ? `<div>${msg.message}</div>` : ''}
-                <div class="message-time">${time}</div>
-            `;
+            console.log(`🖼️ Сообщение с фото:`, msg.photo_file_id);
+
+            // Получаем URL фото через API
+            try {
+                const response = await fetch(`/claims/chat/photo_url/${encodeURIComponent(msg.photo_file_id)}`);
+                const photoData = await response.json();
+
+                if (photoData.url) {
+                    content = `
+                        <div style="margin-bottom: 8px;">
+                            <img src="${photoData.url}"
+                                 alt="Фото из чата"
+                                 style="max-width: 200px; max-height: 200px; border-radius: 8px; border: 2px solid var(--primary);"
+                                 onload="console.log('✅ Фото загружено из Telegram')"
+                                 onerror="console.error('❌ Ошибка загрузки фото из Telegram', this.src)">
+                        </div>
+                        ${msg.message ? `<div style="margin-top: 8px;">${msg.message}</div>` : ''}
+                        <div class="message-time">${time}</div>
+                    `;
+                } else {
+                    content = `
+                        <div style="color: orange;">⚠️ Не удалось получить фото: ${photoData.error}</div>
+                        ${msg.message ? `<div>${msg.message}</div>` : ''}
+                        <div class="message-time">${time}</div>
+                    `;
+                }
+            } catch (error) {
+                content = `
+                    <div style="color: red;">❌ Ошибка получения фото: ${error.message}</div>
+                    ${msg.message ? `<div>${msg.message}</div>` : ''}
+                    <div class="message-time">${time}</div>
+                `;
+            }
         } else {
             content = `
                 <div>${msg.message || '(пустое сообщение)'}</div>
@@ -550,10 +609,9 @@ function displayMessages(claimId, messages) {
 
         div.innerHTML = content;
         container.appendChild(div);
-    });
+    }
 
     container.scrollTop = container.scrollHeight;
-    console.log('✅ Сообщения отображены');
 }
 
     async function sendMessage(event, claimId, userId) {
@@ -579,24 +637,6 @@ function displayMessages(claimId, messages) {
             console.error('Send message:', e);
             alert('Ошибка подключения');
         }
-    }
-
-    function displayMessages(claimId, messages) {
-        const container = document.getElementById(`messages-${claimId}`);
-        container.innerHTML = '';
-
-        messages.forEach(msg => {
-            const div = document.createElement('div');
-            div.className = `message ${msg.is_bot ? 'bot' : 'user'}`;
-            const time = new Date(msg.timestamp).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
-            div.innerHTML = `
-                <div>${msg.message}</div>
-                <div class="message-time">${time}</div>
-            `;
-            container.appendChild(div);
-        });
-
-        container.scrollTop = container.scrollHeight;
     }
 
     function startPolling(claimId) {
@@ -642,25 +682,39 @@ function displayMessages(claimId, messages) {
     }
 
     async function updateStatus(claimId, newStatus) {
-        if (!confirm(`Изменить статус заявки №${claimId} на "${newStatus}"?`)) return;
+    if (!confirm(`Изменить статус заявки №${claimId} на "${newStatus}"?`)) return;
 
-        try {
-            const res = await fetch('/claims/status/update', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ claim_id: claimId, new_status: newStatus })
-            });
+    try {
+        const res = await fetch('/claims/status/update', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                claim_id: claimId,
+                new_status: newStatus,
+                close_chat: true  // флаг для закрытия чата
+            })
+        });
 
-            if (res.ok) {
-                location.reload();
-            } else {
-                const err = await res.json();
-                alert(`❌ ${err.detail || 'Ошибка'}`);
+        if (res.ok) {
+            // Закрываем чат на фронтенде если он открыт
+            const chatContainer = document.getElementById(`chat-${claimId}`);
+            if (chatContainer && chatContainer.classList.contains('active')) {
+                toggleChat(null, claimId); // закрываем чат
             }
-        } catch (e) {
-            alert('❌ Ошибка подключения');
+
+            // Показываем уведомление
+            alert('✅ Статус обновлен, чат сессия закрыта');
+
+            // Перезагружаем страницу
+            location.reload();
+        } else {
+            const err = await res.json();
+            alert(`❌ ${err.detail || 'Ошибка'}`);
         }
+    } catch (e) {
+        alert('❌ Ошибка подключения');
     }
+}
 
     async function requestScreenshot(claimId) {
         try {
@@ -680,6 +734,52 @@ function displayMessages(claimId, messages) {
         }
     }
 
+    async function openChatPhoto(photoFileId) {
+    try {
+        // Получаем URL фото
+        const response = await fetch(`/claims/chat/photo_url/${encodeURIComponent(photoFileId)}`);
+        const photoData = await response.json();
+
+        if (!photoData.url) {
+            alert('❌ Не удалось получить фото: ' + (photoData.error || 'Unknown error'));
+            return;
+        }
+
+        const modal = document.createElement('div');
+        modal.style.cssText = `
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.9); z-index: 1000;
+            display: flex; justify-content: center; align-items: center;
+            cursor: pointer;
+        `;
+
+        modal.innerHTML = `
+            <img src="${photoData.url}"
+                 style="max-width: 90%; max-height: 90%; border-radius: 8px;"
+                 onclick="event.stopPropagation()">
+            <button onclick="this.parentElement.remove()"
+                    style="position: absolute; top: 20px; right: 20px;
+                           background: var(--danger); color: white; border: none;
+                           padding: 10px; border-radius: 50%; cursor: pointer; font-size: 1.2rem;">
+                ×
+            </button>
+        `;
+
+        modal.onclick = () => modal.remove();
+        document.body.appendChild(modal);
+
+        const escHandler = (e) => {
+            if (e.key === 'Escape') modal.remove();
+        };
+        document.addEventListener('keydown', escHandler);
+        modal._escHandler = escHandler;
+
+    } catch (error) {
+        console.error('❌ Ошибка открытия фото:', error);
+        alert('❌ Ошибка загрузки фото');
+    }
+}
+
     // При загрузке — проверяем активные чаты и запускаем polling для них
     document.addEventListener('DOMContentLoaded', () => {
         document.querySelectorAll('.chat-container.active').forEach(container => {
@@ -687,77 +787,6 @@ function displayMessages(claimId, messages) {
             startPolling(claimId);
         });
     });
-    function displayMessages(claimId, messages) {
-    const container = document.getElementById(`messages-${claimId}`);
-    container.innerHTML = '';
-
-    messages.forEach(msg => {
-        const div = document.createElement('div');
-        div.className = `message ${msg.is_bot ? 'bot' : 'user'}`;
-        const time = new Date(msg.timestamp).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
-
-        let content = '';
-
-        if (msg.has_photo && msg.photo_file_id) {
-            // Сообщение с фото
-            content = `
-                <div style="margin-bottom: 8px;">
-                    <img src="/claims/chat/photo/${msg.id}"
-                         alt="Фото из чата"
-                         style="max-width: 200px; max-height: 200px; border-radius: 8px; cursor: pointer;"
-                         onclick="openChatPhoto('${msg.id}')"
-                         onerror="this.style.display='none'">
-                </div>
-                ${msg.message ? `<div>${msg.message}</div>` : ''}
-                <div class="message-time">${time}</div>
-            `;
-        } else {
-            // Текстовое сообщение
-            content = `
-                <div>${msg.message}</div>
-                <div class="message-time">${time}</div>
-            `;
-        }
-
-        div.innerHTML = content;
-        container.appendChild(div);
-    });
-
-    container.scrollTop = container.scrollHeight;
-}
-
-// Функция для открытия фото из чата в модальном окне
-function openChatPhoto(messageId) {
-    const modal = document.createElement('div');
-    modal.style.cssText = `
-        position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-        background: rgba(0,0,0,0.9); z-index: 1000;
-        display: flex; justify-content: center; align-items: center;
-        cursor: pointer;
-    `;
-
-    modal.innerHTML = `
-        <img src="/claims/chat/photo/${messageId}"
-             style="max-width: 90%; max-height: 90%; border-radius: 8px;"
-             onclick="event.stopPropagation()">
-        <button onclick="this.parentElement.remove()"
-                style="position: absolute; top: 20px; right: 20px;
-                       background: var(--danger); color: white; border: none;
-                       padding: 10px; border-radius: 50%; cursor: pointer; font-size: 1.2rem;">
-            ×
-        </button>
-    `;
-
-    modal.onclick = () => modal.remove();
-    document.body.appendChild(modal);
-
-    // Закрытие по ESC
-    const escHandler = (e) => {
-        if (e.key === 'Escape') modal.remove();
-    };
-    document.addEventListener('keydown', escHandler);
-    modal._escHandler = escHandler;
-}
 </script>
 </body>
 </html>

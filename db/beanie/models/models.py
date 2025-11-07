@@ -220,11 +220,9 @@ class ChatSession(Document):
     admin_chat_id: Optional[int] = None
     is_active: bool = True
     has_unanswered: bool = False
-    created_at: datetime = datetime.now(MOSCOW_TZ)
+    created_at: datetime = Field(default_factory=datetime.now)
+    last_interaction: datetime = Field(default_factory=datetime.now)  # ← новое поле
     closed_at: Optional[datetime] = None
-
-    # ✅ ТОЛЬКО ЭТО
-    model_config = ConfigDict(arbitrary_types_allowed=True)
 
     class Settings:
         name = "chat_sessions"

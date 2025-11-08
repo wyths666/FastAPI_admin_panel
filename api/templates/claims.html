@@ -1,11 +1,11 @@
 <!DOCTYPE html>
 <html lang="ru">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% if request.query_params.get('user_id') %}Заявки пользователя №{{ request.query_params.get('user_id') }}{% else %}Управление заявками{% endif %}</title>
     <style>
-        /* ВСЁ CSS ИЗ ВАШЕГО orders.html — без изменений */
         :root {
             --primary: #4361ee;
             --success: #4cc9f0;
@@ -853,11 +853,30 @@
 
     async function displayMessages(claimId, messages) {
     const container = document.getElementById(`messages-${claimId}`);
-    console.log('🎯 Отображение сообщений:', messages);
+    console.log('🔍 [CHAT] Сообщения:', messages);
 
     container.innerHTML = '';
 
+    // Предварительно получим все URL фото
+    const photoUrls = {};
     for (const msg of messages) {
+        if (msg.has_photo && msg.photo_file_id) {
+            try {
+                const resp = await fetch(`/claims/chat/photo-url/${msg.id}`);
+                if (resp.ok) {
+                    const data = await resp.json();
+                    photoUrls[msg.id] = data.url;
+                }
+            } catch (e) {
+                console.error(`❌ Ошибка получения URL для ${msg.id}:`, e);
+                photoUrls[msg.id] = 'https://via.placeholder.com/200x200/333/fff?text=🖼️';
+            }
+        }
+    }
+
+    messages.forEach((msg, index) => {
+        console.log(`🔍 [CHAT] Сообщение ${index}:`, msg);
+
         const div = document.createElement('div');
         div.className = `message ${msg.is_bot ? 'bot' : 'user'}`;
         const time = new Date(msg.timestamp).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
@@ -865,39 +884,20 @@
         let content = '';
 
         if (msg.has_photo && msg.photo_file_id) {
-            console.log(`🖼️ Сообщение с фото:`, msg.photo_file_id);
+            const photoUrl = photoUrls[msg.id] || 'https://via.placeholder.com/200x200/333/fff?text=🖼️';
 
-            // Получаем URL фото через API
-            try {
-                const response = await fetch(`/claims/chat/photo_url/${encodeURIComponent(msg.photo_file_id)}`);
-                const photoData = await response.json();
-
-                if (photoData.url) {
-                    content = `
-                        <div style="margin-bottom: 8px;">
-                            <img src="${photoData.url}"
-                                 alt="Фото из чата"
-                                 style="max-width: 200px; max-height: 200px; border-radius: 8px; border: 2px solid var(--primary);"
-                                 onload="console.log('✅ Фото загружено из Telegram')"
-                                 onerror="console.error('❌ Ошибка загрузки фото из Telegram', this.src)">
-                        </div>
-                        ${msg.message ? `<div style="margin-top: 8px;">${msg.message}</div>` : ''}
-                        <div class="message-time">${time}</div>
-                    `;
-                } else {
-                    content = `
-                        <div style="color: orange;">⚠️ Не удалось получить фото: ${photoData.error}</div>
-                        ${msg.message ? `<div>${msg.message}</div>` : ''}
-                        <div class="message-time">${time}</div>
-                    `;
-                }
-            } catch (error) {
-                content = `
-                    <div style="color: red;">❌ Ошибка получения фото: ${error.message}</div>
-                    ${msg.message ? `<div>${msg.message}</div>` : ''}
-                    <div class="message-time">${time}</div>
-                `;
-            }
+            content = `
+                <div style="margin-bottom: 8px;">
+                    <img src="${photoUrl}"
+                         alt="Фото из чата"
+                         style="max-width: 200px; max-height: 200px; border-radius: 8px; border: 2px solid var(--primary); cursor: pointer;"
+                         onclick="openChatPhoto('${msg.id}')"
+                         onload="console.log('✅ Фото загружено: ${msg.id}')"
+                         onerror="this.src='https://via.placeholder.com/200x200/333/fff?text=🖼️'; console.error('❌ Ошибка загрузки фото: ${msg.id}')">
+                </div>
+                ${msg.message ? `<div style="margin-top: 8px;">${msg.message}</div>` : ''}
+                <div class="message-time">${time}</div>
+            `;
         } else {
             content = `
                 <div>${msg.message || '(пустое сообщение)'}</div>
@@ -907,7 +907,7 @@
 
         div.innerHTML = content;
         container.appendChild(div);
-    }
+    });
 
     container.scrollTop = container.scrollHeight;
 }
@@ -989,25 +989,23 @@
             body: JSON.stringify({
                 claim_id: claimId,
                 new_status: newStatus,
-                close_chat: true  // флаг для закрытия чата
+                close_chat: true
             })
         });
 
-        if (res.ok) {
+        const result = await res.json();
+
+        if (result.ok) {
             // Закрываем чат на фронтенде если он открыт
             const chatContainer = document.getElementById(`chat-${claimId}`);
             if (chatContainer && chatContainer.classList.contains('active')) {
-                toggleChat(null, claimId); // закрываем чат
+                toggleChat(null, claimId);
             }
 
-            // Показываем уведомление
-            alert('✅ Статус обновлен, чат сессия закрыта');
-
-            // Перезагружаем страницу
+            alert('✅ Статус обновлен' + (newStatus === 'pending' ? ', платеж создан' : ''));
             location.reload();
         } else {
-            const err = await res.json();
-            alert(`❌ ${err.detail || 'Ошибка'}`);
+            alert(`❌ ${result.error || 'Ошибка'}`);
         }
     } catch (e) {
         alert('❌ Ошибка подключения');
@@ -1032,49 +1030,52 @@
         }
     }
 
-    async function openChatPhoto(photoFileId) {
+    async function openChatPhoto(messageId) {
     try {
         // Получаем URL фото
-        const response = await fetch(`/claims/chat/photo_url/${encodeURIComponent(photoFileId)}`);
-        const photoData = await response.json();
+        const resp = await fetch(`/claims/chat/photo-url/${messageId}`);
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
 
-        if (!photoData.url) {
-            alert('❌ Не удалось получить фото: ' + (photoData.error || 'Unknown error'));
-            return;
-        }
+        const { url } = await resp.json();
 
+        // Создаём модалку
         const modal = document.createElement('div');
         modal.style.cssText = `
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.9); z-index: 1000;
-            display: flex; justify-content: center; align-items: center;
-            cursor: pointer;
+            background: rgba(0,0,0,0.95); z-index: 10000;
+            display: flex; flex-direction: column; justify-content: center; align-items: center;
+            cursor: pointer; padding: 20px;
         `;
 
         modal.innerHTML = `
-            <img src="${photoData.url}"
-                 style="max-width: 90%; max-height: 90%; border-radius: 8px;"
-                 onclick="event.stopPropagation()">
             <button onclick="this.parentElement.remove()"
-                    style="position: absolute; top: 20px; right: 20px;
-                           background: var(--danger); color: white; border: none;
-                           padding: 10px; border-radius: 50%; cursor: pointer; font-size: 1.2rem;">
+                    style="align-self: flex-end; background: #fff; color: #000;
+                           border: none; width: 36px; height: 36px; border-radius: 50%;
+                           font-size: 1.4rem; margin-bottom: 10px; cursor: pointer;">
                 ×
             </button>
+            <img src="${url}"
+                 alt="Фото из чата"
+                 style="max-width: 95%; max-height: 85vh; object-fit: contain;
+                        border-radius: 4px; box-shadow: 0 4px 12px rgba(0,0,0,0.5);"
+                 onerror="this.src='https://via.placeholder.com/400x300/333/999?text=🖼️+Ошибка+загрузки'">
         `;
 
-        modal.onclick = () => modal.remove();
-        document.body.appendChild(modal);
-
-        const escHandler = (e) => {
+        // Закрытие по клику на фон или Esc
+        modal.onclick = (e) => {
+            if (e.target === modal) modal.remove();
+        };
+        const escClose = (e) => {
             if (e.key === 'Escape') modal.remove();
         };
-        document.addEventListener('keydown', escHandler);
-        modal._escHandler = escHandler;
+        document.addEventListener('keydown', escClose);
+        modal._escHandler = escClose;
+
+        document.body.appendChild(modal);
 
     } catch (error) {
-        console.error('❌ Ошибка открытия фото:', error);
-        alert('❌ Ошибка загрузки фото');
+        console.error("❌ openChatPhoto error:", error);
+        alert(`❌ Не удалось открыть фото: ${error.message}`);
     }
 }
 

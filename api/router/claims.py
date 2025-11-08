@@ -1,6 +1,10 @@
+import base64
 import os
 import json
 from pathlib import Path
+
+from beanie import PydanticObjectId
+
 from core.logger import api_logger as logger
 from datetime import datetime, timezone
 from typing import List, Optional
@@ -301,42 +305,33 @@ async def send_chat_message_endpoint(data: dict):
         raise HTTPException(status_code=500, detail=error_msg)
 
 
-@router.get("/claims/chat/photo_url/{photo_file_id}")
-async def get_chat_photo_url(photo_file_id: str):
-    """Получить прямую ссылку на фото из Telegram"""
+@router.get("/chat/photo-url/{message_id}")
+async def get_chat_photo_url(message_id: str):
+    """
+    Возвращает JSON с URL фото из Telegram CDN по message_id.
+    Без скачивания, быстро и безопасно.
+    """
     try:
-        print(f"🔗 Запрос URL для file_id: {photo_file_id}")
+        # 1. Валидация и получение сообщения
+        obj_id = PydanticObjectId(message_id)
+        message = await ChatMessage.get(obj_id)
 
-        from urllib.parse import unquote
-        import aiohttp
+        if not message or not message.has_photo or not message.photo_file_id:
+            raise HTTPException(status_code=404, detail="Photo not found in message")
 
-        decoded_file_id = unquote(photo_file_id)
+        # 2. Получаем file_path через Telegram API (лёгкий запрос, без скачивания!)
+        file = await bot.get_file(message.photo_file_id)  # ← это НЕ download_file, а мета-запрос
+        if not file.file_path:
+            raise HTTPException(status_code=500, detail="File path missing from Telegram")
 
+        # 3. Формируем публичный URL
+        photo_url = f"https://api.telegram.org/file/bot{bot.token}/{file.file_path}"
 
-        async with aiohttp.ClientSession() as session:
-            # Получаем информацию о файле
-            tg_api_url = f"https://api.telegram.org/bot{cnf.bot.TOKEN}/getFile"
-
-            async with session.post(tg_api_url, json={"file_id": decoded_file_id}) as resp:
-                file_info = await resp.json()
-
-            if not file_info.get('ok'):
-                return {"error": "File not found in Telegram", "details": file_info}
-
-            file_path = file_info['result']['file_path']
-            direct_url = f"https://api.telegram.org/file/bot{cnf.bot.TOKEN}/{file_path}"
-
-            print(f"✅ Сгенерирован URL: {direct_url}")
-
-            return {
-                "url": direct_url,
-                "file_path": file_path,
-                "status": "success"
-            }
+        return {"url": photo_url}
 
     except Exception as e:
-        print(f"❌ Ошибка: {e}")
-        return {"error": str(e), "status": "error"}
+        print(f"❌ Ошибка в /chat/photo-url/{message_id}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to get photo URL")
 
 
 
@@ -576,26 +571,7 @@ async def notify_user_about_chat_close(user_id: int, claim_id: str):
         logger.error(f"⚠️ Не удалось отправить уведомление пользователю {user_id}: {e}")
 
 # Исправляем эндпоинт get_chat_photo
-@router.get("/chat/photo/{message_id}")
-async def get_chat_photo(message_id: str, admin=Depends(get_current_admin)):
-    """Получить фото из сообщения чата"""
-    # ПРАВИЛЬНЫЙ СИНТАКСИС
-    message = await ChatMessage.find_one({"_id": message_id})  # ← словарь
-    if not message or not message.has_photo or not message.photo_file_id:
-        raise HTTPException(status_code=404, detail="Photo not found")
 
-    try:
-        file = await bot.get_file(message.photo_file_id)
-        file_path = file.file_path
-        file_bytes = await bot.download_file(file_path)
-
-        return Response(
-            content=file_bytes.getvalue(),
-            media_type="image/jpeg",
-            headers={"Content-Disposition": f"inline; filename=chat_photo_{message_id}.jpg"}
-        )
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error loading photo: {str(e)}")
 
 
 @router.get("/{claim_id}/photos/{photo_index}")
@@ -629,28 +605,6 @@ async def get_claim_photo(
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error loading photo: {str(e)}")
-
-
-@router.get("/chat/debug-all-messages")
-async def debug_all_messages():
-    """Показать все сообщения в базе для отладки"""
-    messages = await ChatMessage.find_all().to_list()
-
-    return {
-        "total_messages": len(messages),
-        "messages": [
-            {
-                "id": str(msg.id),
-                "claim_id": msg.claim_id,
-                "user_id": msg.user_id,
-                "message": msg.message,
-                "is_bot": msg.is_bot,
-                "has_photo": msg.has_photo,
-                "timestamp": msg.timestamp.isoformat()
-            }
-            for msg in messages
-        ]
-    }
 
 
 @router.post("/user/ban")

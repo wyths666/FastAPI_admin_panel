@@ -21,6 +21,47 @@
 
         * { margin: 0; padding: 0; box-sizing: border-box; }
 
+        .header-actions {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .btn-logout {
+    background: var(--danger);
+    padding: 10px 20px;
+    font-size: 1rem;
+    display: inline-block;
+    color: white;
+    text-decoration: none;
+    border-radius: var(--radius);
+    font-weight: 500;
+    text-align: center;
+    transition: all 0.3s ease;
+    border: none;
+    cursor: pointer;
+    margin: 0;
+    box-sizing: border-box;
+}
+
+        .btn-back {
+    display: inline-block;
+    padding: 15px 30px;
+    background: var(--gray);
+    color: white;
+    text-decoration: none;
+    border-radius: var(--radius);
+    font-size: 1.2rem;
+    font-weight: 500;
+    text-align: center;
+    transition: all 0.3s ease;
+    border: none;
+    cursor: pointer;
+    margin: 0;
+    box-sizing: border-box;
+}
+
         .filters {
             background: white;
             border-radius: var(--radius);
@@ -515,6 +556,11 @@
 </head>
 <body>
 <div class="container">
+    <div class="header-actions">
+    <a href="/" class="btn-back" style="background: var(--gray);">← Назад</a>
+    <a href="/auth/logout" class="btn-logout">🚪 Выйти</a>
+</div>
+
     <header>
         <h1>
             {% if request.query_params.get('user_id') %}

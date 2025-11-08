@@ -1,10 +1,9 @@
-import base64
 import os
-
+import json
+from pathlib import Path
 from core.logger import api_logger as logger
 from datetime import datetime, timezone
 from typing import List, Optional
-from fastapi import Response
 from fastapi import APIRouter, Request, Depends, HTTPException, Query
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
@@ -15,7 +14,8 @@ from api.schemas.response import ClaimResponse, ChatMessageSchema
 from config import cnf
 from core.bot import bot
 from db.beanie.models import Claim, UserMessage, ChatSession, User, AdminMessage
-from db.beanie.models.models import ChatMessage
+from db.beanie.models.models import ChatMessage, KonsolPayment
+from utils.konsol_client import konsol_client
 
 router = APIRouter(prefix="/claims", tags=["Claims"])
 templates = Jinja2Templates(directory="api/templates")
@@ -30,6 +30,44 @@ async def get_user_safe(tg_id: int) -> Optional[User]:
         return None
 
 
+def load_banks():
+    banks_file = Path("utils/banks.json")
+    if banks_file.exists():
+        with open(banks_file, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    return {}
+
+
+@router.post("/update_bank")
+async def update_claim_bank(data: dict):
+    """Обновление bank_member_id для заявки"""
+    try:
+        claim_id = data.get("claim_id")
+        bank_member_id = data.get("bank_member_id")
+
+        if not claim_id:
+            raise HTTPException(status_code=400, detail="claim_id required")
+
+        # Находим заявку
+        claim = await Claim.find_one({"claim_id": claim_id})
+        if not claim:
+            raise HTTPException(status_code=404, detail="Claim not found")
+
+        # Обновляем bank_member_id
+        await claim.update(bank_member_id=bank_member_id)
+
+        print(f"✅ Bank updated for claim {claim_id}: {bank_member_id}")
+
+        return {
+            "ok": True,
+            "claim_id": claim_id,
+            "bank_member_id": bank_member_id
+        }
+
+    except Exception as e:
+        print(f"❌ Ошибка обновления банка: {e}")
+        return {"ok": False, "error": str(e)}
+
 # --- 1. Страница списка заявок ---
 @router.get("/", response_class=HTMLResponse)
 async def claims_page(
@@ -38,6 +76,7 @@ async def claims_page(
         date_from: Optional[str] = Query(None),
         date_to: Optional[str] = Query(None),
         status: Optional[str] = Query(None),
+        number: Optional[str] = Query(None),
 ):
     query = {}  # начинаем с пустого словаря
 
@@ -48,6 +87,15 @@ async def claims_page(
     # Фильтр по статусу
     if status:
         query["claim_status"] = status
+
+    if number and number.strip():  # ← проверяем что строка не пустая
+        try:
+            number_int = int(number.strip())
+            claim_id_str = f"{number_int:06d}"
+            query["claim_id"] = {"$regex": f"^{claim_id_str}$"}
+        except ValueError:
+            # Если не число, игнорируем
+            pass
 
     # Базовый запрос
     claims_query = Claim.find(query)
@@ -85,10 +133,12 @@ async def claims_page(
             "id": str(claim.id),
             "claim_id": claim.claim_id,
             "user_id": claim.user_id,
+            "banned": user.banned,
             "username": user.username if user else f"@id{claim.user_id}",
-            "code": claim.code,
+            "code": claim.code.upper(),
             "payment_method": claim.payment_method,
             "phone": claim.phone,
+            "bank": claim.bank,
             "card": claim.card,
             "bank_member_id": claim.bank_member_id,
             "review_text": claim.review_text,
@@ -101,13 +151,17 @@ async def claims_page(
             "has_unanswered": chat_session.has_unanswered if chat_session else False,
         })
 
+    banks = load_banks()
+
     return templates.TemplateResponse("claims.html", {
         "request": request,
         "claims": claims_data,
+        "banks": banks,
         "user_id": user_id,
         "date_from": date_from,
         "date_to": date_to,
         "status": status,
+        "number": number,
         "statuses": [
             {"id": "pending", "name": "✅ Подтверждёно"},
             {"id": "process", "name": "🆕 Не обработано"},
@@ -292,7 +346,7 @@ async def update_claim_status(data: dict):
     try:
         claim_id = data.get("claim_id")
         new_status = data.get("new_status")
-        close_chat = data.get("close_chat", True)  # по умолчанию закрываем чат
+        close_chat = data.get("close_chat", True)
 
         if not claim_id or not new_status:
             raise HTTPException(status_code=400, detail="claim_id and new_status required")
@@ -306,11 +360,31 @@ async def update_claim_status(data: dict):
         if new_status not in valid_statuses:
             raise HTTPException(status_code=400, detail="Invalid status")
 
-        # Обновляем статус заявки
-        await claim.update(
-            claim_status=new_status,
-            process_status="complete" if new_status != "pending" else "process"
-        )
+        # === ОСОБАЯ ЛОГИКА ДЛЯ СТАТУСА PENDING ===
+        if new_status == "pending":
+            # Проверяем, не был ли уже создан платеж
+            if claim.konsol_payment_id:
+                return {
+                    "ok": False,
+                    "error": "Платеж уже создан для этой заявки",
+                    "claim_id": claim_id
+                }
+
+            # Выполняем логику подтверждения заявки
+            success = await process_claim_approval_admin(claim)
+            if not success:
+                return {
+                    "ok": False,
+                    "error": "Ошибка создания платежа",
+                    "claim_id": claim_id
+                }
+
+        else:
+            # Для других статусов просто обновляем
+            await claim.update(
+                claim_status=new_status,
+                process_status="complete" if new_status != "pending" else "process"
+            )
 
         # Закрываем чат-сессию если нужно
         if close_chat:
@@ -330,9 +404,128 @@ async def update_claim_status(data: dict):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+async def process_claim_approval_admin(claim: Claim):
+    """Обработка подтверждения заявки через админ-панель"""
+    try:
+        print(f"🔍 [ADMIN] Подтверждение заявки: {claim.claim_id}")
+
+        # === Получаем пользователя ===
+        user = await User.get(tg_id=claim.user_id)
+        if not user:
+            print(f"❌ [ADMIN] Пользователь не найден: {claim.user_id}")
+            return False
+
+        # === 1. Создаём НОВОГО contract_id в Konsol API ===
+        contractor_phone = claim.phone if claim.phone else "+79000" + claim.claim_id
+
+        contractor_data = {
+            "kind": "individual",
+            "first_name": claim.claim_id,
+            "last_name": "Заявка",
+            "phone": contractor_phone
+        }
+
+        try:
+            contractor_result = await konsol_client.create_contractor(contractor_data)
+            contractor_id = contractor_result["id"]
+
+            # Сохраняем contractor_id в заявке
+            await claim.update(contractor_id=contractor_id)
+            print(f"✅ [ADMIN] Contract_id создан: {contractor_id}")
+
+        except Exception as e:
+            print(f"❌ [ADMIN] Ошибка создания contract_id: {e}")
+            return False
+
+        # === 2. Подготавливаем данные для платежа ===
+        bank_details_kind = "fps" if claim.phone else "card"
+
+        if bank_details_kind == "fps":
+            if not claim.bank_member_id:
+                print(f"❌ [ADMIN] Не указан ID банка для СБП: {claim.claim_id}")
+                return False
+            bank_details = {
+                "fps_mobile_phone": claim.phone,
+                "fps_bank_member_id": claim.bank_member_id
+            }
+        else:
+            bank_details = {
+                "card_number": claim.card
+            }
+
+        payment_data = {
+            "contractor_id": contractor_id,
+            "services_list": [
+                {
+                    "title": f"Выплата по заявке {claim.claim_id}",
+                    "amount": str(claim.amount)
+                }
+            ],
+            "bank_details_kind": bank_details_kind,
+            "bank_details": bank_details,
+            "purpose": "Выплата выигрыша",
+            "amount": str(claim.amount)
+        }
+
+        # === 3. Создаём платёж в Konsol API ===
+        try:
+            result = await konsol_client.create_payment(payment_data)
+            payment_id = result.get("id")
+            payment_status = result.get("status")
+
+            print(f"✅ [ADMIN] Платёж создан: {payment_id}")
+
+            # === 4. Сохраняем платёж в БД ===
+            await KonsolPayment.create(
+                konsol_id=payment_id,
+                contractor_id=contractor_id,
+                amount=claim.amount,
+                status=payment_status,
+                purpose=payment_data["purpose"],
+                services_list=payment_data["services_list"],
+                bank_details_kind=bank_details_kind,
+                card_number=claim.card,
+                phone_number=claim.phone,
+                bank_member_id=claim.bank_member_id,
+                claim_id=claim.claim_id,
+                user_id=claim.user_id
+            )
+
+            # === 5. Обновляем статусы в заявке ===
+            await claim.update(
+                claim_status="pending",  # оставляем как pending для админ-панели
+                process_status="complete",
+                konsol_payment_id=payment_id,
+                updated_at=datetime.utcnow()
+            )
+
+            # === 6. Уведомляем пользователя ===
+            try:
+                await bot.send_message(
+                    chat_id=claim.user_id,
+                    text="✅ Ваш выигрыш отправлен на указанные реквизиты. Компания Pure желает Вам крепкого здоровья, и хорошего дня."
+                )
+                print(f"✅ [ADMIN] Уведомление отправлено пользователю {claim.user_id}")
+            except Exception as notify_e:
+                print(f"⚠️ [ADMIN] Не удалось уведомить пользователя: {notify_e}")
+
+            return True
+
+        except Exception as pay_e:
+            print(f"❌ [ADMIN] Ошибка создания платежа: {pay_e}")
+            return False
+
+    except Exception as e:
+        print(f"❌ [ADMIN] Общая ошибка подтверждения заявки: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
+
+
 async def close_chat_session(claim_id: str):
     """Закрытие чат-сессии для заявки"""
     try:
+        # Находим активную сессию
         chat_session = await ChatSession.find_one({
             "claim_id": claim_id,
             "is_active": True
@@ -345,15 +538,24 @@ async def close_chat_session(claim_id: str):
             chat_session.closed_at = datetime.now()
             await chat_session.save()
 
-            logger.info(f"✅ Чат-сессия закрыта для заявки {claim_id}")
+            print(f"✅ Чат-сессия закрыта для заявки {claim_id}")
 
-            # Отправляем уведомление пользователю о закрытии чата
-            await notify_user_about_chat_close(chat_session.user_id, claim_id)
+            # Уведомляем в админ-чате если он открыт
+            if chat_session.admin_chat_id:
+                try:
+                    await bot.send_message(
+                        chat_id=chat_session.admin_chat_id,
+                        text=f"❌ <b>Чат закрыт - заявка {claim_id} обработана</b>",
+                        parse_mode="HTML"
+                    )
+                except Exception as e:
+                    print(f"⚠️ Не удалось уведомить админа: {e}")
+
         else:
-            logger.info(f"ℹ️ Активная чат-сессия не найдена для заявки {claim_id}")
+            print(f"ℹ️ Активная чат-сессия не найдена для заявки {claim_id}")
 
     except Exception as e:
-        logger.error(f"❌ Ошибка закрытия чат-сессии: {e}")
+        print(f"❌ Ошибка закрытия чат-сессии: {e}")
 
 
 async def notify_user_about_chat_close(user_id: int, claim_id: str):
@@ -449,3 +651,73 @@ async def debug_all_messages():
             for msg in messages
         ]
     }
+
+
+@router.post("/user/ban")
+async def ban_user(data: dict):
+    """Блокировка пользователя"""
+    try:
+        user_id = data.get("user_id")
+        claim_id = data.get("claim_id")
+
+        if not user_id:
+            return {"ok": False, "error": "user_id required"}
+
+        # Находим пользователя
+        user = await User.get(tg_id=user_id)
+        if not user:
+            return {"ok": False, "error": "Пользователь не найден"}
+
+        if user.banned:
+            return {"ok": False, "error": "Пользователь уже заблокирован"}
+
+        # Блокируем пользователя
+        await user.update(banned=True)
+
+        print(f"🚫 Пользователь заблокирован {user_id} через админ-панель")
+
+        return {
+            "ok": True,
+            "message": f"Пользователь {user_id} заблокирован",
+            "user_id": user_id,
+            "banned": True
+        }
+
+    except Exception as e:
+        print(f"❌ Ошибка блокировки пользователя: {e}")
+        return {"ok": False, "error": str(e)}
+
+
+@router.post("/user/unban")
+async def unban_user(data: dict):
+    """Разблокировка пользователя"""
+    try:
+        user_id = data.get("user_id")
+        claim_id = data.get("claim_id")
+
+        if not user_id:
+            return {"ok": False, "error": "user_id required"}
+
+        # Находим пользователя
+        user = await User.get(tg_id=user_id)
+        if not user:
+            return {"ok": False, "error": "Пользователь не найден"}
+
+        if not user.banned:
+            return {"ok": False, "error": "Пользователь не заблокирован"}
+
+        # Разблокируем пользователя
+        await user.update(banned=False)
+
+        print(f"✅ Пользователь разблокирован {user_id} через админ-панель")
+
+        return {
+            "ok": True,
+            "message": f"Пользователь {user_id} разблокирован",
+            "user_id": user_id,
+            "banned": False
+        }
+
+    except Exception as e:
+        print(f"❌ Ошибка разблокировки пользователя: {e}")
+        return {"ok": False, "error": str(e)}

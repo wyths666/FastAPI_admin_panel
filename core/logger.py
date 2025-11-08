@@ -21,7 +21,7 @@ def setting_logger(logger: Logger) -> Logger:
 
     # Add handlers to logger
     logger.handlers = [stream_handler]
-
+    logger.propagate = False
     logger.setLevel(INFO)
 
     return logger

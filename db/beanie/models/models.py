@@ -143,6 +143,7 @@ class Claim(ModelAdmin):
 
     # === Реквизиты из заявки (не дублируются в User) ===
     phone: Optional[str] = None  # если выбрана СБП
+    bank: Optional[str] = None
     card: Optional[str] = None  # если выбрана карта
     bank_member_id: Optional[str] = None  # если выбрана СБП
 

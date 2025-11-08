@@ -403,11 +403,12 @@ async def finalize_claim(user_tg_id: int, state: FSMContext):
     # Добавляем данные в зависимости от выбранного способа оплаты
     if phone:  # Если выбран телефон
         update_data["phone"] = phone
+        update_data["bank"] = bank
         update_data["card"] = None
     elif card:  # Если выбрана карта
         update_data["card"] = card
         update_data["phone"] = None
-
+        update_data["bank"] = bank
     # === Обновляем заявку ===
     await claim.update(**update_data)
 

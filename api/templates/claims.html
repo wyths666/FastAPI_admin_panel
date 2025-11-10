@@ -652,6 +652,7 @@
             🚫 Заблокировать
         </button>
         {% endif %}</p>
+    <p>📋 <strong>Кол-во заявок пользователя:</strong> {{ claim.old_claims }}</p>
     <p>🔐 <strong>Код:</strong> <code>{{ claim.code }}</code></p>
     <p>📱 <strong>Телефон:</strong> {{ claim.phone }}</p>
     <p>📲 <strong>СБП:</strong> {{ claim.bank }} </p>
@@ -691,7 +692,9 @@
         <button class="btn-ban" onclick="toggleUserBan('{{ claim.user_id }}', '{{ claim.claim_id }}', true)">
             🚫 Заблокировать
         </button>
-        {% endif %}</p><p>🔐 <strong>Код:</strong> <code>{{ claim.code }}</code></p>
+        {% endif %}</p>
+    <p>📋 <strong>Кол-во заявок пользователя:</strong> {{ claim.old_claims }}</p>
+    <p>🔐 <strong>Код:</strong> <code>{{ claim.code }}</code></p>
     <p>💳 <strong>Карта:</strong> {{ claim.card or '—' }}</p>
     <p>{% if claim.review_text %}📝 <strong>Отзыв:</strong> {{ claim.review_text }}{% endif %}</p>
     {% endif %}

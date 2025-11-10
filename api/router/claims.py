@@ -81,7 +81,11 @@ async def claims_page(
         date_to: Optional[str] = Query(None),
         status: Optional[str] = Query(None),
         number: Optional[str] = Query(None),
+        admin=Depends(get_current_admin)
 ):
+    if not admin:
+        return RedirectResponse("/auth/login")
+
     query = {}  # начинаем с пустого словаря
 
     # Фильтр по пользователю
@@ -123,9 +127,22 @@ async def claims_page(
 
     claims = await claims_query.sort("-created_at").to_list()
 
+    # СОБИРАЕМ ID всех пользователей в текущей выборке
+    user_ids = list(set([claim.user_id for claim in claims]))
+
+    # АГРЕГАЦИЯ: подсчитываем заявки для каждого пользователя
+    user_claims_count = {}
+    for user_id in user_ids:
+        count = await Claim.find({"user_id": user_id}).count()
+        user_claims_count[str(user_id)] = count
+
+
     # Подготавливаем данные
     claims_data = []
     for claim in claims:
+        user_id_str = str(claim.user_id)
+        total_claims = user_claims_count.get(user_id_str, 1)
+        previous_claims = total_claims - 1
         user = await get_user_safe(claim.user_id)
 
         # ПРАВИЛЬНЫЙ СИНТАКСИС ДЛЯ ПОИСКА ЧАТ-СЕССИИ
@@ -153,6 +170,7 @@ async def claims_page(
             "created_at": claim.created_at,
             "is_chat_active": chat_session is not None,
             "has_unanswered": chat_session.has_unanswered if chat_session else False,
+            "old_claims": total_claims
         })
 
     banks = load_banks()

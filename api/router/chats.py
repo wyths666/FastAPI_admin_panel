@@ -199,8 +199,14 @@ async def get_chat_history(
             "date": msg["date"],
             "file_id": msg.get("file_id", ""),
             "file_type": msg.get("file_type", "none"),
+            "file_name": msg.get("file_name", ""),
+            "file_size": msg.get("file_size", 0),
+            "mime_type": msg.get("mime_type", ""),
             "from_operator": msg.get("from_operator", "0") == "1",
-            "has_photo": msg.get("file_type") == "photo" and bool(msg.get("file_id"))
+            "has_photo": msg.get("file_type") == "photo" and bool(msg.get("file_id")),
+            "has_document": msg.get("file_type") == "document" and bool(msg.get("file_id")),
+            "has_audio": msg.get("file_type") in ["audio", "voice"] and bool(msg.get("file_id")),
+            "has_video": msg.get("file_type") in ["video", "video_note"] and bool(msg.get("file_id"))
         })
 
     return messages_data
@@ -242,6 +248,58 @@ async def get_chat_photo_url(
         print(f"❌ Ошибка в /chats/photo-url/{message_id}: {e}")
         return {"error": f"Failed to get photo URL: {str(e)}"}
 
+
+@router.get("/chats/download/{message_id}")
+async def download_file(
+        message_id: str,
+        admin=Depends(get_current_admin)
+):
+    """Скачать файл"""
+    if not admin:
+        return {"error": "Unauthorized"}
+
+    try:
+        db = get_database_bot1()
+        messages_collection = db["messages"]
+
+        from bson import ObjectId
+        message = await messages_collection.find_one({"_id": ObjectId(message_id)})
+
+        if not message or not message.get("file_id"):
+            return {"error": "File not found"}
+
+        # Получаем файл через Telegram API
+        file = await bot1.get_file(message["file_id"])
+
+        # Скачиваем файл
+        file_url = f"https://api.telegram.org/file/bot{bot1.token}/{file.file_path}"
+
+        # Перенаправляем на прямой URL к файлу
+        from fastapi.responses import RedirectResponse
+        return RedirectResponse(file_url)
+
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@router.get("/chats/audio/{message_id}")
+async def stream_audio(
+        message_id: str,
+        admin=Depends(get_current_admin)
+):
+    """Воспроизвести аудио"""
+    # Аналогично download_file, но для аудио
+    return await download_file(message_id, admin)
+
+
+@router.get("/chats/video/{message_id}")
+async def stream_video(
+        message_id: str,
+        admin=Depends(get_current_admin)
+):
+    """Воспроизвести видео"""
+    # Аналогично download_file, но для видео
+    return await download_file(message_id, admin)
 
 @router.post("/chats/send/")
 async def send_operator_message(

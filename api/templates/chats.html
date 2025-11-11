@@ -714,23 +714,6 @@ async function loadChatHistory(userId, container) {
 
         container.innerHTML = '';
 
-        // Предварительно получаем все URL фото
-        const photoUrls = {};
-        for (const msg of messages) {
-            if (msg.has_photo && msg.file_id) {
-                try {
-                    const resp = await fetch(`/chats/photo-url/${msg.id}`);
-                    if (resp.ok) {
-                        const data = await resp.json();
-                        photoUrls[msg.id] = data.url;
-                    }
-                } catch (e) {
-                    console.error(`❌ Ошибка получения URL для ${msg.id}:`, e);
-                    photoUrls[msg.id] = 'https://via.placeholder.com/200x200/333/fff?text=🖼️';
-                }
-            }
-        }
-
         // Отображаем сообщения
         messages.forEach((msg, index) => {
             const messageDiv = document.createElement('div');
@@ -743,28 +726,105 @@ async function loadChatHistory(userId, container) {
 
             let content = '';
 
-            if (msg.has_photo && msg.file_id) {
-                const photoUrl = photoUrls[msg.id] || 'https://via.placeholder.com/200x200/333/fff?text=🖼️';
-
+            if (msg.has_photo) {
+                // Фото
                 content = `
                     <div style="margin-bottom: 8px;">
-                        <img src="${photoUrl}"
+                        <img src="/chats/photo/${msg.id}"
                              alt="Фото из чата"
                              style="max-width: 200px; max-height: 200px; border-radius: 8px; border: 2px solid var(--primary); cursor: pointer;"
                              onclick="openChatPhoto('${msg.id}')"
-                             onload="console.log('✅ Фото загружено: ${msg.id}')"
-                             onerror="this.src='https://via.placeholder.com/200x200/333/fff?text=🖼️'; console.error('❌ Ошибка загрузки фото: ${msg.id}')">
+                             onerror="this.style.display='none'">
                     </div>
                     ${msg.message ? `<div style="margin-top: 8px;">${msg.message}</div>` : ''}
-                    <div class="message-time">${messageTime}</div>
+                `;
+            } else if (msg.has_document) {
+                // Документ (файл)
+                const fileSize = msg.file_size ? ` (${formatFileSize(msg.file_size)})` : '';
+                content = `
+                    <div style="margin-bottom: 8px; padding: 10px; background: #f0f8ff; border-radius: 8px; border: 1px solid #d1e7ff;">
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <span style="font-size: 1.5rem;">📎</span>
+                            <div style="flex: 1;">
+                                <div style="font-weight: bold;">${msg.file_name || 'Файл'}</div>
+                                <div style="font-size: 0.8rem; color: #666;">
+                                    ${msg.mime_type || 'Неизвестный тип'}${fileSize}
+                                </div>
+                            </div>
+                            <button onclick="downloadFile('${msg.id}')"
+                                    style="background: var(--primary); color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 0.8rem;">
+                                Скачать
+                            </button>
+                        </div>
+                    </div>
+                    ${msg.message ? `<div style="margin-top: 8px;">${msg.message}</div>` : ''}
+                `;
+            } else if (msg.has_audio) {
+                // Аудио или голосовое
+                const isVoice = msg.file_type === 'voice';
+                const icon = isVoice ? '🎤' : '🎵';
+                const label = isVoice ? 'Голосовое сообщение' : 'Аудио';
+                const fileSize = msg.file_size ? ` (${formatFileSize(msg.file_size)})` : '';
+
+                content = `
+                    <div style="margin-bottom: 8px; padding: 10px; background: #fff0f5; border-radius: 8px; border: 1px solid #ffd1dc;">
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <span style="font-size: 1.5rem;">${icon}</span>
+                            <div style="flex: 1;">
+                                <div style="font-weight: bold;">${label}</div>
+                                <div style="font-size: 0.8rem; color: #666;">
+                                    ${msg.mime_type || ''}${fileSize}
+                                </div>
+                            </div>
+                            <button onclick="playAudio('${msg.id}')"
+                                    style="background: var(--success); color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 0.8rem;">
+                                ▶️ Воспроизвести
+                            </button>
+                        </div>
+                    </div>
+                    ${msg.message ? `<div style="margin-top: 8px;">${msg.message}</div>` : ''}
+                `;
+            } else if (msg.has_video) {
+                // Видео
+                const isVideoNote = msg.file_type === 'video_note';
+                const icon = isVideoNote ? '📹' : '🎥';
+                const label = isVideoNote ? 'Видео-кружочек' : 'Видео';
+                const fileSize = msg.file_size ? ` (${formatFileSize(msg.file_size)})` : '';
+
+                content = `
+                    <div style="margin-bottom: 8px; padding: 10px; background: #f0f0f0; border-radius: 8px; border: 1px solid #ddd;">
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <span style="font-size: 1.5rem;">${icon}</span>
+                            <div style="flex: 1;">
+                                <div style="font-weight: bold;">${label}</div>
+                                <div style="font-size: 0.8rem; color: #666;">
+                                    ${msg.mime_type || ''}${fileSize}
+                                </div>
+                            </div>
+                            <button onclick="playVideo('${msg.id}')"
+                                    style="background: var(--warning); color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 0.8rem;">
+                                ▶️ Смотреть
+                            </button>
+                        </div>
+                    </div>
+                    ${msg.message ? `<div style="margin-top: 8px;">${msg.message}</div>` : ''}
+                `;
+            } else if (msg.file_type === 'sticker') {
+                // Стикер
+                content = `
+                    <div style="margin-bottom: 8px; text-align: center;">
+                        <div style="font-size: 3rem;">${msg.message}</div>
+                        <div style="font-size: 0.8rem; color: #666;">Стикер</div>
+                    </div>
                 `;
             } else {
+                // Текстовое сообщение
                 content = `
                     <div>${msg.message || ''}</div>
-                    <div class="message-time">${messageTime}</div>
                 `;
             }
 
+            content += `<div class="message-time">${messageTime}</div>`;
             messageDiv.innerHTML = content;
             container.appendChild(messageDiv);
         });
@@ -781,6 +841,29 @@ async function loadChatHistory(userId, container) {
         console.error('Ошибка загрузки истории:', error);
         container.innerHTML = '<div style="text-align: center; color: var(--gray);">Ошибка загрузки сообщений</div>';
     }
+}
+
+// Вспомогательные функции
+function formatFileSize(bytes) {
+    if (!bytes) return '';
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / 1024 / 1024).toFixed(1) + ' MB';
+}
+
+function downloadFile(messageId) {
+    // Реализация скачивания файла
+    window.open(`/chats/download/${messageId}`, '_blank');
+}
+
+function playAudio(messageId) {
+    // Реализация воспроизведения аудио
+    window.open(`/chats/audio/${messageId}`, '_blank');
+}
+
+function playVideo(messageId) {
+    // Реализация воспроизведения видео
+    window.open(`/chats/video/${messageId}`, '_blank');
 }
 
 // Функция для открытия фото в полноэкранном режиме

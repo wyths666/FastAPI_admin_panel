@@ -1,0 +1,948 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Управление чатами</title>
+    <style>
+        :root {
+            --primary: #4361ee;
+            --success: #4cc9f0;
+            --warning: #f72585;
+            --danger: #e63946;
+            --light: #f8f9fa;
+            --dark: #212529;
+            --gray: #6c757d;
+            --border: #dee2e6;
+            --shadow: rgba(0, 0, 0, 0.1);
+            --radius: 10px;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #f5f7fa 0%, #e4edf5 100%);
+            color: var(--dark);
+            padding: 20px;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .header-actions {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .btn-logout {
+            background: var(--danger);
+            padding: 10px 20px;
+            font-size: 1rem;
+            display: inline-block;
+            color: white;
+            text-decoration: none;
+            border-radius: var(--radius);
+            font-weight: 500;
+            text-align: center;
+            transition: all 0.3s ease;
+            border: none;
+            cursor: pointer;
+        }
+
+        .btn-back {
+            display: inline-block;
+            padding: 10px 20px;
+            background: var(--gray);
+            color: white;
+            text-decoration: none;
+            border-radius: var(--radius);
+            font-size: 1rem;
+            font-weight: 500;
+            text-align: center;
+            transition: all 0.3s ease;
+        }
+
+        .filters {
+            background: white;
+            border-radius: var(--radius);
+            box-shadow: 0 4px 12px var(--shadow);
+            padding: 20px;
+            margin-bottom: 30px;
+        }
+
+        .filter-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+            align-items: end;
+        }
+
+        .filter-group {
+            display: flex;
+            flex-direction: column;
+            flex: 1;
+            min-width: 200px;
+        }
+
+        .filter-group label {
+            font-weight: 500;
+            margin-bottom: 5px;
+            color: var(--dark);
+        }
+
+        .filter-group input,
+        .filter-group select {
+            padding: 10px;
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            font-family: inherit;
+        }
+
+        .filter-button {
+            height: 40px;
+            line-height: 40px;
+            text-align: center;
+            padding: 0 20px;
+            border: none;
+            border-radius: 4px;
+            font-weight: 500;
+            font-family: inherit;
+            cursor: pointer;
+            width: 120px;
+            box-sizing: border-box;
+            background-color: var(--primary);
+            color: white;
+        }
+
+        .filter-button:hover {
+            background-color: #3a56e4;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 30px;
+            padding: 20px;
+            background: white;
+            border-radius: var(--radius);
+            box-shadow: 0 4px 12px var(--shadow);
+        }
+
+        h1 {
+            font-size: 2.2rem;
+            color: var(--primary);
+            margin-bottom: 10px;
+        }
+
+        .summary {
+            font-size: 1.2rem;
+            color: var(--gray);
+        }
+
+        .chat-item {
+            background: white;
+            border-radius: var(--radius);
+            box-shadow: 0 4px 10px var(--shadow);
+            margin-bottom: 20px;
+            overflow: hidden;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .chat-item:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 6px 15px var(--shadow);
+        }
+
+        .chat-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px;
+            background: linear-gradient(to right, #f1f3f9, #e9ecef);
+            border-bottom: 1px solid var(--border);
+            cursor: pointer;
+        }
+
+        .chat-user-info {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .chat-username {
+            font-weight: bold;
+            font-size: 1.2rem;
+            color: var(--primary);
+        }
+
+        .chat-user-id {
+            color: var(--gray);
+            font-size: 0.9rem;
+        }
+
+        .chat-stats {
+            display: flex;
+            gap: 15px;
+            align-items: center;
+        }
+
+        .unread-badge {
+            background: var(--danger);
+            color: white;
+            border-radius: 50%;
+            width: 25px;
+            height: 25px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.8rem;
+            font-weight: bold;
+        }
+
+        .chat-status {
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-weight: bold;
+            font-size: 0.9rem;
+            text-align: center;
+        }
+
+        .status-active { background: #d1ecf1; color: #0c5460; }
+        .status-banned { background: #f8d7da; color: #721c24; }
+
+        .toggle-icon {
+            font-size: 1.2rem;
+            transition: transform 0.3s ease;
+        }
+
+        .chat-item.expanded .toggle-icon {
+            transform: rotate(180deg);
+        }
+
+        .chat-details {
+            display: none;
+            padding: 20px;
+            background: white;
+        }
+
+        .chat-item.expanded .chat-details {
+            display: block;
+        }
+
+        .chat-info {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .info-item {
+            padding: 10px;
+            background: #f8f9fa;
+            border-radius: 4px;
+        }
+
+        .info-item strong {
+            color: var(--dark);
+        }
+
+        .chat-actions {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .btn-open-chat {
+            background: var(--primary);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 500;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn-ban {
+            background: var(--danger);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 500;
+        }
+
+        .btn-unban {
+            background: var(--success);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 500;
+        }
+
+        /* Модальное окно чата */
+        .chat-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.8);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .chat-modal-content {
+            background: white;
+            border-radius: var(--radius);
+            width: 90%;
+            max-width: 800px;
+            height: 80%;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .chat-modal-header {
+            padding: 20px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .chat-modal-close {
+            background: var(--danger);
+            color: white;
+            border: none;
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            cursor: pointer;
+            font-size: 1.2rem;
+        }
+
+        .chat-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .message {
+            max-width: 70%;
+            padding: 12px;
+            border-radius: 12px;
+            position: relative;
+        }
+
+        .message.operator {
+            background: #e3f2fd;
+            align-self: flex-end;
+            text-align: right;
+        }
+
+        .message.user {
+            background: #f5f5f5;
+            align-self: flex-start;
+        }
+
+        .message-time {
+            font-size: 0.8rem;
+            color: var(--gray);
+            margin-top: 5px;
+        }
+
+        .chat-input-area {
+            padding: 20px;
+            border-top: 1px solid var(--border);
+        }
+
+        .chat-input-form {
+            display: flex;
+            gap: 10px;
+        }
+
+        .chat-input {
+            flex: 1;
+            padding: 12px;
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            font-family: inherit;
+        }
+
+        .chat-send {
+            padding: 12px 20px;
+            background: var(--primary);
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 500;
+        }
+
+        /* Пагинация */
+        .pagination {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin: 30px 0;
+            gap: 10px;
+        }
+
+        .pagination-info {
+            text-align: center;
+            margin-bottom: 15px;
+            color: var(--gray);
+        }
+
+        .page-btn {
+            padding: 8px 16px;
+            border: 1px solid var(--border);
+            background: white;
+            border-radius: 4px;
+            cursor: pointer;
+            text-decoration: none;
+            color: var(--dark);
+        }
+
+        .page-btn:hover {
+            background: var(--primary);
+            color: white;
+            border-color: var(--primary);
+        }
+
+        .page-btn.active {
+            background: var(--primary);
+            color: white;
+            border-color: var(--primary);
+        }
+
+        .page-btn.disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .page-btn.disabled:hover {
+            background: white;
+            color: var(--dark);
+            border-color: var(--border);
+        }
+
+        @media (max-width: 768px) {
+            .filter-row {
+                flex-direction: column;
+            }
+            .filter-button {
+                align-self: stretch;
+            }
+            .chat-header {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 10px;
+            }
+            .chat-stats {
+                align-self: stretch;
+                justify-content: space-between;
+            }
+            .message {
+                max-width: 85%;
+            }
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="header-actions">
+        <a href="/" class="btn-back">← Назад в панель</a>
+        <a href="/auth/logout" class="btn-logout">🚪 Выйти</a>
+    </div>
+
+    <header>
+        <h1>Управление чатами</h1>
+        <p class="summary">Всего чатов: {{ total_chats }}</p>
+    </header>
+
+    <div class="filters">
+        <form id="filter-form" method="GET">
+            <div class="filter-row">
+                <div class="filter-group">
+                    <label for="username">Имя пользователя:</label>
+                    <input type="text" id="username" name="username" value="{{ username or '' }}"
+                           placeholder="Введите имя пользователя...">
+                </div>
+
+                <div class="filter-group">
+                    <label for="date_from">Дата от:</label>
+                    <input type="date" id="date_from" name="date_from" value="{{ date_from or '' }}">
+                </div>
+
+                <div class="filter-group">
+                    <label for="date_to">Дата до:</label>
+                    <input type="date" id="date_to" name="date_to" value="{{ date_to or '' }}">
+                </div>
+
+                <div class="filter-group">
+                    <label for="has_unread" style="display: flex; align-items: center; gap: 8px;">
+                        <input type="checkbox" id="has_unread" name="has_unread"
+                               {% if has_unread %}checked{% endif %}>
+                        Только с непрочитанными
+                    </label>
+                </div>
+
+                <input type="hidden" name="page" value="1">
+
+                <button type="submit" class="filter-button">🔍 Фильтр</button>
+                <button type="button" class="filter-button" onclick="resetFilters()" style="background-color: #8f8f8f;">❌ Сброс</button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Информация о пагинации -->
+    {% if total_chats > 0 %}
+    <div class="pagination-info">
+        Показаны чаты с {{ start_chat }} по {{ end_chat }} из {{ total_chats }}
+    </div>
+    {% endif %}
+
+    {% for chat in chats %}
+    <div class="chat-item" data-user-id="{{ chat.user_id }}">
+        <div class="chat-header" onclick="toggleChatDetails(this.parentElement)">
+            <div class="chat-user-info">
+                <div>
+                    <div class="chat-username">
+                        {% if chat.unread_count > 0 %}
+                        <span style="color: red;">📩 </span>
+                        {% endif %}
+                        {{ chat.username }}
+                    </div>
+                    <div class="chat-user-id">ID: {{ chat.user_id }}</div>
+                </div>
+            </div>
+
+            <div class="chat-stats">
+                {% if chat.unread_count > 0 %}
+                <div class="unread-badge">{{ chat.unread_count }}</div>
+                {% endif %}
+
+                <div class="chat-status {% if chat.banned == '1' %}status-banned{% else %}status-active{% endif %}">
+                    {% if chat.banned == '1' %}🚫 Заблокирован{% else %}✅ Активен{% endif %}
+                </div>
+
+                <span class="toggle-icon">▼</span>
+            </div>
+        </div>
+
+        <div class="chat-details">
+            <div class="chat-info">
+                <div class="info-item">
+                    <strong>👤 Полное имя:</strong><br>
+                    {{ chat.full_name }}
+                </div>
+                <div class="info-item">
+                    <strong>📅 Последнее сообщение:</strong><br>
+                    {{ chat.last_message_date.strftime('%d.%m.%Y %H:%M') }}
+                </div>
+                <div class="info-item">
+                    <strong>📊 Всего сообщений:</strong><br>
+                    {{ chat.message_count }}
+                </div>
+                <div class="info-item">
+                    <strong>👁️ Непрочитанных:</strong><br>
+                    {{ chat.unread_count }}
+                </div>
+            </div>
+
+            <div class="info-item">
+                <strong>💬 Последнее сообщение:</strong><br>
+                {{ chat.last_message_preview }}
+                {% if chat.has_photo %}
+                <span style="color: var(--primary);"> 🖼️</span>
+                {% endif %}
+            </div>
+
+            <div class="chat-actions">
+                <button class="btn-open-chat" onclick="openChatModal({{ chat.user_id }}, '{{ chat.username }}')">
+                    💬 Открыть чат
+                </button>
+
+                {% if chat.banned == '1' %}
+                <button class="btn-unban" onclick="toggleUserBan({{ chat.user_id }}, false)">
+                    ✅ Разблокировать
+                </button>
+                {% else %}
+                <button class="btn-ban" onclick="toggleUserBan({{ chat.user_id }}, true)">
+                    🚫 Заблокировать
+                </button>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    {% else %}
+    <div style="text-align: center; padding: 40px; background: white; border-radius: var(--radius); box-shadow: 0 4px 12px var(--shadow);">
+        <h3>📭 Нет чатов</h3>
+        <p>Чаты не найдены по заданным фильтрам.</p>
+    </div>
+    {% endfor %}
+
+    <!-- Пагинация -->
+    {% if total_pages > 1 %}
+    <div class="pagination">
+        <!-- Первая страница -->
+        <a href="?page=1{% if username %}&username={{ username }}{% endif %}{% if date_from %}&date_from={{ date_from }}{% endif %}{% if date_to %}&date_to={{ date_to }}{% endif %}{% if has_unread %}&has_unread=true{% endif %}"
+           class="page-btn {% if current_page == 1 %}disabled{% endif %}">
+            « Первая
+        </a>
+
+        <!-- Предыдущая страница -->
+        <a href="?page={{ current_page - 1 }}{% if username %}&username={{ username }}{% endif %}{% if date_from %}&date_from={{ date_from }}{% endif %}{% if date_to %}&date_to={{ date_to }}{% endif %}{% if has_unread %}&has_unread=true{% endif %}"
+           class="page-btn {% if current_page == 1 %}disabled{% endif %}">
+            ‹ Назад
+        </a>
+
+        <!-- Номера страниц -->
+        {% for page_num in range(1, total_pages + 1) %}
+            {% if page_num >= current_page - 2 and page_num <= current_page + 2 %}
+            <a href="?page={{ page_num }}{% if username %}&username={{ username }}{% endif %}{% if date_from %}&date_from={{ date_from }}{% endif %}{% if date_to %}&date_to={{ date_to }}{% endif %}{% if has_unread %}&has_unread=true{% endif %}"
+               class="page-btn {% if page_num == current_page %}active{% endif %}">
+                {{ page_num }}
+            </a>
+            {% endif %}
+        {% endfor %}
+
+        <!-- Следующая страница -->
+        <a href="?page={{ current_page + 1 }}{% if username %}&username={{ username }}{% endif %}{% if date_from %}&date_from={{ date_from }}{% endif %}{% if date_to %}&date_to={{ date_to }}{% endif %}{% if has_unread %}&has_unread=true{% endif %}"
+           class="page-btn {% if current_page == total_pages %}disabled{% endif %}">
+            Вперед ›
+        </a>
+
+        <!-- Последняя страница -->
+        <a href="?page={{ total_pages }}{% if username %}&username={{ username }}{% endif %}{% if date_from %}&date_from={{ date_from }}{% endif %}{% if date_to %}&date_to={{ date_to }}{% endif %}{% if has_unread %}&has_unread=true{% endif %}"
+           class="page-btn {% if current_page == total_pages %}disabled{% endif %}">
+            Последняя »
+        </a>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Модальное окно чата -->
+<div id="chatModal" class="chat-modal">
+    <div class="chat-modal-content">
+        <div class="chat-modal-header">
+            <h3 id="chatModalTitle">Чат с пользователем</h3>
+            <button class="chat-modal-close" onclick="closeChatModal()">×</button>
+        </div>
+
+        <div class="chat-messages" id="chatModalMessages">
+            <!-- Сообщения загружаются здесь -->
+        </div>
+
+        <div class="chat-input-area">
+            <form class="chat-input-form" onsubmit="sendChatMessage(event)">
+                <input type="text" class="chat-input" id="chatMessageInput" placeholder="Введите сообщение..." required>
+                <button type="submit" class="chat-send">Отправить</button>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+function resetFilters() {
+    // Очищаем форму и отправляем
+    window.location.href = '/chats/';
+}
+
+let currentChatUserId = null;
+let chatPollInterval = null;
+let isUserScrolling = false;
+let lastScrollTop = 0;
+
+function toggleChatDetails(element) {
+    element.classList.toggle('expanded');
+}
+
+function openChatModal(userId, username) {
+    currentChatUserId = userId;
+    const modal = document.getElementById('chatModal');
+    const title = document.getElementById('chatModalTitle');
+    const messagesContainer = document.getElementById('chatModalMessages');
+
+    title.textContent = `Чат с ${username} (ID: ${userId})`;
+    modal.style.display = 'flex';
+
+    // Загружаем историю чата
+    loadChatHistory(userId, messagesContainer);
+
+    // Запускаем обновление чата с увеличенным интервалом
+    startChatPolling(userId, messagesContainer);
+}
+
+function closeChatModal() {
+    const modal = document.getElementById('chatModal');
+    modal.style.display = 'none';
+    currentChatUserId = null;
+
+    // Останавливаем опрос
+    if (chatPollInterval) {
+        clearInterval(chatPollInterval);
+        chatPollInterval = null;
+    }
+}
+
+async function loadChatHistory(userId, container) {
+    try {
+        const response = await fetch(`/chats/history/?user_id=${userId}`);
+        const messages = await response.json();
+
+        // Сохраняем позицию прокрутки
+        const wasAtBottom = isScrolledToBottom(container);
+        const previousScrollTop = container.scrollTop;
+        const previousHeight = container.scrollHeight;
+
+        container.innerHTML = '';
+
+        // Предварительно получаем все URL фото
+        const photoUrls = {};
+        for (const msg of messages) {
+            if (msg.has_photo && msg.file_id) {
+                try {
+                    const resp = await fetch(`/chats/photo-url/${msg.id}`);
+                    if (resp.ok) {
+                        const data = await resp.json();
+                        photoUrls[msg.id] = data.url;
+                    }
+                } catch (e) {
+                    console.error(`❌ Ошибка получения URL для ${msg.id}:`, e);
+                    photoUrls[msg.id] = 'https://via.placeholder.com/200x200/333/fff?text=🖼️';
+                }
+            }
+        }
+
+        // Отображаем сообщения
+        messages.forEach((msg, index) => {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${msg.from_operator ? 'operator' : 'user'}`;
+
+            const messageTime = new Date(msg.date).toLocaleTimeString('ru-RU', {
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+
+            let content = '';
+
+            if (msg.has_photo && msg.file_id) {
+                const photoUrl = photoUrls[msg.id] || 'https://via.placeholder.com/200x200/333/fff?text=🖼️';
+
+                content = `
+                    <div style="margin-bottom: 8px;">
+                        <img src="${photoUrl}"
+                             alt="Фото из чата"
+                             style="max-width: 200px; max-height: 200px; border-radius: 8px; border: 2px solid var(--primary); cursor: pointer;"
+                             onclick="openChatPhoto('${msg.id}')"
+                             onload="console.log('✅ Фото загружено: ${msg.id}')"
+                             onerror="this.src='https://via.placeholder.com/200x200/333/fff?text=🖼️'; console.error('❌ Ошибка загрузки фото: ${msg.id}')">
+                    </div>
+                    ${msg.message ? `<div style="margin-top: 8px;">${msg.message}</div>` : ''}
+                    <div class="message-time">${messageTime}</div>
+                `;
+            } else {
+                content = `
+                    <div>${msg.message || ''}</div>
+                    <div class="message-time">${messageTime}</div>
+                `;
+            }
+
+            messageDiv.innerHTML = content;
+            container.appendChild(messageDiv);
+        });
+
+        // Восстанавливаем позицию прокрутки
+        if (wasAtBottom || isUserScrolling) {
+            container.scrollTop = container.scrollHeight;
+        } else {
+            const newHeight = container.scrollHeight;
+            container.scrollTop = previousScrollTop + (newHeight - previousHeight);
+        }
+
+    } catch (error) {
+        console.error('Ошибка загрузки истории:', error);
+        container.innerHTML = '<div style="text-align: center; color: var(--gray);">Ошибка загрузки сообщений</div>';
+    }
+}
+
+// Функция для открытия фото в полноэкранном режиме
+async function openChatPhoto(messageId) {
+    try {
+        // Получаем URL фото
+        const resp = await fetch(`/chats/photo-url/${messageId}`);
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+
+        const { url } = await resp.json();
+
+        // Создаём модалку
+        const modal = document.createElement('div');
+        modal.style.cssText = `
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.95); z-index: 10000;
+            display: flex; flex-direction: column; justify-content: center; align-items: center;
+            cursor: pointer; padding: 20px;
+        `;
+
+        modal.innerHTML = `
+            <button onclick="this.parentElement.remove()"
+                    style="align-self: flex-end; background: #fff; color: #000;
+                           border: none; width: 36px; height: 36px; border-radius: 50%;
+                           font-size: 1.4rem; margin-bottom: 10px; cursor: pointer;">
+                ×
+            </button>
+            <img src="${url}"
+                 alt="Фото из чата"
+                 style="max-width: 95%; max-height: 85vh; object-fit: contain;
+                        border-radius: 4px; box-shadow: 0 4px 12px rgba(0,0,0,0.5);"
+                 onerror="this.src='https://via.placeholder.com/400x300/333/999?text=🖼️+Ошибка+загрузки'">
+        `;
+
+        // Закрытие по клику на фон или Esc
+        modal.onclick = (e) => {
+            if (e.target === modal) modal.remove();
+        };
+        const escClose = (e) => {
+            if (e.key === 'Escape') modal.remove();
+        };
+        document.addEventListener('keydown', escClose);
+        modal._escHandler = escClose;
+
+        document.body.appendChild(modal);
+
+    } catch (error) {
+        console.error("❌ openChatPhoto error:", error);
+        alert(`❌ Не удалось открыть фото: ${error.message}`);
+    }
+}
+
+
+async function sendChatMessage(event) {
+    event.preventDefault();
+    const input = document.getElementById('chatMessageInput');
+    const text = input.value.trim();
+
+    if (!text || !currentChatUserId) return;
+
+    try {
+        const response = await fetch('/chats/send/', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({user_id: currentChatUserId, text})
+        });
+
+        const result = await response.json();
+
+        if (result.ok) {
+            input.value = '';
+            // Просто перезагружаем историю чата
+            await loadChatHistory(currentChatUserId, document.getElementById('chatModalMessages'));
+        } else {
+            alert('Ошибка отправки: ' + (result.error || 'Неизвестная ошибка'));
+        }
+    } catch (error) {
+        console.error('Ошибка отправки:', error);
+        alert('Ошибка соединения');
+    }
+}
+
+function startChatPolling(userId, container) {
+    // Останавливаем предыдущий интервал
+    if (chatPollInterval) {
+        clearInterval(chatPollInterval);
+    }
+
+    // Добавляем обработчик скролла для определения активности пользователя
+    container.addEventListener('scroll', handleChatScroll);
+
+    // Запускаем обновление каждые 10 секунд (вместо 3)
+    chatPollInterval = setInterval(async () => {
+        if (currentChatUserId === userId && !isUserScrolling) {
+            await loadChatHistory(userId, container);
+        }
+    }, 10000); // 10 секунд вместо 3
+}
+function handleChatScroll(event) {
+    const container = event.target;
+    const scrollTop = container.scrollTop;
+
+    // Определяем, скроллит ли пользователь
+    if (Math.abs(scrollTop - lastScrollTop) > 5) {
+        isUserScrolling = true;
+
+        // Сбрасываем таймер скроллинга
+        clearTimeout(window.scrollTimeout);
+        window.scrollTimeout = setTimeout(() => {
+            isUserScrolling = false;
+        }, 2000); // Считаем что пользователь закончил скроллить через 2 секунды
+    }
+
+    lastScrollTop = scrollTop;
+}
+
+function isScrolledToBottom(container) {
+    const threshold = 100; // пикселей от низа
+    return container.scrollHeight - container.scrollTop - container.clientHeight <= threshold;
+}
+
+async function toggleUserBan(userId, ban) {
+    const action = ban ? 'блокировку' : 'разблокировку';
+
+    if (!confirm(`Вы уверены, что хотите выполнить ${action} пользователя ${userId}?`)) {
+        return;
+    }
+
+    try {
+        const endpoint = ban ? '/chats/user/ban' : '/chats/user/unban';
+
+        const response = await fetch(endpoint, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                user_id: parseInt(userId)
+            })
+        });
+
+        const result = await response.json();
+
+        if (result.ok) {
+            alert(`✅ ${result.message}`);
+            location.reload();
+        } else {
+            alert(`❌ Ошибка: ${result.error}`);
+        }
+
+    } catch (error) {
+        console.error('Ошибка блокировки/разблокировки:', error);
+        alert('❌ Ошибка соединения');
+    }
+}
+
+// Закрытие модального окна по ESC
+document.addEventListener('keydown', function(event) {
+    if (event.key === 'Escape') {
+        closeChatModal();
+    }
+});
+</script>
+</body>
+</html>ы

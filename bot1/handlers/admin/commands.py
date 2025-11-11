@@ -9,7 +9,7 @@ from bot1.filters.admin import IsAdmin
 from bot1.templates.admin.keyboards import start_admin_kb
 from bot1.templates.admin.states import AdminMailingState
 from core.bot1 import bot1
-from db.beanie_bot1.models import User
+from db.beanie_bot1.models import Users
 
 router = Router()
 
@@ -39,7 +39,7 @@ async def process_mailing_message(msg: Message, state: FSMContext):
 
     # Получаем всех пользователей из базы данных
     try:
-        users = await User.find_all().to_list()
+        users = await Users.find_all().to_list()
     except Exception as e:
         logger.error(f"Ошибка при получении пользователей из БД: {e}")
         await msg.answer("❌ Ошибка при получении списка пользователей")

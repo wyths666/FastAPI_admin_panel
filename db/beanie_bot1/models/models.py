@@ -6,60 +6,63 @@ from beanie import Document
 from typing import get_origin, get_args, Optional
 from pydantic import TypeAdapter, ValidationError, Field, ConfigDict
 from typing import get_type_hints
+from pymongo import IndexModel, ASCENDING, DESCENDING, TEXT
 
 
-class User(Document):
-    tg_id: int
-    username: Optional[str] = None
+class Users(Document):
+    id: int
+    username: str
+    full_name: Optional[str] = None
     role: str = "user"
-    banned: bool = False
+    banned: str = "0"
 
     class Settings:
         name = "users"
+        indexes = [
+            IndexModel([("id", ASCENDING)], unique=True),
+            IndexModel([("username", ASCENDING)]),
+            IndexModel([("banned", ASCENDING)])
+        ]
 
-
-class ChatSession(Document):
-    user_id: int
-    admin_chat_id: Optional[int] = None
-    is_active: bool = True
-    has_unanswered: bool = False
-    created_at: datetime = Field(default_factory=datetime.now)
-    last_interaction: datetime = Field(default_factory=datetime.now)  # ← новое поле
-    closed_at: Optional[datetime] = None
-
-    class Settings:
-        name = "chat_sessions"
-
-
-class ChatMessage(Document):
-    session_id: str
-    claim_id: str
-    user_id: int
-    message: str = ""  # делаем по умолчанию пустую строку
-    is_bot: bool = False
-    has_photo: bool = False
-    photo_file_id: Optional[str] = None
-    photo_caption: Optional[str] = None
-    timestamp: datetime = Field(default_factory=datetime.now)
-
-    class Settings:
-        name = "chat_messages"
-        use_state_management = True
-
-    @classmethod
-    async def create(cls, **kwargs):
-        obj = cls(**kwargs)
-        await obj.insert()
-        return obj
-
-
-class Product(Document):
-    product_id: int
+class Products(Document):
+    id: int
     title: str
-    description: str
+    desc: str
     image_id: str
-    image_path: str
 
     class Settings:
         name = "products"
+        indexes = [
+            IndexModel([("id", ASCENDING)], unique=True),
+            IndexModel([("title", TEXT)])  # Текстовый поиск
+        ]
 
+class Messages(Document):
+    from_id: int
+    message_object: Optional[str] = ""
+    checked: str = "0"
+    date: datetime
+    file_id: str
+    file_type: str = "none"
+    from_operator: str = "0"
+    id: int
+
+
+    class Settings:
+        name = "messages"
+        indexes = [
+            # Основной индекс для поиска сообщений пользователя
+            IndexModel([("from_id", ASCENDING)]),
+
+            # Для сортировки по дате (новые сначала)
+            IndexModel([("date", DESCENDING)]),
+
+            # Составной индекс для частых запросов
+            IndexModel([("from_id", ASCENDING), ("date", DESCENDING)]),
+
+            # Для поиска непрочитанных сообщений
+            IndexModel([("checked", ASCENDING), ("from_id", ASCENDING)]),
+
+            # Уникальный индекс для id сообщения
+            IndexModel([("id", ASCENDING)], unique=True)
+        ]

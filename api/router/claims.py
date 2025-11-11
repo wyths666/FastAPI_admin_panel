@@ -1,10 +1,6 @@
-import base64
-import os
 import json
 from pathlib import Path
-
 from beanie import PydanticObjectId
-
 from core.logger import api_logger as logger
 from datetime import datetime, timezone
 from typing import List, Optional

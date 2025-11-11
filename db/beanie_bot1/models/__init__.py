@@ -1,4 +1,4 @@
-from .models import ChatSession, ChatMessage, User, Product
+from .models import Users, Products, Messages
 
 
-document_models = [ChatSession, ChatMessage, User, Product]
+document_models = [Users, Products, Messages]

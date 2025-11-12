@@ -45,7 +45,18 @@ async def chats_page(
             "last_message_date": {"$max": "$date"},
             "message_count": {"$sum": 1},
             "unread_count": {
-                "$sum": {"$cond": [{"$eq": ["$checked", "0"]}, 1, 0]}
+                "$sum": {
+                    "$cond": [
+                        {
+                            "$and": [
+                                {"$eq": ["$checked", "0"]},  # не прочитано
+                                {"$eq": ["$from_operator", "0"]}  # от пользователя
+                            ]
+                        },
+                        1,
+                        0
+                    ]
+                }
             }
         }},
         {"$sort": {"last_message_date": -1}}
@@ -171,9 +182,9 @@ async def chats_page(
 
 @router.get("/chats/history/")
 async def get_chat_history(
-        user_id: int = Query(..., description="ID пользователя"),
-        limit: int = Query(100, description="Лимит сообщений"),
-        admin=Depends(get_current_admin)
+    user_id: int = Query(..., description="ID пользователя"),
+    limit: int = Query(100, description="Лимит сообщений"),
+    admin=Depends(get_current_admin)
 ):
     """Получить историю сообщений с пользователем"""
     if not admin:
@@ -182,28 +193,49 @@ async def get_chat_history(
     db = get_database_bot1()
     messages_collection = db["messages"]
 
-    # Получаем сообщения напрямую из MongoDB
+    # 1. СНАЧАЛА загружаем сообщения
     messages_cursor = messages_collection.find(
         {"from_id": user_id}
     ).sort("date", -1).limit(limit)
 
     messages_list = await messages_cursor.to_list(length=None)
 
-    # Преобразуем в нужный формат
+    # 2. ПОТОМ помечаем как прочитанные
+    unread_count = await messages_collection.count_documents({
+        "from_id": user_id,
+        "from_operator": "0",
+        "checked": "0"
+    })
+
+    if unread_count > 0:
+        await messages_collection.update_many(
+            {
+                "from_id": user_id,
+                "from_operator": "0",
+                "checked": "0"
+            },
+            {
+                "$set": {"checked": "1"}
+            }
+        )
+
+    # 3. Преобразуем в нужный формат
     messages_data = []
     for msg in reversed(messages_list):
         messages_data.append({
-            "id": str(msg["_id"]),  # ObjectId как строка
+            "id": str(msg["_id"]),
             "from_id": msg["from_id"],
             "message": msg.get("message_object", ""),
             "date": msg["date"],
             "file_id": msg.get("file_id", ""),
             "file_type": msg.get("file_type", "none"),
+            "from_operator": msg.get("from_operator", "0") == "1",
+            "checked": msg.get("checked", "0") == "1",  # ← ДОБАВЛЕНО ДЛЯ НЕПРОЧИТАННЫХ
+            "has_photo": msg.get("file_type") == "photo" and bool(msg.get("file_id")),
+            # Дополнительные поля для файлов
             "file_name": msg.get("file_name", ""),
             "file_size": msg.get("file_size", 0),
             "mime_type": msg.get("mime_type", ""),
-            "from_operator": msg.get("from_operator", "0") == "1",
-            "has_photo": msg.get("file_type") == "photo" and bool(msg.get("file_id")),
             "has_document": msg.get("file_type") == "document" and bool(msg.get("file_id")),
             "has_audio": msg.get("file_type") in ["audio", "voice"] and bool(msg.get("file_id")),
             "has_video": msg.get("file_type") in ["video", "video_note"] and bool(msg.get("file_id"))
@@ -212,14 +244,12 @@ async def get_chat_history(
     return messages_data
 
 
-@router.get("/chats/photo-url/{message_id}")
-async def get_chat_photo_url(
+@router.get("/chats/photo/{message_id}")
+async def get_chat_photo_proxy(
         message_id: str,
         admin=Depends(get_current_admin)
 ):
-    """
-    Возвращает JSON с URL фото из Telegram CDN по message_id.
-    """
+    """Proxy для отображения фото"""
     if not admin:
         return {"error": "Unauthorized"}
 
@@ -227,26 +257,62 @@ async def get_chat_photo_url(
         db = get_database_bot1()
         messages_collection = db["messages"]
 
-        # 1. Находим сообщение по _id
         from bson import ObjectId
         message = await messages_collection.find_one({"_id": ObjectId(message_id)})
 
         if not message or message.get("file_type") != "photo" or not message.get("file_id"):
             return {"error": "Photo not found"}
 
-        # 2. Получаем file_path через Telegram API
+        # Получаем file_path через Telegram API
         file = await bot1.get_file(message["file_id"])
         if not file.file_path:
-            return {"error": "File path missing from Telegram"}
+            return {"error": "File path missing"}
 
-        # 3. Формируем публичный URL
+        # Перенаправляем на Telegram CDN
         photo_url = f"https://api.telegram.org/file/bot{bot1.token}/{file.file_path}"
 
-        return {"url": photo_url}
+        from fastapi.responses import RedirectResponse
+        return RedirectResponse(photo_url)
 
     except Exception as e:
-        print(f"❌ Ошибка в /chats/photo-url/{message_id}: {e}")
-        return {"error": f"Failed to get photo URL: {str(e)}"}
+        print(f"❌ Ошибка получения фото {message_id}: {e}")
+        return {"error": str(e)}
+
+# @router.get("/chats/photo-url/{message_id}")
+# async def get_chat_photo_url(
+#         message_id: str,
+#         admin=Depends(get_current_admin)
+# ):
+#     """
+#     Возвращает JSON с URL фото из Telegram CDN по message_id.
+#     """
+#     if not admin:
+#         return {"error": "Unauthorized"}
+#
+#     try:
+#         db = get_database_bot1()
+#         messages_collection = db["messages"]
+#
+#         # 1. Находим сообщение по _id
+#         from bson import ObjectId
+#         message = await messages_collection.find_one({"_id": ObjectId(message_id)})
+#
+#         if not message or message.get("file_type") != "photo" or not message.get("file_id"):
+#             return {"error": "Photo not found"}
+#
+#         # 2. Получаем file_path через Telegram API
+#         file = await bot1.get_file(message["file_id"])
+#         if not file.file_path:
+#             return {"error": "File path missing from Telegram"}
+#
+#         # 3. Формируем публичный URL
+#         photo_url = f"https://api.telegram.org/file/bot{bot1.token}/{file.file_path}"
+#
+#         return {"url": photo_url}
+#
+#     except Exception as e:
+#         print(f"❌ Ошибка в /chats/photo-url/{message_id}: {e}")
+#         return {"error": f"Failed to get photo URL: {str(e)}"}
 
 
 @router.get("/chats/download/{message_id}")
@@ -301,12 +367,13 @@ async def stream_video(
     # Аналогично download_file, но для видео
     return await download_file(message_id, admin)
 
+
 @router.post("/chats/send/")
 async def send_operator_message(
         data: dict,
         admin=Depends(get_current_admin)
 ):
-    """Отправить сообщение от оператора и доставить пользователю в Telegram"""
+    """Отправить сообщение от оператора и пометить сообщения пользователя как прочитанные"""
     if not admin:
         return {"error": "Unauthorized"}
 
@@ -331,14 +398,28 @@ async def send_operator_message(
         if user and user.get("banned") == "1":
             return {"error": "Пользователь заблокирован"}
 
-        # 2. Отправляем сообщение пользователю в Telegram
+        # 2. ОТМЕТКА: Помечаем ВСЕ сообщения пользователя как прочитанные
+        await messages_collection.update_many(
+            {
+                "from_id": user_id,
+                "from_operator": "0",  # только сообщения от пользователя
+                "checked": "0"  # только непрочитанные
+            },
+            {
+                "$set": {"checked": "1"}
+            }
+        )
+
+        print(f"✅ Помечены как прочитанные сообщения пользователя {user_id}")
+
+        # 3. Отправляем сообщение пользователю в Telegram
         telegram_success = await send_telegram_message(user_id, text)
 
-        # 3. Получаем следующий ID сообщения
+        # 4. Получаем следующий ID сообщения
         last_message = await messages_collection.find_one({}, sort=[("id", -1)])
         next_id = last_message["id"] + 1 if last_message else 1
 
-        # 4. Сохраняем сообщение в БД
+        # 5. Сохраняем сообщение оператора в БД
         message_text = text
         if not telegram_success:
             message_text = text + " (не доставлено)"
@@ -346,11 +427,11 @@ async def send_operator_message(
         message_data = {
             "from_id": user_id,
             "message_object": message_text,
-            "checked": "1",
+            "checked": "1",  # сообщение от оператора всегда прочитанное
             "date": datetime.now(timezone.utc),
             "file_id": "",
             "file_type": "text",
-            "from_operator": "1",
+            "from_operator": "1",  # сообщение от оператора
             "id": next_id
         }
 

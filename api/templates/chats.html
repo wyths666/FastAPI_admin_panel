@@ -730,15 +730,15 @@ async function loadChatHistory(userId, container) {
                 // Фото
                 content = `
                     <div style="margin-bottom: 8px;">
-                        <img src="/chats/photo/${msg.id}"
+                            <img src="/chats/photo/${msg.id}"
                              alt="Фото из чата"
-                             style="max-width: 200px; max-height: 200px; border-radius: 8px; border: 2px solid var(--primary); cursor: pointer;"
-                             onclick="openChatPhoto('${msg.id}')"
-                             onerror="this.style.display='none'">
-                    </div>
+                 style="max-width: 200px; max-height: 200px; border-radius: 8px; border: 2px solid var(--primary); cursor: pointer;"
+                 onclick="openChatPhoto('${msg.id}')"
+                 onerror="console.error('❌ Ошибка загрузки фото: ${msg.id}'); this.style.display='none'">
+        </div>
                     ${msg.message ? `<div style="margin-top: 8px;">${msg.message}</div>` : ''}
-                `;
-            } else if (msg.has_document) {
+    `;
+} else if (msg.has_document) {
                 // Документ (файл)
                 const fileSize = msg.file_size ? ` (${formatFileSize(msg.file_size)})` : '';
                 content = `
@@ -869,13 +869,9 @@ function playVideo(messageId) {
 // Функция для открытия фото в полноэкранном режиме
 async function openChatPhoto(messageId) {
     try {
-        // Получаем URL фото
-        const resp = await fetch(`/chats/photo-url/${messageId}`);
-        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        // Используем тот же proxy эндпоинт для полноэкранного просмотра
+        const photoUrl = `/chats/photo/${messageId}`;
 
-        const { url } = await resp.json();
-
-        // Создаём модалку
         const modal = document.createElement('div');
         modal.style.cssText = `
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
@@ -891,22 +887,23 @@ async function openChatPhoto(messageId) {
                            font-size: 1.4rem; margin-bottom: 10px; cursor: pointer;">
                 ×
             </button>
-            <img src="${url}"
+            <img src="${photoUrl}"
                  alt="Фото из чата"
                  style="max-width: 95%; max-height: 85vh; object-fit: contain;
                         border-radius: 4px; box-shadow: 0 4px 12px rgba(0,0,0,0.5);"
-                 onerror="this.src='https://via.placeholder.com/400x300/333/999?text=🖼️+Ошибка+загрузки'">
+                 onerror="alert('Не удалось загрузить фото')">
         `;
 
-        // Закрытие по клику на фон или Esc
         modal.onclick = (e) => {
             if (e.target === modal) modal.remove();
         };
-        const escClose = (e) => {
-            if (e.key === 'Escape') modal.remove();
-        };
-        document.addEventListener('keydown', escClose);
-        modal._escHandler = escClose;
+
+        document.addEventListener('keydown', function escClose(e) {
+            if (e.key === 'Escape') {
+                modal.remove();
+                document.removeEventListener('keydown', escClose);
+            }
+        });
 
         document.body.appendChild(modal);
 

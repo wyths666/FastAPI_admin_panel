@@ -1,6 +1,8 @@
 from aiogram import Router, F
 from aiogram.types import Message, ContentType
-from aiogram.filters import Command
+from aiogram.filters import Command, StateFilter
+
+from core.bot1 import bot1
 from db.beanie_bot1.models.models import Messages
 from datetime import datetime, timezone
 from utils.database import get_database_bot1
@@ -10,20 +12,49 @@ user_messages_router = Router()
 
 # Исключаем команды
 user_messages_router.message.filter(~F.text.startswith('/'))
-
+user_messages_router.message.filter(StateFilter(None))
 
 @user_messages_router.message(F.content_type.in_({
-    ContentType.TEXT,
-    ContentType.PHOTO,
-    ContentType.DOCUMENT,
     ContentType.VIDEO,
     ContentType.AUDIO,
     ContentType.VOICE,
     ContentType.STICKER,
     ContentType.VIDEO_NOTE
 }))
+async def handle_unsupported_content(message: Message):
+    """Сообщает пользователю о неподдерживаемых типах контента"""
+
+    # Пропускаем служебные сообщения
+    if not message.from_user:
+        return
+
+    user_id = message.from_user.id
+
+    try:
+        # Отправляем информационное сообщение
+        await bot1.send_message(
+            chat_id=user_id,
+            text="❌ Отправлять можно только:\n"
+                 "• 📝 Текстовые сообщения\n"
+                 "• 🖼️ Фотографии\n"
+                 "• 📎 Документы (файлы)\n\n"
+                 "Видео, аудио, голосовые сообщения и стикеры не поддерживаются."
+        )
+
+        print(f"🚫 Пользователь {user_id} попытался отправить неподдерживаемый контент: {message.content_type}")
+
+    except Exception as e:
+        print(f"❌ Ошибка отправки информационного сообщения: {e}")
+
+
+
+@user_messages_router.message(F.content_type.in_({
+    ContentType.TEXT,
+    ContentType.PHOTO,
+    ContentType.DOCUMENT
+}))
 async def handle_user_message(message: Message):
-    """Обрабатывает все сообщения пользователей кроме команд"""
+    """Обрабатывает только текст, фото и документы"""
 
     # Пропускаем служебные сообщения
     if not message.from_user:
@@ -38,7 +69,7 @@ async def handle_user_message(message: Message):
         next_id = await get_next_message_id()
 
         # Определяем тип контента и извлекаем данные
-        message_data = await extract_message_data(message)
+        message_data = await extract_message_data_simple(message)
 
         # Сохраняем сообщение в MongoDB
         await save_user_message(
@@ -49,16 +80,14 @@ async def handle_user_message(message: Message):
             message_id=next_id
         )
 
-        # Логируем для отладки
-        print(
-            f"💾 Сохранено сообщение от {user_id}: {message_data['file_type']} - {message_data['message_object'][:50]}...")
+        print(f"💾 Сохранено сообщение от {user_id}: {message_data['file_type']}")
 
     except Exception as e:
         print(f"❌ Ошибка сохранения сообщения: {e}")
 
 
-async def extract_message_data(message: Message) -> dict:
-    """Извлекает данные из сообщения в зависимости от типа контента"""
+async def extract_message_data_simple(message: Message) -> dict:
+    """Извлекает данные только для текста, фото и документов"""
 
     message_object = ""
     file_id = ""
@@ -84,7 +113,7 @@ async def extract_message_data(message: Message) -> dict:
         message_object = message.caption or ""
         file_id = message.document.file_id
         file_type = "document"
-        file_name = message.document.file_name or "Без названия"
+        file_name = message.document.file_name or "Файл"
         file_size = message.document.file_size or 0
         mime_type = message.document.mime_type or ""
 
@@ -96,59 +125,8 @@ async def extract_message_data(message: Message) -> dict:
             if file_size:
                 size_mb = file_size / 1024 / 1024
                 file_info.append(f"({size_mb:.1f} MB)")
-            if mime_type:
-                file_info.append(f"[{mime_type}]")
 
             message_object = " ".join(file_info) if file_info else "📎 Файл"
-
-    elif message.video:
-        # Видео
-        message_object = message.caption or "🎥 Видео"
-        file_id = message.video.file_id
-        file_type = "video"
-        file_size = message.video.file_size or 0
-        mime_type = message.video.mime_type or ""
-
-    elif message.audio:
-        # Аудио
-        message_object = message.caption or "🎵 Аудио"
-        file_id = message.audio.file_id
-        file_type = "audio"
-        file_size = message.audio.file_size or 0
-        mime_type = message.audio.mime_type or ""
-
-        # Добавляем информацию о треке
-        audio_info = []
-        if message.audio.title:
-            audio_info.append(message.audio.title)
-        if message.audio.performer:
-            audio_info.append(f"- {message.audio.performer}")
-        if audio_info and not message.caption:
-            message_object = "🎵 " + " ".join(audio_info)
-
-    elif message.voice:
-        # Голосовое сообщение
-        message_object = "🎤 Голосовое сообщение"
-        file_id = message.voice.file_id
-        file_type = "voice"
-        file_size = message.voice.file_size or 0
-
-    elif message.sticker:
-        # Стикер
-        message_object = "🔄 Стикер"
-        file_id = message.sticker.file_id
-        file_type = "sticker"
-
-        # Добавляем эмодзи стикера если есть
-        if message.sticker.emoji:
-            message_object = f"{message.sticker.emoji} Стикер"
-
-    elif message.video_note:
-        # Кружочек (video note)
-        message_object = "📹 Видео-кружочек"
-        file_id = message.video_note.file_id
-        file_type = "video_note"
-        file_size = message.video_note.file_size or 0
 
     return {
         "message_object": message_object,

@@ -1,19 +1,22 @@
+import asyncio
 from datetime import datetime, timezone
 from typing import Optional
 from fastapi import Request, Query, Depends, APIRouter
 from fastapi.responses import HTMLResponse, RedirectResponse
-from beanie.operators import And, Or
 from fastapi.templating import Jinja2Templates
 from api.router.auth import get_current_admin
 from core.bot1 import bot1
 from db.beanie_bot1.models import Messages, Users
 from utils.database import get_database_bot1
+from fastapi.responses import JSONResponse
+from core.logger import api_logger as logger
 
 router = APIRouter()
 templates = Jinja2Templates(directory="api/templates")
 def build_pagination_url(page: int):
     return f"?page={page}"
 templates.env.globals["build_pagination_url"] = build_pagination_url
+
 
 
 @router.get("/chats/", response_class=HTMLResponse)
@@ -529,3 +532,43 @@ async def unban_user_chat(
         return {"ok": False, "error": f"Ошибка базы данных: {str(e)}"}
 
 
+@router.post("/chats/delete/")
+async def delete_chat(
+        request: Request,
+        admin=Depends(get_current_admin)
+):
+    if not admin:
+        return JSONResponse({"ok": False, "error": "Не авторизован"})
+
+    try:
+        data = await request.json()
+        user_id = data.get("user_id")
+
+        if not user_id:
+            return JSONResponse({"ok": False, "error": "Не указан user_id"})
+
+        # Получаем подключение к MongoDB
+        db = get_database_bot1()
+        messages_collection = db["messages"]
+
+        # Удаляем все сообщения пользователя
+        result = await messages_collection.delete_many({"from_id": user_id})
+
+        # Также удаляем сообщения оператора этому пользователю (если есть)
+        await messages_collection.delete_many({
+            "$or": [
+                {"from_id": user_id},
+                {"to_id": user_id}
+            ]
+        })
+
+        deleted_count = result.deleted_count
+
+        return JSONResponse({
+            "ok": True,
+            "message": f"Чат с пользователем {user_id} удален. Удалено сообщений: {deleted_count}"
+        })
+
+    except Exception as e:
+        logger.error(f"Ошибка удаления чата: {e}")
+        return JSONResponse({"ok": False, "error": str(e)})

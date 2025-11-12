@@ -8,9 +8,11 @@ from bot1.templates.admin.keyboards import products_management_kb, products_pagi
     start_admin_kb
 import math
 
+from core.bot1 import bot1
 from utils.database import get_database_bot1
 
 router = Router()
+
 
 
 # Главное меню управления товарами
@@ -41,6 +43,9 @@ async def add_new_product_start(call: CallbackQuery, state: FSMContext):
 # Шаг 2 (описание)
 @router.message(ProductStates.waiting_product_name)
 async def process_product_name(msg: Message, state: FSMContext):
+    if not msg.text:
+        await msg.answer("❌ Введите название текстом")
+        return
     if len(msg.text) > 100:
         await msg.answer("❌ Название слишком длинное (максимум 100 символов)")
         return
@@ -55,6 +60,9 @@ async def process_product_name(msg: Message, state: FSMContext):
 # Шаг 3 (изображение)
 @router.message(ProductStates.waiting_product_description)
 async def process_product_description(msg: Message, state: FSMContext):
+    if not msg.text:
+        await msg.answer("❌ Введите описание текстом")
+        return
     if len(msg.text) > 1000:
         await msg.answer("❌ Описание слишком длинное (максимум 1000 символов)")
         return
@@ -70,7 +78,8 @@ async def process_product_description(msg: Message, state: FSMContext):
 @router.message(ProductStates.waiting_product_image, F.photo)
 async def process_product_image(msg: Message, state: FSMContext):
     data = await state.get_data()
-
+    bot_info = await bot1.get_me()
+    bot_username = bot_info.username
     try:
         db = get_database_bot1()
         products_collection = db["products"]
@@ -89,16 +98,20 @@ async def process_product_image(msg: Message, state: FSMContext):
 
         await products_collection.insert_one(product_data)
 
-        await msg.answer(
-            f"✅ <b>Товар успешно добавлен!</b>\n\n"
-            f"<b>ID:</b> {new_id}\n"
-            f"<b>Название:</b> {data['title']}\n"
-            f"<b>Описание:</b> {data['desc'][:100]}...\n\n"
-            f"🔗 <b>Ссылка для пользователей:</b>\n"
-            f"https://t.me/вашбот?start={new_id}",
-            parse_mode="HTML", reply_markup=products_management_kb()
-        )
+        # Получаем обновленный товар
+        product = await products_collection.find_one({"id": new_id})
 
+        # Отправляем фото товара с обновленными данными
+        await msg.answer_photo(
+            photo=product['image_id'],
+            caption=f"🛍️ <b>Товар успешно добавлен:</b>\n\n"
+                    f"<b>ID:</b> {product['id']}\n"
+                    f"<b>Название:</b> {product['title']}\n"
+                    f"<b>Описание:</b> {product['desc'][:200]}...\n\n"
+                    f"🔗 <b>Ссылка:</b> https://t.me/{bot_username}?start={product['id']}",
+            parse_mode="HTML",
+            reply_markup=products_management_kb()
+        )
         await state.clear()
 
     except Exception as e:
@@ -134,6 +147,12 @@ async def edit_existing_products(call: CallbackQuery, state: FSMContext):
                     reply_markup=products_management_kb()
                 )
             except:
+                try:
+                    # Пытаемся удалить сообщение
+                    await call.message.delete()
+                except:
+                    # Если удаление не получилось, просто игнорируем
+                    pass
                 await call.message.answer(
                     "❌ Товары не найдены",
                     reply_markup=products_management_kb()
@@ -150,6 +169,12 @@ async def edit_existing_products(call: CallbackQuery, state: FSMContext):
                 reply_markup=products_pagination_kb(products, 1, total_pages)
             )
         except:
+            try:
+                # Пытаемся удалить сообщение
+                await call.message.delete()
+            except:
+                # Если удаление не получилось, просто игнорируем
+                pass
             # Если не получается редактировать, отправляем новое сообщение
             await call.message.answer(
                 f"📦 <b>Выберите товар для редактирования</b>\n\n"
@@ -196,6 +221,8 @@ async def products_pagination(call: CallbackQuery):
 @router.callback_query(F.data.startswith("edit_product_"))
 async def edit_product(call: CallbackQuery, state: FSMContext):
     product_id = int(call.data.split("_")[2])
+    bot_info = await bot1.get_me()
+    bot_username = bot_info.username
 
     try:
         db = get_database_bot1()
@@ -218,7 +245,7 @@ async def edit_product(call: CallbackQuery, state: FSMContext):
                         f"<b>ID:</b> {product['id']}\n"
                         f"<b>Название:</b> {product['title']}\n"
                         f"<b>Описание:</b> {product['desc'][:200]}...\n\n"
-                        f"🔗 <b>Ссылка:</b> https://t.me/вашбот?start={product['id']}",
+                        f"🔗 <b>Ссылка:</b> https://t.me/{bot_username}?start={product['id']}",
                 parse_mode="HTML"
             ),
             reply_markup=product_edit_kb(product_id)
@@ -244,13 +271,18 @@ async def edit_product_name(call: CallbackQuery, state: FSMContext):
 
 @router.message(ProductStates.waiting_edit_name)
 async def process_edit_name(msg: Message, state: FSMContext):
+    if not msg.text:
+        await msg.answer("❌ Введите название текстом")
+        return
+
     if len(msg.text) > 100:
         await msg.answer("❌ Название слишком длинное (максимум 100 символов)")
         return
 
     data = await state.get_data()
     product_id = data['editing_product_id']
-
+    bot_info = await bot1.get_me()
+    bot_username = bot_info.username
     try:
         db = get_database_bot1()
         products_collection = db["products"]
@@ -267,11 +299,11 @@ async def process_edit_name(msg: Message, state: FSMContext):
             # Отправляем фото товара с обновленными данными
             await msg.answer_photo(
                 photo=product['image_id'],
-                caption=f"🛍️ <b>Товар для редактирования</b>\n\n"
+                caption=f"🛍️ <b>Редактирование товара:</b>\n\n"
                         f"<b>ID:</b> {product['id']}\n"
                         f"<b>Название:</b> {product['title']}\n"
                         f"<b>Описание:</b> {product['desc'][:200]}...\n\n"
-                        f"🔗 <b>Ссылка:</b> https://t.me/вашбот?start={product['id']}",
+                        f"🔗 <b>Ссылка:</b> https://t.me/{bot_username}?start={product['id']}",
                 parse_mode="HTML",
                 reply_markup=product_edit_kb(product_id)
             )
@@ -302,13 +334,18 @@ async def edit_product_desc(call: CallbackQuery, state: FSMContext):
 
 @router.message(ProductStates.waiting_edit_description)
 async def process_edit_desc(msg: Message, state: FSMContext):
+    if not msg.text:
+        await msg.answer("❌ Введите описание текстом")
+        return
+
     if len(msg.text) > 1000:
         await msg.answer("❌ Описание слишком длинное (максимум 1000 символов)")
         return
 
     data = await state.get_data()
     product_id = data['editing_product_id']
-
+    bot_info = await bot1.get_me()
+    bot_username = bot_info.username
     try:
         db = get_database_bot1()
         products_collection = db["products"]
@@ -325,11 +362,11 @@ async def process_edit_desc(msg: Message, state: FSMContext):
             # Отправляем фото товара с обновленными данными
             await msg.answer_photo(
                 photo=product['image_id'],
-                caption=f"🛍️ <b>Товар для редактирования</b>\n\n"
+                caption=f"🛍️ <b>Редактирование товара:</b>\n\n"
                         f"<b>ID:</b> {product['id']}\n"
                         f"<b>Название:</b> {product['title']}\n"
                         f"<b>Описание:</b> {product['desc'][:200]}...\n\n"
-                        f"🔗 <b>Ссылка:</b> https://t.me/вашбот?start={product['id']}",
+                        f"🔗 <b>Ссылка:</b> https://t.me/{bot_username}?start={product['id']}",
                 parse_mode="HTML",
                 reply_markup=product_edit_kb(product_id)
             )
@@ -362,7 +399,8 @@ async def edit_product_image(call: CallbackQuery, state: FSMContext):
 async def process_edit_image(msg: Message, state: FSMContext):
     data = await state.get_data()
     product_id = data['editing_product_id']
-
+    bot_info = await bot1.get_me()
+    bot_username = bot_info.username
     try:
         db = get_database_bot1()
         products_collection = db["products"]
@@ -383,7 +421,7 @@ async def process_edit_image(msg: Message, state: FSMContext):
                         f"<b>ID:</b> {product['id']}\n"
                         f"<b>Название:</b> {product['title']}\n"
                         f"<b>Описание:</b> {product['desc'][:200]}...\n\n"
-                        f"🔗 <b>Ссылка:</b> https://t.me/вашбот?start={product['id']}",
+                        f"🔗 <b>Ссылка:</b> https://t.me/{bot_username}?start={product['id']}",
                 parse_mode="HTML",
                 reply_markup=product_edit_kb(product_id)
             )
@@ -430,9 +468,25 @@ async def back_to_products_manage(call: CallbackQuery, state: FSMContext):
 async def admin_back(call: CallbackQuery, state: FSMContext):
     await state.clear()
 
-    await call.message.edit_text(
+    try:
+        # Пытаемся отредактировать существующее сообщение
+        await call.message.edit_text(
         "Выберите действие:",
         parse_mode="HTML",
         reply_markup=start_admin_kb()
     )
+    except:
+        try:
+            # Пытаемся удалить сообщение
+            await call.message.delete()
+        except:
+            # Если удаление не получилось, просто игнорируем
+            pass
+        # Если не получается редактировать, отправляем новое сообщение
+        await call.message.answer(
+        "Выберите действие:",
+        parse_mode="HTML",
+        reply_markup=start_admin_kb()
+    )
+
     await call.answer()

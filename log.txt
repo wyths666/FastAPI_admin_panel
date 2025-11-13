@@ -1,0 +1,141 @@
+INFO - 2025-10-28 13:49:34 - bot - (Line: 38) - [bot.py]: ✅ MongoDB (Beanie) подключена
+INFO:bot:✅ MongoDB (Beanie) подключена
+INFO - 2025-10-28 13:49:34 - bot - (Line: 42) - [bot.py]: ✅ MySQL подключена
+INFO:bot:✅ MySQL подключена
+INFO - 2025-10-28 13:49:34 - bot - (Line: 61) - [bot.py]: === Bot started ===
+INFO:bot:=== Bot started ===
+INFO:aiogram.dispatcher:Start polling
+INFO:aiogram.dispatcher:Run polling for bot @TechWizards_test1_bot id=8246101999 - 'TechWizards test bot 1'
+INFO:aiogram.event:Update id=714602101 is handled. Duration 371 ms by bot id=8246101999
+INFO:aiogram.event:Update id=714602102 is handled. Duration 457 ms by bot id=8246101999
+INFO:aiogram.event:Update id=714602103 is handled. Duration 1409 ms by bot id=8246101999
+INFO:aiogram.event:Update id=714602104 is handled. Duration 93 ms by bot id=8246101999
+INFO:aiogram.event:Update id=714602105 is handled. Duration 41 ms by bot id=8246101999
+INFO:aiogram.event:Update id=714602106 is handled. Duration 79 ms by bot id=8246101999
+INFO:aiogram.event:Update id=714602107 is handled. Duration 92 ms by bot id=8246101999
+INFO:aiogram.event:Update id=714602108 is handled. Duration 170 ms by bot id=8246101999
+🚫 Пользователь заблокирован 1210922257
+INFO:aiogram.event:Update id=714602109 is handled. Duration 75 ms by bot id=8246101999
+INFO:aiogram.event:Update id=714602110 is handled. Duration 1 ms by bot id=8246101999
+🚫 Пользователь заблокирован 1210922257
+INFO:aiogram.event:Update id=714602111 is handled. Duration 93 ms by bot id=8246101999
+🚫 Пользователь заблокирован 1210922257
+INFO:aiogram.event:Update id=714602112 is handled. Duration 72 ms by bot id=8246101999
+🚫 Пользователь заблокирован 1210922257
+INFO:aiogram.event:Update id=714602113 is handled. Duration 89 ms by bot id=8246101999
+INFO:aiogram.event:Update id=714602114 is handled. Duration 294 ms by bot id=8246101999
+INFO:aiogram.event:Update id=714602115 is handled. Duration 1354 ms by bot id=8246101999
+INFO:aiogram.event:Update id=714602116 is handled. Duration 67 ms by bot id=8246101999
+INFO:aiogram.event:Update id=714602117 is handled. Duration 361 ms by bot id=8246101999
+INFO:aiogram.event:Update id=714602118 is handled. Duration 33 ms by bot id=8246101999
+INFO:aiogram.event:Update id=714602119 is handled. Duration 51 ms by bot id=8246101999
+INFO:aiogram.event:Update id=714602120 is handled. Duration 101 ms by bot id=8246101999
+INFO:aiogram.event:Update id=714602121 is handled. Duration 398 ms by bot id=8246101999
+❌ Отклонение заявки: 000050
+✏️ Сообщение обновлено (отклонено)
+INFO:aiogram.event:Update id=714602122 is handled. Duration 318 ms by bot id=8246101999
+INFO:aiogram.event:Update id=714602123 is not handled. Duration 0 ms by bot id=8246101999
+INFO:aiogram.event:Update id=714602124 is handled. Duration 102 ms by bot id=8246101999
+INFO:aiogram.event:Update id=714602125 is handled. Duration 170 ms by bot id=8246101999
+INFO:aiogram.event:Update id=714602126 is handled. Duration 482 ms by bot id=8246101999
+INFO:aiogram.event:Update id=714602127 is handled. Duration 3458 ms by bot id=8246101999
+INFO:aiogram.event:Update id=714602128 is handled. Duration 55 ms by bot id=8246101999
+INFO:aiogram.event:Update id=714602129 is handled. Duration 94 ms by bot id=8246101999
+INFO:aiogram.event:Update id=714602130 is handled. Duration 47 ms by bot id=8246101999
+INFO:aiogram.event:Update id=714602131 is handled. Duration 42 ms by bot id=8246101999
+INFO:aiogram.event:Update id=714602132 is handled. Duration 117 ms by bot id=8246101999
+INFO:aiogram.event:Update id=714602133 is handled. Duration 357 ms by bot id=8246101999
+INFO:aiogram.event:Update id=714602134 is handled. Duration 404 ms by bot id=8246101999
+INFO:aiogram.event:Update id=714602135 is handled. Duration 145 ms by bot id=8246101999
+INFO:aiogram.event:Update id=714602136 is handled. Duration 95 ms by bot id=8246101999
+INFO:aiogram.event:Update id=714602137 is handled. Duration 252 ms by bot id=8246101999
+INFO:aiogram.event:Update id=714602138 is handled. Duration 68 ms by bot id=8246101999
+INFO:aiogram.event:Update id=714602139 is handled. Duration 408 ms by bot id=8246101999
+INFO:aiogram.event:Update id=714602140 is handled. Duration 111 ms by bot id=8246101999
+INFO:aiogram.event:Update id=714602141 is handled. Duration 78 ms by bot id=8246101999
+INFO:aiogram.event:Update id=714602142 is handled. Duration 74 ms by bot id=8246101999
+✅ Подтверждение оплаты для заявки: 000051
+🔍 Найдена заявка: 000051, текущий статус: process
+INFO - 2025-10-28 14:15:38 - api - (Line: 54) - [konsol_client.py]: Konsol API request successful: POST /api/v1/contractors
+INFO:api:Konsol API request successful: POST /api/v1/contractors
+[CONTRACTOR] Новый contract_id создан для заявки 000051: cb4911c9-cd6f-4a7d-b53b-96da2e26ef9b
+ERROR - 2025-10-28 14:15:38 - api - (Line: 51) - [konsol_client.py]: Konsol API error: 400 - {'success': False, 'errors': ['Bank details Неправильный идентификатор банка в СБП']}
+ERROR:api:Konsol API error: 400 - {'success': False, 'errors': ['Bank details Неправильный идентификатор банка в СБП']}
+ERROR - 2025-10-28 14:15:38 - api - (Line: 61) - [konsol_client.py]: Konsol API request error: API Error 400: {'success': False, 'errors': ['Bank details Неправильный идентификатор банка в СБП']}
+ERROR:api:Konsol API request error: API Error 400: {'success': False, 'errors': ['Bank details Неправильный идентификатор банка в СБП']}
+[PAYMENT ERROR] Ошибка создания платежа для заявки 000051: API Error 400: {'success': False, 'errors': ['Bank details Неправильный идентификатор банка в СБП']}
+INFO:aiogram.event:Update id=714602143 is handled. Duration 690 ms by bot id=8246101999
+INFO:aiogram.event:Update id=714602144 is handled. Duration 2550 ms by bot id=8246101999
+INFO:aiogram.event:Update id=714602145 is handled. Duration 1002 ms by bot id=8246101999
+✅ Подтверждение оплаты для заявки: 000051
+🔍 Найдена заявка: 000051, текущий статус: process
+INFO - 2025-10-28 14:16:55 - api - (Line: 54) - [konsol_client.py]: Konsol API request successful: POST /api/v1/contractors
+INFO:api:Konsol API request successful: POST /api/v1/contractors
+[CONTRACTOR] Новый contract_id создан для заявки 000051: cb4911c9-cd6f-4a7d-b53b-96da2e26ef9b
+ERROR - 2025-10-28 14:16:56 - api - (Line: 51) - [konsol_client.py]: Konsol API error: 400 - {'success': False, 'errors': ['Bank details Неправильный идентификатор банка в СБП']}
+ERROR:api:Konsol API error: 400 - {'success': False, 'errors': ['Bank details Неправильный идентификатор банка в СБП']}
+ERROR - 2025-10-28 14:16:56 - api - (Line: 61) - [konsol_client.py]: Konsol API request error: API Error 400: {'success': False, 'errors': ['Bank details Неправильный идентификатор банка в СБП']}
+ERROR:api:Konsol API request error: API Error 400: {'success': False, 'errors': ['Bank details Неправильный идентификатор банка в СБП']}
+[PAYMENT ERROR] Ошибка создания платежа для заявки 000051: API Error 400: {'success': False, 'errors': ['Bank details Неправильный идентификатор банка в СБП']}
+INFO:aiogram.event:Update id=714602146 is handled. Duration 647 ms by bot id=8246101999
+INFO:aiogram.event:Update id=714602147 is handled. Duration 3818 ms by bot id=8246101999
+INFO:aiogram.event:Update id=714602148 is handled. Duration 807 ms by bot id=8246101999
+✅ Подтверждение оплаты для заявки: 000051
+🔍 Найдена заявка: 000051, текущий статус: process
+INFO - 2025-10-28 14:21:21 - api - (Line: 54) - [konsol_client.py]: Konsol API request successful: POST /api/v1/contractors
+INFO:api:Konsol API request successful: POST /api/v1/contractors
+[CONTRACTOR] Новый contract_id создан для заявки 000051: cb4911c9-cd6f-4a7d-b53b-96da2e26ef9b
+INFO - 2025-10-28 14:21:22 - api - (Line: 54) - [konsol_client.py]: Konsol API request successful: POST /api/v1/payments
+INFO:api:Konsol API request successful: POST /api/v1/payments
+[PAYMENT] Платёж создан для заявки 000051: 1dbc2ce6-41ef-4932-9f91-af939967158b
+INFO:aiogram.event:Update id=714602149 is handled. Duration 1683 ms by bot id=8246101999
+INFO:aiogram.event:Update id=714602150 is handled. Duration 160 ms by bot id=8246101999
+INFO:aiogram.event:Update id=714602151 is handled. Duration 1388 ms by bot id=8246101999
+INFO:aiogram.event:Update id=714602152 is handled. Duration 43 ms by bot id=8246101999
+INFO:aiogram.event:Update id=714602153 is handled. Duration 60 ms by bot id=8246101999
+INFO:aiogram.event:Update id=714602154 is handled. Duration 48 ms by bot id=8246101999
+INFO:aiogram.event:Update id=714602155 is handled. Duration 41 ms by bot id=8246101999
+INFO:aiogram.event:Update id=714602156 is handled. Duration 111 ms by bot id=8246101999
+INFO:aiogram.event:Update id=714602157 is handled. Duration 79 ms by bot id=8246101999
+INFO:aiogram.event:Update id=714602158 is handled. Duration 75 ms by bot id=8246101999
+INFO:aiogram.event:Update id=714602159 is handled. Duration 271 ms by bot id=8246101999
+INFO:aiogram.event:Update id=714602160 is handled. Duration 77 ms by bot id=8246101999
+INFO:aiogram.event:Update id=714602161 is handled. Duration 876 ms by bot id=8246101999
+INFO:aiogram.event:Update id=714602162 is handled. Duration 3367 ms by bot id=8246101999
+INFO:aiogram.event:Update id=714602163 is handled. Duration 76 ms by bot id=8246101999
+INFO:aiogram.event:Update id=714602164 is handled. Duration 111 ms by bot id=8246101999
+INFO:aiogram.event:Update id=714602165 is handled. Duration 61 ms by bot id=8246101999
+INFO:aiogram.event:Update id=714602166 is handled. Duration 127 ms by bot id=8246101999
+INFO:aiogram.event:Update id=714602167 is handled. Duration 81 ms by bot id=8246101999
+INFO:aiogram.event:Update id=714602168 is handled. Duration 505 ms by bot id=8246101999
+INFO:aiogram.event:Update id=714602169 is handled. Duration 408 ms by bot id=8246101999
+INFO:aiogram.event:Update id=714602170 is handled. Duration 76 ms by bot id=8246101999
+INFO:aiogram.event:Update id=714602171 is handled. Duration 117 ms by bot id=8246101999
+INFO:aiogram.event:Update id=714602172 is handled. Duration 3738 ms by bot id=8246101999
+INFO:aiogram.event:Update id=714602173 is handled. Duration 4293 ms by bot id=8246101999
+INFO:aiogram.event:Update id=714602174 is handled. Duration 74 ms by bot id=8246101999
+INFO:aiogram.event:Update id=714602175 is handled. Duration 90 ms by bot id=8246101999
+INFO:aiogram.event:Update id=714602176 is handled. Duration 486 ms by bot id=8246101999
+INFO:aiogram.event:Update id=714602177 is handled. Duration 3184 ms by bot id=8246101999
+INFO:aiogram.event:Update id=714602178 is handled. Duration 40 ms by bot id=8246101999
+INFO:aiogram.event:Update id=714602179 is handled. Duration 60 ms by bot id=8246101999
+INFO:aiogram.event:Update id=714602180 is handled. Duration 110 ms by bot id=8246101999
+INFO:aiogram.event:Update id=714602181 is handled. Duration 73 ms by bot id=8246101999
+INFO:aiogram.event:Update id=714602182 is not handled. Duration 0 ms by bot id=8246101999
+INFO:aiogram.event:Update id=714602183 is handled. Duration 1040 ms by bot id=8246101999
+INFO:aiogram.event:Update id=714602184 is handled. Duration 191 ms by bot id=8246101999
+INFO:aiogram.event:Update id=714602185 is handled. Duration 130 ms by bot id=8246101999
+INFO:aiogram.event:Update id=714602186 is handled. Duration 56 ms by bot id=8246101999
+INFO:aiogram.event:Update id=714602187 is not handled. Duration 0 ms by bot id=8246101999
+INFO:aiogram.event:Update id=714602188 is handled. Duration 81 ms by bot id=8246101999
+INFO:aiogram.event:Update id=714602189 is not handled. Duration 0 ms by bot id=8246101999
+INFO:aiogram.event:Update id=714602190 is handled. Duration 286 ms by bot id=8246101999
+INFO:aiogram.event:Update id=714602191 is not handled. Duration 0 ms by bot id=8246101999
+INFO:aiogram.event:Update id=714602192 is handled. Duration 108 ms by bot id=8246101999
+INFO:aiogram.event:Update id=714602193 is handled. Duration 80 ms by bot id=8246101999
+INFO:aiogram.event:Update id=714602194 is not handled. Duration 0 ms by bot id=8246101999
+INFO:aiogram.event:Update id=714602195 is handled. Duration 82 ms by bot id=8246101999
+INFO:aiogram.event:Update id=714602196 is handled. Duration 5323 ms by bot id=8246101999
+INFO:aiogram.event:Update id=714602198 is not handled. Duration 0 ms by bot id=8246101999
+INFO:aiogram.event:Update id=714602197 is handled. Duration 2614 ms by bot id=8246101999
+INFO:aiogram.event:Update id=714602199 is handled. Duration 68 ms by bot id=8246101999

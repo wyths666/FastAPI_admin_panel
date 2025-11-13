@@ -52,3 +52,29 @@ class PaymentsListResponse(BaseModel):
     total: int
     page: int
     per_page: int
+
+
+class PaymentCreateRequest(BaseModel):
+    payment_type: str = Field(..., description="Тип выплаты: 'card' или 'fps'")
+    amount: Decimal = Field(..., gt=0, description="Сумма выплаты")
+    phone: Optional[str] = Field(None, description="Телефон для СБП")
+    bank_member_id: Optional[str] = Field(None, description="ID банка для СБП")
+    card_number: Optional[str] = Field(None, description="Номер карты")
+    first_name: str = Field(..., description="Имя получателя")
+    last_name: str = Field(..., description="Фамилия получателя")
+    purpose: str = Field(default="Выплата", description="Назначение платежа")
+
+class HandPaymentResponse(BaseModel):
+    payment_id: str
+    konsol_id: Optional[str]
+    contractor_id: str
+    amount: Decimal
+    status: str
+    payment_type: str
+    purpose: str
+    created_at: datetime
+    message: str
+
+class BankInfo(BaseModel):
+    id: str
+    name: str

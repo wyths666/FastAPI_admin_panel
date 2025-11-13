@@ -79,7 +79,7 @@ async def check_connection():
     """Проверить подключение к основной БД"""
     try:
         count = await Administrators.count()
-        return True, f"✅ Подключение к основной БД успешно, администраторов: {count}"
+        return True, f"✅ Подключение к БД бота-2 успешно, администраторов: {count}"
     except Exception as e:
         return False, f"❌ Ошибка подключения к основной БД: {e}"
 

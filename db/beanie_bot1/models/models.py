@@ -66,3 +66,34 @@ class Messages(Document):
             # Уникальный индекс для id сообщения
             IndexModel([("id", ASCENDING)], unique=True)
         ]
+
+
+class KonsolPayment(Document):
+    """Модель для платежей konsol.pro"""
+    konsol_id: Optional[str] = None
+    contractor_id: str
+    amount: Decimal = Decimal("100.00")
+    status: str = "created"
+    purpose: str = "Выплата"
+    services_list: List[Dict[str, Any]] = [{"title": "Выплата", "amount": "100.00"}]
+    bank_details_kind: str  # "fps", "card"
+
+    # Реквизиты
+    card_number: Optional[str] = None
+    phone_number: Optional[str] = None
+    bank_member_id: Optional[str] = None
+
+    # Дополнительные поля для ручного ввода
+    first_name: Optional[str] = None  # Имя получателя
+    last_name: Optional[str] = None  # Фамилия получателя
+
+    # Временные метки
+    created_at: datetime
+    updated_at: datetime
+    paid_at: Optional[datetime] = None
+
+    class Settings:
+        name = "konsol_payments"
+        indexes = [
+            "konsol_id", "status", "bank_details_kind", "phone_number", "card_number"
+        ]

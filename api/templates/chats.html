@@ -8,7 +8,7 @@
         :root {
             --primary: #4361ee;
             --success: #4cc9f0;
-            --warning: #f72585;
+            --warning: #ff5c1a;
             --danger: #e63946;
             --light: #f8f9fa;
             --dark: #212529;
@@ -290,6 +290,20 @@
             font-weight: 500;
         }
 
+        .btn-pay {
+            display: inline-block;
+            padding: 10px 20px;
+            background: #09ad50;
+            color: white;
+            text-decoration: none;
+            border-radius: 4px;
+            font-size: 1rem;
+            font-weight: 500;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
         /* Модальное окно чата */
         .chat-modal {
             display: none;
@@ -490,6 +504,7 @@
     border-radius: 4px;
     cursor: pointer;
     font-weight: 500;
+
     transition: all 0.3s ease;
 }
 
@@ -502,7 +517,7 @@
 <body>
 <div class="container">
     <div class="header-actions">
-        <a href="/" class="btn-back">← Назад в панель</a>
+        <a href="/" class="btn-back">← Назад</a>
         <a href="/auth/logout" class="btn-logout">🚪 Выйти</a>
     </div>
 
@@ -622,6 +637,7 @@
         🗑️ Удалить чат
     </button>
 
+    <a href="/payments/create/" class="btn-pay">💸 Оформить выплату</a>
             </div>
         </div>
     </div>

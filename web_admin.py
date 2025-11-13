@@ -3,6 +3,7 @@ from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
 from api.router.claims import router as claims_router
 from api.router.chats import router as chats_router
+from api.router.payments import router as payments_router
 from api.router import auth, main
 from db.beanie.models import Administrators
 from utils.database import init_database, check_connection, init_database_bot1, check_connection_bot1
@@ -42,7 +43,7 @@ app.include_router(auth.router)
 app.include_router(main.router)
 app.include_router(claims_router)
 app.include_router(chats_router)
-
+app.include_router(payments_router)
 
 # Эндпоинты для проверки
 @app.get("/health")

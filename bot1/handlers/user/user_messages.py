@@ -1,7 +1,7 @@
 from aiogram import Router, F
 from aiogram.types import Message, ContentType
 from aiogram.filters import Command, StateFilter
-
+from core.logger import bot_1_logger as logger
 from core.bot1 import bot1
 from db.beanie_bot1.models.models import Messages
 from datetime import datetime, timezone
@@ -41,10 +41,10 @@ async def handle_unsupported_content(message: Message):
                  "Видео, аудио, голосовые сообщения и стикеры не поддерживаются."
         )
 
-        print(f"🚫 Пользователь {user_id} попытался отправить неподдерживаемый контент: {message.content_type}")
+        logger.warning(f"🚫 Пользователь {user_id} попытался отправить неподдерживаемый контент: {message.content_type}")
 
     except Exception as e:
-        print(f"❌ Ошибка отправки информационного сообщения: {e}")
+        logger.error(f"❌ Ошибка отправки информационного сообщения: {e}")
 
 
 
@@ -80,10 +80,10 @@ async def handle_user_message(message: Message):
             message_id=next_id
         )
 
-        print(f"💾 Сохранено сообщение от {user_id}: {message_data['file_type']}")
+        # logger.info(f"💾 Сохранено сообщение от {user_id}: {message_data['file_type']}")
 
     except Exception as e:
-        print(f"❌ Ошибка сохранения сообщения: {e}")
+        logger.error(f"❌ Ошибка сохранения сообщения: {e}")
 
 
 async def extract_message_data_simple(message: Message) -> dict:

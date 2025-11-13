@@ -56,7 +56,7 @@ async def update_claim_bank(data: dict):
         # Обновляем bank_member_id
         await claim.update(bank_member_id=bank_member_id)
 
-        print(f"✅ Bank updated for claim {claim_id}: {bank_member_id}")
+        logger.info(f"✅ Bank updated for claim {claim_id}: {bank_member_id}")
 
         return {
             "ok": True,
@@ -65,7 +65,7 @@ async def update_claim_bank(data: dict):
         }
 
     except Exception as e:
-        print(f"❌ Ошибка обновления банка: {e}")
+        logger.error(f"❌ Ошибка обновления банка: {e}")
         return {"ok": False, "error": str(e)}
 
 # --- 1. Страница списка заявок ---
@@ -344,7 +344,7 @@ async def get_chat_photo_url(message_id: str):
         return {"url": photo_url}
 
     except Exception as e:
-        print(f"❌ Ошибка в /chat/photo-url/{message_id}: {e}")
+        logger.error(f"❌ Ошибка в /chat/photo-url/{message_id}: {e}")
         raise HTTPException(status_code=500, detail="Failed to get photo URL")
 
 
@@ -416,12 +416,12 @@ async def update_claim_status(data: dict):
 async def process_claim_approval_admin(claim: Claim):
     """Обработка подтверждения заявки через админ-панель"""
     try:
-        print(f"🔍 [ADMIN] Подтверждение заявки: {claim.claim_id}")
+        logger.info(f"🔍 [ADMIN] Подтверждение заявки: {claim.claim_id}")
 
         # === Получаем пользователя ===
         user = await User.get(tg_id=claim.user_id)
         if not user:
-            print(f"❌ [ADMIN] Пользователь не найден: {claim.user_id}")
+            logger.error(f"❌ [ADMIN] Пользователь не найден: {claim.user_id}")
             return False
 
         # === 1. Создаём НОВОГО contract_id в Konsol API ===
@@ -440,10 +440,10 @@ async def process_claim_approval_admin(claim: Claim):
 
             # Сохраняем contractor_id в заявке
             await claim.update(contractor_id=contractor_id)
-            print(f"✅ [ADMIN] Contract_id создан: {contractor_id}")
+            logger.info(f"✅ [ADMIN] Contract_id создан: {contractor_id}")
 
         except Exception as e:
-            print(f"❌ [ADMIN] Ошибка создания contract_id: {e}")
+            logger.error(f"❌ [ADMIN] Ошибка создания contract_id: {e}")
             return False
 
         # === 2. Подготавливаем данные для платежа ===
@@ -451,7 +451,7 @@ async def process_claim_approval_admin(claim: Claim):
 
         if bank_details_kind == "fps":
             if not claim.bank_member_id:
-                print(f"❌ [ADMIN] Не указан ID банка для СБП: {claim.claim_id}")
+                logger.error(f"❌ [ADMIN] Не указан ID банка для СБП: {claim.claim_id}")
                 return False
             bank_details = {
                 "fps_mobile_phone": claim.phone,
@@ -482,7 +482,7 @@ async def process_claim_approval_admin(claim: Claim):
             payment_id = result.get("id")
             payment_status = result.get("status")
 
-            print(f"✅ [ADMIN] Платёж создан: {payment_id}")
+            logger.info(f"✅ [ADMIN] Платёж создан: {payment_id}")
 
             # === 4. Сохраняем платёж в БД ===
             await KonsolPayment.create(
@@ -514,18 +514,18 @@ async def process_claim_approval_admin(claim: Claim):
                     chat_id=claim.user_id,
                     text="✅ Ваш выигрыш отправлен на указанные реквизиты. Компания Pure желает Вам крепкого здоровья, и хорошего дня."
                 )
-                print(f"✅ [ADMIN] Уведомление отправлено пользователю {claim.user_id}")
+                logger.info(f"✅ [ADMIN] Уведомление отправлено пользователю {claim.user_id}")
             except Exception as notify_e:
-                print(f"⚠️ [ADMIN] Не удалось уведомить пользователя: {notify_e}")
+                logger.error(f"⚠️ [ADMIN] Не удалось уведомить пользователя: {notify_e}")
 
             return True
 
         except Exception as pay_e:
-            print(f"❌ [ADMIN] Ошибка создания платежа: {pay_e}")
+            logger.error(f"❌ [ADMIN] Ошибка создания платежа: {pay_e}")
             return False
 
     except Exception as e:
-        print(f"❌ [ADMIN] Общая ошибка подтверждения заявки: {e}")
+        logger.error(f"❌ [ADMIN] Общая ошибка подтверждения заявки: {e}")
         import traceback
         traceback.print_exc()
         return False
@@ -547,24 +547,16 @@ async def close_chat_session(claim_id: str):
             chat_session.closed_at = datetime.now()
             await chat_session.save()
 
-            print(f"✅ Чат-сессия закрыта для заявки {claim_id}")
+            logger.info(f"✅ Чат-сессия закрыта для заявки {claim_id}")
 
-            # Уведомляем в админ-чате если он открыт
-            if chat_session.admin_chat_id:
-                try:
-                    await bot.send_message(
-                        chat_id=chat_session.admin_chat_id,
-                        text=f"❌ <b>Чат закрыт - заявка {claim_id} обработана</b>",
-                        parse_mode="HTML"
-                    )
-                except Exception as e:
-                    print(f"⚠️ Не удалось уведомить админа: {e}")
+
+
 
         else:
-            print(f"ℹ️ Активная чат-сессия не найдена для заявки {claim_id}")
+            logger.info(f"ℹ️ Активная чат-сессия не найдена для заявки {claim_id}")
 
     except Exception as e:
-        print(f"❌ Ошибка закрытия чат-сессии: {e}")
+        logger.error(f"❌ Ошибка закрытия чат-сессии: {e}")
 
 
 async def notify_user_about_chat_close(user_id: int, claim_id: str):
@@ -642,7 +634,7 @@ async def ban_user(data: dict):
         # Блокируем пользователя
         await user.update(banned=True)
 
-        print(f"🚫 Пользователь заблокирован {user_id} через админ-панель")
+        logger.warning(f"🚫 Пользователь заблокирован {user_id} через админ-панель")
 
         return {
             "ok": True,
@@ -652,7 +644,7 @@ async def ban_user(data: dict):
         }
 
     except Exception as e:
-        print(f"❌ Ошибка блокировки пользователя: {e}")
+        logger.error(f"❌ Ошибка блокировки пользователя: {e}")
         return {"ok": False, "error": str(e)}
 
 
@@ -677,7 +669,7 @@ async def unban_user(data: dict):
         # Разблокируем пользователя
         await user.update(banned=False)
 
-        print(f"✅ Пользователь разблокирован {user_id} через админ-панель")
+        logger.warning(f"✅ Пользователь разблокирован {user_id} через админ-панель")
 
         return {
             "ok": True,
@@ -687,5 +679,5 @@ async def unban_user(data: dict):
         }
 
     except Exception as e:
-        print(f"❌ Ошибка разблокировки пользователя: {e}")
+        logger.error(f"❌ Ошибка разблокировки пользователя: {e}")
         return {"ok": False, "error": str(e)}

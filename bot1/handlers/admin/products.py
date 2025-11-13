@@ -3,6 +3,7 @@ from aiogram.filters import StateFilter, Command
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message, InputMediaPhoto
 from bot1.filters.admin import IsAdmin
+from core.logger import bot_1_logger as logger
 from bot1.templates.admin.states import ProductStates
 from bot1.templates.admin.keyboards import products_management_kb, products_pagination_kb, product_edit_kb, \
     start_admin_kb
@@ -236,20 +237,32 @@ async def edit_product(call: CallbackQuery, state: FSMContext):
 
         await state.update_data(editing_product_id=product_id)
 
-        # Отправляем фото товара
+        product_link = f"https://t.me/{bot_username}?start={product['id']}"
+        caption = (f"🛍️ <b>Товар для редактирования</b>\n\n"
+                  f"<b>ID:</b> {product['id']}\n"
+                  f"<b>Название:</b> {product['title']}\n"
+                  f"<b>Описание:</b> {product['desc'][:200]}...\n\n"
+                  f"🔗 <b>Ссылка:</b> {product_link}")
 
-        await call.message.edit_media(
-            media=InputMediaPhoto(
-                media=product['image_id'],
-                caption=f"🛍️ <b>Товар для редактирования</b>\n\n"
-                        f"<b>ID:</b> {product['id']}\n"
-                        f"<b>Название:</b> {product['title']}\n"
-                        f"<b>Описание:</b> {product['desc'][:200]}...\n\n"
-                        f"🔗 <b>Ссылка:</b> https://t.me/{bot_username}?start={product['id']}",
-                parse_mode="HTML"
-            ),
-            reply_markup=product_edit_kb(product_id)
-        )
+        # Пытаемся отправить фото
+        try:
+            await call.message.edit_media(
+                media=InputMediaPhoto(
+                    media=product['image_id'],
+                    caption=caption,
+                    parse_mode="HTML"
+                ),
+                reply_markup=product_edit_kb(product_id)
+            )
+        except Exception as photo_error:
+            # Если фото недоступно, отправляем текстовое сообщение
+            logger.warning(f"Фото недоступно: {photo_error}")
+            await call.message.edit_text(
+                text=f"📷 <b>Фото недоступно</b>\n\n{caption}",
+                parse_mode="HTML",
+                reply_markup=product_edit_kb(product_id)
+            )
+
         await call.answer()
     except Exception as e:
         await call.answer(f"❌ Ошибка: {e}")

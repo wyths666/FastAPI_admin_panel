@@ -4,6 +4,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from datetime import datetime
 import secrets
+from core.logger import api_logger as logger
 from db.beanie.models import Administrators
 
 router = APIRouter(prefix="/auth", tags=["authentication"])
@@ -42,13 +43,13 @@ async def login(
         password: str = Form(...)
 ):
     try:
-        print(f"🔐 Попытка входа: логин='{username}', пароль='{password}'")
+        logger.warning(f"🔐 Попытка входа: логин='{username}', пароль='{password}'")
 
         # Ищем администратора
         admin = await Administrators.get(login=username, is_active=True)
 
         if not admin:
-            print(f"❌ Администратор с логином '{username}' не найден")
+            logger.error(f"❌ Администратор с логином '{username}' не найден")
             return templates.TemplateResponse(
                 "login.html",
                 {
@@ -59,11 +60,11 @@ async def login(
                 }
             )
 
-        print(f"✅ Найден администратор: {admin.login}")
+        logger.info(f"✅ Найден администратор: {admin.login}")
 
         # Проверяем пароль
         if admin.password != password:
-            print("❌ Неверный пароль")
+            logger.error("❌ Неверный пароль")
             return templates.TemplateResponse(
                 "login.html",
                 {
@@ -74,7 +75,7 @@ async def login(
                 }
             )
 
-        print("✅ Пароль верный!")
+        logger.info("✅ Пароль верный!")
 
         # Генерируем токен сессии
         session_token = secrets.token_urlsafe(32)
@@ -91,11 +92,11 @@ async def login(
             max_age=24 * 60 * 60
         )
 
-        print(f"✅ Успешный вход для {admin.login}")
+        logger.info(f"✅ Успешный вход для {admin.login}")
         return response
 
     except Exception as e:
-        print(f"💥 Ошибка при логине: {e}")
+        logger.error(f"💥 Ошибка при логине: {e}")
         import traceback
         traceback.print_exc()
 

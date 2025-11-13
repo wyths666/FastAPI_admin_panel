@@ -278,7 +278,7 @@ async def get_chat_photo_proxy(
         return RedirectResponse(photo_url)
 
     except Exception as e:
-        print(f"❌ Ошибка получения фото {message_id}: {e}")
+        logger.error(f"❌ Ошибка получения фото {message_id}: {e}")
         return {"error": str(e)}
 
 # @router.get("/chats/photo-url/{message_id}")
@@ -413,7 +413,7 @@ async def send_operator_message(
             }
         )
 
-        print(f"✅ Помечены как прочитанные сообщения пользователя {user_id}")
+        logger.info(f"✅ Помечены как прочитанные сообщения пользователя {user_id}")
 
         # 3. Отправляем сообщение пользователю в Telegram
         telegram_success = await send_telegram_message(user_id, text)
@@ -447,7 +447,7 @@ async def send_operator_message(
         }
 
     except Exception as e:
-        print(f"❌ Ошибка отправки сообщения: {e}")
+        logger.error(f"❌ Ошибка отправки сообщения: {e}")
         return {"error": f"Внутренняя ошибка: {str(e)}"}
 
 
@@ -461,7 +461,7 @@ async def send_telegram_message(user_id: int, text: str) -> bool:
         return True
 
     except Exception as e:
-        print(f"❌ Ошибка отправки в Telegram пользователю {user_id}: {e}")
+        logger.error(f"❌ Ошибка отправки в Telegram пользователю {user_id}: {e}")
         return False
 
 async def get_next_message_id() -> int:

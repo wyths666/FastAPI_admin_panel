@@ -18,6 +18,10 @@ class AdminState(StatesGroup):
     waiting_reply_to_user = State()
     waiting_for_bank_id = State()
 
+class AdminRegState(StatesGroup):
+    waiting_for_login = State()
+    waiting_for_password = State()
+
 def claim_action_ikb_with_bank_button(claim_id: str) -> InlineKeyboardMarkup:
     """
     Клавиатура для заявки СБП: кнопка заполнения ID банка + стандартные действия.

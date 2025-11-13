@@ -1,0 +1,527 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Создание выплаты</title>
+    <style>
+        :root {
+            --primary: #4361ee;
+            --success: #4cc9f0;
+            --warning: #ff5c1a;
+            --danger: #e63946;
+            --light: #f8f9fa;
+            --dark: #212529;
+            --gray: #6c757d;
+            --border: #dee2e6;
+            --shadow: rgba(0, 0, 0, 0.1);
+            --radius: 10px;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #f5f7fa 0%, #e4edf5 100%);
+            color: var(--dark);
+            padding: 20px;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        .header-actions {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .btn-logout {
+            background: var(--danger);
+            padding: 10px 20px;
+            font-size: 1rem;
+            display: inline-block;
+            color: white;
+            text-decoration: none;
+            border-radius: var(--radius);
+            font-weight: 500;
+            text-align: center;
+            transition: all 0.3s ease;
+            border: none;
+            cursor: pointer;
+        }
+
+        .btn-back {
+            display: inline-block;
+            padding: 10px 20px;
+            background: var(--gray);
+            color: white;
+            text-decoration: none;
+            border-radius: var(--radius);
+            font-size: 1rem;
+            font-weight: 500;
+            text-align: center;
+            transition: all 0.3s ease;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 30px;
+            padding: 20px;
+            background: white;
+            border-radius: var(--radius);
+            box-shadow: 0 4px 12px var(--shadow);
+        }
+
+        h1 {
+            font-size: 2.2rem;
+            color: var(--primary);
+            margin-bottom: 10px;
+        }
+
+        .payment-form {
+            background: white;
+            border-radius: var(--radius);
+            box-shadow: 0 4px 12px var(--shadow);
+            padding: 30px;
+            margin-bottom: 30px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            font-weight: 500;
+            margin-bottom: 8px;
+            color: var(--dark);
+        }
+
+        .form-group input,
+        .form-group select {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            font-size: 16px;
+            font-family: inherit;
+        }
+
+        .form-group input:focus,
+        .form-group select:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 2px rgba(67, 97, 238, 0.2);
+        }
+
+        .payment-section {
+            display: none;
+            padding: 15px;
+            background: var(--light);
+            border-radius: 4px;
+            margin-top: 10px;
+        }
+
+        .btn-pay {
+            width: 100%;
+            padding: 14px;
+            background: var(--primary);
+            color: white;
+            border: none;
+            border-radius: 4px;
+            font-size: 16px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background 0.3s ease;
+        }
+
+        .btn-pay:hover {
+            background: #3a56e4;
+        }
+
+        .btn-pay:disabled {
+            background: var(--gray);
+            cursor: not-allowed;
+        }
+
+        .alert {
+            padding: 12px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+            display: none;
+        }
+
+        .alert-success {
+            background: #d1edff;
+            color: #0c5460;
+            border: 1px solid #b8daff;
+        }
+
+        .alert-error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 10px;
+        }
+
+        @media (max-width: 768px) {
+            .header-actions {
+                flex-direction: column;
+                gap: 10px;
+            }
+
+            .btn-back,
+            .btn-logout {
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="header-actions">
+        <a href="/" class="btn-back">← Назад</a>
+        <a href="/auth/logout" class="btn-logout">🚪 Выйти</a>
+    </div>
+
+    <header>
+        <h1>📤 Создание выплаты</h1>
+        <p class="summary">Ручное создание выплаты через Konsol API</p>
+    </header>
+
+    <div class="alert" id="alert"></div>
+
+    <div class="payment-form">
+        <form id="paymentForm">
+            <!-- Тип выплаты -->
+            <div class="form-group">
+                <label for="payment_type">💳 Тип выплаты:</label>
+                <select id="payment_type" name="payment_type" required>
+                    <option value="">Выберите тип выплаты</option>
+                    <option value="card">💳 Перевод на карту</option>
+                    <option value="fps">📱 Перевод по СБП</option>
+                </select>
+            </div>
+
+            <!-- Секция для карты -->
+            <div id="cardSection" class="payment-section">
+                <div class="form-group">
+                    <label for="card_number">Номер карты:</label>
+                    <input type="text" id="card_number" name="card_number"
+       placeholder="0000 0000 0000 0000" maxlength="19"
+       autocomplete="cc-number">
+                </div>
+            </div>
+
+            <!-- Секция для СБП -->
+            <div id="fpsSection" class="payment-section">
+                <div class="form-group">
+                    <label for="phone">Номер телефона:</label>
+                    <input type="tel" id="phone" name="phone"
+       placeholder="+7 900 123-45-67"
+       autocomplete="tel">
+                </div>
+                <div class="form-group">
+                    <label for="bank_member_id">Банк получателя:</label>
+                    <select id="bank_member_id" name="bank_member_id">
+                        <option value="">Выберите банк</option>
+                        {% for bank_id, bank_name in banks.items() %}
+                        <option value="{{ bank_id }}">{{ bank_name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+
+            <!-- Сумма -->
+            <div class="form-group">
+                <label for="amount">💰 Сумма выплаты (руб):</label>
+                <input type="number" id="amount" name="amount"
+                       step="0.01" min="1" required placeholder="100.00">
+            </div>
+
+            <!-- Имя получателя -->
+            <div class="form-group">
+                <label for="first_name">👤 Имя получателя:</label>
+                <input type="text" id="first_name" name="first_name" value="Выплата" required>
+            </div>
+
+            <!-- Фамилия получателя -->
+            <div class="form-group">
+                <label for="last_name">👤 Фамилия получателя:</label>
+                <input type="text" id="last_name" name="last_name" value="Вознаграждения" required>
+            </div>
+
+            <!-- Назначение платежа -->
+            <div class="form-group">
+                <label for="purpose">📝 Назначение платежа:</label>
+                <input type="text" id="purpose" name="purpose"
+                       value="Выплата" required>
+            </div>
+
+            <button type="submit" class="btn-pay" id="submitBtn">
+                💸 Создать выплату
+            </button>
+        </form>
+
+        <div id="loading" class="loading">
+            ⏳ Создаем выплату...
+        </div>
+    </div>
+</div>
+
+<script>
+    // Основные функции форматирования
+    function formatCardNumber(value) {
+        let cleanValue = value.replace(/\s+/g, '').replace(/[^0-9]/gi, '');
+        return cleanValue.replace(/(.{4})/g, '$1 ').trim().substring(0, 19);
+    }
+
+    function formatPhoneNumber(value) {
+        let cleanValue = value.replace(/\D/g, '');
+
+        if (cleanValue.startsWith('7')) {
+            cleanValue = cleanValue.substring(1);
+        } else if (cleanValue.startsWith('8')) {
+            cleanValue = cleanValue.substring(1);
+        }
+
+        let formatted = '+7';
+        if (cleanValue.length > 0) {
+            formatted += ' ' + cleanValue.substring(0, 3);
+        }
+        if (cleanValue.length > 3) {
+            formatted += ' ' + cleanValue.substring(3, 6);
+        }
+        if (cleanValue.length > 6) {
+            formatted += '-' + cleanValue.substring(6, 8);
+        }
+        if (cleanValue.length > 8) {
+            formatted += '-' + cleanValue.substring(8, 10);
+        }
+
+        return formatted.substring(0, 16);
+    }
+
+    function cleanCardNumber(value) {
+        return value ? value.replace(/\s/g, '') : '';
+    }
+
+    function cleanPhoneNumber(value) {
+        return value ? value.replace(/\s/g, '').replace(/-/g, '').replace('+', '') : '';
+    }
+
+    // Инициализация полей
+    function initializeFieldHandlers() {
+        const cardInput = document.getElementById('card_number');
+        const phoneInput = document.getElementById('phone');
+
+        // Обработка карты
+        if (cardInput) {
+            const handleCardInput = (event, source) => {
+                console.log(`💳 Обработка карты (${source}):`, event.target.value);
+                event.target.value = formatCardNumber(event.target.value);
+            };
+
+            cardInput.addEventListener('input', (e) => handleCardInput(e, 'input'));
+            cardInput.addEventListener('change', (e) => handleCardInput(e, 'change'));
+            cardInput.addEventListener('blur', (e) => handleCardInput(e, 'blur'));
+
+            // Очистка при загрузке
+            setTimeout(() => {
+                if (cardInput.value) {
+                    cardInput.value = formatCardNumber(cardInput.value);
+                }
+            }, 100);
+        }
+
+        // Обработка телефона
+        if (phoneInput) {
+            const handlePhoneInput = (event, source) => {
+                console.log(`📱 Обработка телефона (${source}):`, event.target.value);
+                event.target.value = formatPhoneNumber(event.target.value);
+            };
+
+            phoneInput.addEventListener('input', (e) => handlePhoneInput(e, 'input'));
+            phoneInput.addEventListener('change', (e) => handlePhoneInput(e, 'change'));
+            phoneInput.addEventListener('blur', (e) => handlePhoneInput(e, 'blur'));
+
+            // Очистка при загрузке
+            setTimeout(() => {
+                if (phoneInput.value) {
+                    phoneInput.value = formatPhoneNumber(phoneInput.value);
+                }
+            }, 100);
+        }
+    }
+
+    // Показ/скрытие секций в зависимости от типа выплаты
+    function initializePaymentTypeHandler() {
+        const paymentTypeSelect = document.getElementById('payment_type');
+        if (paymentTypeSelect) {
+            paymentTypeSelect.addEventListener('change', function() {
+                const type = this.value;
+                document.getElementById('cardSection').style.display =
+                    type === 'card' ? 'block' : 'none';
+                document.getElementById('fpsSection').style.display =
+                    type === 'fps' ? 'block' : 'none';
+            });
+        }
+    }
+
+    // Обработка формы
+    function initializeFormHandler() {
+        const form = document.getElementById('paymentForm');
+        if (!form) return;
+
+        form.addEventListener('submit', async function(e) {
+            e.preventDefault();
+
+            console.log('📤 Начало отправки формы...');
+
+            const formData = new FormData(this);
+            const rawData = Object.fromEntries(formData);
+
+            console.log('📝 Сырые данные формы:', rawData);
+
+            // Очищаем данные перед отправкой
+            const data = {
+                ...rawData,
+                card_number: cleanCardNumber(rawData.card_number),
+                phone: cleanPhoneNumber(rawData.phone)
+            };
+
+            console.log('🧹 Очищенные данные:', data);
+
+            // Валидация
+            if (!validateFormData(data)) {
+                return;
+            }
+
+            await submitPaymentForm(data);
+        });
+    }
+
+    // Валидация формы
+    function validateFormData(data) {
+        if (!data.payment_type) {
+            showAlert('❌ Выберите тип выплаты', 'error');
+            return false;
+        }
+
+        if (data.payment_type === 'card' && !data.card_number) {
+            showAlert('❌ Введите номер карты', 'error');
+            return false;
+        }
+
+        if (data.payment_type === 'fps') {
+            if (!data.phone) {
+                showAlert('❌ Введите номер телефона для СБП', 'error');
+                return false;
+            }
+            if (!data.bank_member_id) {
+                showAlert('❌ Выберите банк для СБП', 'error');
+                return false;
+            }
+
+            // Дополнительная валидация телефона для СБП
+            const cleanPhone = cleanPhoneNumber(data.phone);
+            if (cleanPhone.length !== 11 || !cleanPhone.startsWith('7')) {
+                showAlert('❌ Введите корректный номер телефона для СБП', 'error');
+                return false;
+            }
+        }
+
+        if (!data.amount || parseFloat(data.amount) <= 0) {
+            showAlert('❌ Введите корректную сумму', 'error');
+            return false;
+        }
+
+        if (!data.first_name || !data.last_name) {
+            showAlert('❌ Введите имя и фамилию получателя', 'error');
+            return false;
+        }
+
+        return true;
+    }
+
+    // Отправка формы
+    async function submitPaymentForm(data) {
+        const submitBtn = document.getElementById('submitBtn');
+        const loading = document.getElementById('loading');
+
+        // Показываем загрузку
+        submitBtn.disabled = true;
+        submitBtn.textContent = '⏳ Создаем выплату...';
+        loading.style.display = 'block';
+
+        try {
+            console.log('🚀 Отправка запроса на /payments/create-payment...');
+            console.log('📦 Отправляемые данные:', data);
+
+            const response = await fetch('/payments/create-payment', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(data)
+            });
+
+            console.log('📨 Ответ сервера:', response.status, response.statusText);
+
+            const result = await response.json();
+            console.log('📊 Данные ответа:', result);
+
+            if (response.ok) {
+                showAlert(`✅ Выплата создана! ID: ${result.id}, Статус: ${result.status}`, 'success');
+                document.getElementById('paymentForm').reset();
+                document.getElementById('cardSection').style.display = 'none';
+                document.getElementById('fpsSection').style.display = 'none';
+            } else {
+                const errorMsg = result.detail || result.error || 'Неизвестная ошибка';
+                console.error('❌ Ошибка сервера:', errorMsg);
+                showAlert(`❌ Ошибка: ${errorMsg}`, 'error');
+            }
+        } catch (error) {
+            console.error('💥 Ошибка сети:', error);
+            showAlert('❌ Ошибка соединения с сервером', 'error');
+        } finally {
+            submitBtn.disabled = false;
+            submitBtn.textContent = '💸 Создать выплату';
+            loading.style.display = 'none';
+        }
+    }
+
+    // Показ уведомлений
+    function showAlert(message, type) {
+        const alert = document.getElementById('alert');
+        if (!alert) return;
+
+        alert.textContent = message;
+        alert.className = `alert alert-${type}`;
+        alert.style.display = 'block';
+
+        setTimeout(() => {
+            alert.style.display = 'none';
+        }, 5000);
+    }
+
+    // Инициализация при загрузке страницы
+    document.addEventListener('DOMContentLoaded', function() {
+        console.log('🚀 Инициализация платежной формы...');
+        initializePaymentTypeHandler();
+        initializeFieldHandlers();
+        initializeFormHandler();
+    });
+</script>
+</body>
+</html>

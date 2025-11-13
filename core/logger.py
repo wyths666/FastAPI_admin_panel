@@ -21,7 +21,7 @@ def setting_logger(logger: Logger) -> Logger:
 
     # Add handlers to logger
     logger.handlers = [stream_handler]
-
+    logger.propagate = False
     logger.setLevel(INFO)
 
     return logger
@@ -31,6 +31,11 @@ def setting_logger(logger: Logger) -> Logger:
 bot_logger = setting_logger(
     logger=getLogger('bot')
 )
+
+bot_1_logger = setting_logger(
+    logger=getLogger('bot_1')
+)
+
 api_logger = setting_logger(
     logger=getLogger('api')
 )

@@ -9,6 +9,7 @@ from bot.templates.admin import menu as tadmin
 from bot.templates.admin.menu import AdminState
 from db.beanie.models import Claim, KonsolPayment, User
 from core.bot import bot
+from db.beanie.models.models import ChatSession
 from utils.konsol_client import konsol_client
 
 router = Router()
@@ -254,6 +255,8 @@ async def process_claim_approval(call: CallbackQuery, claim_id: str):
                 new_text = f"{current_text[:-14]} Подтверждено ✅"
                 await call.message.edit_text(text=new_text, reply_markup=None)
 
+
+
             # === 7. Уведомляем пользователя ===
             try:
                 await bot.send_message(
@@ -264,6 +267,27 @@ async def process_claim_approval(call: CallbackQuery, claim_id: str):
                 print(f"[NOTIFY ERROR] Не удалось уведомить пользователя {claim.user_id}: {notify_e}")
 
             await call.answer("✅ Оплата подтверждена")
+
+            try:
+                # ✅ ЗАКРЫВАЕМ ЧАТ-СЕССИЮ
+                session = await ChatSession.find_one(
+                    ChatSession.claim_id == claim_id,
+                    ChatSession.is_active == True
+                )
+                if session:
+                    await session.update(
+                        is_active=False,
+                        closed_at=datetime.now()
+                    )
+                    # Уведомляем в чате если он открыт
+                    if session.admin_chat_id:
+                        await bot.send_message(
+                            chat_id=session.admin_chat_id,
+                            text="❌ <b>Чат закрыт - заявка обработана</b>",
+                            parse_mode="HTML"
+                        )
+            except Exception as e:
+                return
 
         except Exception as pay_e:
             error_msg = f"[PAYMENT ERROR] Ошибка создания платежа для заявки {claim.claim_id}: {pay_e}"
@@ -315,6 +339,27 @@ async def process_claim_rejection(call: CallbackQuery, claim_id: str):
         #     print(f"[NOTIFY ERROR] Не удалось уведомить пользователя {claim.user_id}: {e}")
         #
         await call.answer("❌ Заявка отклонена")
+
+        try:
+            # ✅ ЗАКРЫВАЕМ ЧАТ-СЕССИЮ
+            session = await ChatSession.find_one(
+                ChatSession.claim_id == claim_id,
+                ChatSession.is_active == True
+            )
+            if session:
+                await session.update(
+                    is_active=False,
+                    closed_at=datetime.now()
+                )
+                # Уведомляем в чате если он открыт
+                if session.admin_chat_id:
+                    await bot.send_message(
+                        chat_id=session.admin_chat_id,
+                        text="❌ <b>Чат закрыт - заявка обработана</b>",
+                        parse_mode="HTML"
+                    )
+        except Exception as e:
+            return
 
     except Exception as e:
         print(f"❌ Ошибка отклонения заявки: {e}")

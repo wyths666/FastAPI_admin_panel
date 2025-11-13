@@ -1,0 +1,1255 @@
+<!DOCTYPE html>
+<html lang="ru">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% if request.query_params.get('user_id') %}Заявки пользователя №{{ request.query_params.get('user_id') }}{% else %}Управление заявками{% endif %}</title>
+    <style>
+        :root {
+            --primary: #4361ee;
+            --success: #4cc9f0;
+            --warning: #ff5c1a;
+            --danger: #e63946;
+            --light: #f8f9fa;
+            --dark: #212529;
+            --gray: #6c757d;
+            --border: #dee2e6;
+            --shadow: rgba(0, 0, 0, 0.1);
+            --radius: 10px;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        .header-actions {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .btn-logout {
+    background: var(--danger);
+    padding: 10px 20px;
+    font-size: 1rem;
+    display: inline-block;
+    color: white;
+    text-decoration: none;
+    border-radius: var(--radius);
+    font-weight: 500;
+    text-align: center;
+    transition: all 0.3s ease;
+    border: none;
+    cursor: pointer;
+    margin: 0;
+    box-sizing: border-box;
+}
+
+        .btn-back {
+    display: inline-block;
+    padding: 15px 30px;
+    background: var(--gray);
+    color: white;
+    text-decoration: none;
+    border-radius: var(--radius);
+    font-size: 1.2rem;
+    font-weight: 500;
+    text-align: center;
+    transition: all 0.3s ease;
+    border: none;
+    cursor: pointer;
+    margin: 0;
+    box-sizing: border-box;
+}
+
+        .filters {
+            background: white;
+            border-radius: var(--radius);
+            box-shadow: 0 4px 12px var(--shadow);
+            padding: 20px;
+            margin-bottom: 30px;
+        }
+
+        .filter-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+            align-items: end;
+        }
+
+        .filter-group {
+            display: flex;
+            flex-direction: column;
+            flex: 1;
+            min-width: 200px;
+        }
+
+        .filter-group label {
+            font-weight: 500;
+            margin-bottom: 5px;
+            color: var(--dark);
+        }
+
+        .filter-group input,
+        .filter-group select {
+            padding: 10px;
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            font-family: inherit;
+        }
+
+        .filter-button {
+            height: 40px;
+            line-height: 40px;
+            text-align: center;
+            padding: 0 20px;
+            border: none;
+            border-radius: 4px;
+            font-weight: 500;
+            font-family: inherit;
+            cursor: pointer;
+            width: 120px;
+            box-sizing: border-box;
+            background-color: var(--primary);
+            color: white;
+        }
+
+        .filter-button:hover {
+            background-color: #3a56e4;
+        }
+
+        @media (max-width: 768px) {
+            .filter-row {
+                flex-direction: column;
+            }
+            .filter-button {
+                align-self: stretch;
+            }
+        }
+        .bank-selector {
+            margin: 10px 0;
+        }
+
+        .bank-select {
+            padding: 8px 12px;
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            background: white;
+            font-family: inherit;
+            margin-left: 10px;
+            min-width: 200px;
+        }
+        .btn-ban {
+            background: var(--danger);
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 500;
+            margin-left: 10px;
+        }
+
+        .btn-ban:hover {
+            background: #c82333;
+        transform: translateY(-1px);
+        }
+
+        .btn-unban {
+            background: var(--success);
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 500;
+            margin-left: 10px;
+        }
+
+        .btn-unban:hover {
+            background: #1e7e34;
+            transform: translateY(-1px);
+        }
+
+        .bank-select:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 2px rgba(67, 97, 238, 0.2);
+        }
+
+        .bank-saving {
+            color: var(--primary);
+        }
+
+        .bank-success {
+            color: var(--success);
+        }
+
+        .bank-error {
+            color: var(--danger);
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #f5f7fa 0%, #e4edf5 100%);
+            color: var(--dark);
+            padding: 20px;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 30px;
+            padding: 20px;
+            background: white;
+            border-radius: var(--radius);
+            box-shadow: 0 4px 12px var(--shadow);
+        }
+
+        h1 {
+            font-size: 2.2rem;
+            color: var(--primary);
+            margin-bottom: 10px;
+        }
+
+        .summary {
+            font-size: 1.2rem;
+            color: var(--gray);
+        }
+
+        .claim {
+            background: white;
+            border-radius: var(--radius);
+            box-shadow: 0 4px 10px var(--shadow);
+            margin-bottom: 25px;
+            overflow: hidden;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .claim:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 20px var(--shadow);
+        }
+
+        .claim-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px;
+            background: linear-gradient(to right, #f1f3f9, #e9ecef);
+            border-bottom: 1px solid var(--border);
+            cursor: pointer;
+        }
+
+        .claim-number {
+            font-weight: bold;
+            font-size: 1.4rem;
+            color: var(--primary);
+        }
+
+        .claim-status {
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-weight: bold;
+            font-size: 0.9rem;
+            text-align: center;
+            display: inline-block;
+        }
+
+        .status-pending { background: #fff3cd; color: #856404; }
+        .status-confirm { background: #d1ecf1; color: #0c5460; }
+        .status-cancelled { background: #f8d7da; color: #721c24; }
+
+        .toggle-icon {
+            font-size: 1.2rem;
+            transition: transform 0.3s ease;
+        }
+
+        .claim.expanded .toggle-icon {
+            transform: rotate(180deg);
+        }
+
+        .claim-details {
+            display: none;
+            padding: 20px;
+            background: white;
+        }
+
+        .claim.expanded .claim-details {
+            display: block;
+        }
+
+        .customer-info {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 4px;
+            margin: 15px 0;
+        }
+
+        .chat-section {
+            margin-top: 20px;
+            border-top: 1px solid var(--border);
+            padding-top: 20px;
+        }
+
+        .chat-toggle {
+            background: var(--primary);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 500;
+            margin-bottom: 15px;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .btn-confirm {
+            background: #28a745;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 500;
+            margin-bottom: 15px;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .btn-cancel {
+            background: #e31e1e;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 500;
+            margin-bottom: 15px;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .chat-container {
+            display: none;
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 15px;
+            margin-top: 10px;
+        }
+
+        .chat-container.active {
+            display: block;
+        }
+
+        .chat-messages {
+            height: 300px;
+            overflow-y: auto;
+            background: white;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 15px;
+            border: 1px solid var(--border);
+        }
+
+        .message {
+            margin-bottom: 12px;
+            padding: 10px;
+            border-radius: 8px;
+            max-width: 80%;
+        }
+
+        .message.bot {
+            background: #e3f2fd;
+            margin-left: auto;
+            text-align: right;
+        }
+
+        .message.user {
+            background: #f5f5f5;
+            margin-right: auto;
+        }
+
+        .message-time {
+            font-size: 0.8rem;
+            color: var(--gray);
+            margin-top: 5px;
+        }
+
+        .chat-input-form {
+            display: flex;
+            gap: 10px;
+        }
+
+        .chat-input {
+            flex: 1;
+            padding: 12px;
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            font-family: inherit;
+        }
+
+        .chat-send {
+            padding: 12px 20px;
+            background: var(--primary);
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 500;
+        }
+
+        .chat-send:hover {
+            background: #3a56e4;
+        }
+
+        .unread-badge {
+            background: var(--danger);
+            color: white;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            font-size: 0.8rem;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            margin-left: 5px;
+        }
+
+        @media (max-width: 768px) {
+            .claim-header {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+            .claim-status { margin-top: 10px; }
+            .chat-input-form { flex-direction: column; }
+        }
+        .message img {
+    max-width: 200px;
+    max-height: 200px;
+    border-radius: 8px;
+    border: 2px solid var(--primary);
+    transition: transform 0.2s ease;
+}
+
+.message img:hover {
+    transform: scale(1.05);
+}
+
+.photo-placeholder {
+    width: 200px;
+    height: 150px;
+    background: var(--light);
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--gray);
+    font-size: 3rem;
+}
+
+/* Стили для модального окна фото */
+.photo-modal {
+    display: none;
+    position: fixed;
+    z-index: 1000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0,0,0,0.9);
+    animation: fadeIn 0.3s;
+}
+
+.photo-modal-content {
+    position: relative;
+    margin: auto;
+    display: block;
+    width: auto;
+    max-width: 90%;
+    max-height: 90%;
+    top: 50%;
+    transform: translateY(-50%);
+    border-radius: 8px;
+}
+
+.photo-modal-nav {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    background: rgba(255,255,255,0.2);
+    color: white;
+    border: none;
+    padding: 15px 10px;
+    cursor: pointer;
+    font-size: 1.5rem;
+    border-radius: 4px;
+    transition: background 0.3s;
+}
+
+.photo-modal-nav:hover {
+    background: rgba(255,255,255,0.4);
+}
+
+.photo-modal-prev {
+    left: 20px;
+}
+
+.photo-modal-next {
+    right: 20px;
+}
+
+.photo-modal-close {
+    position: absolute;
+    top: 20px;
+    right: 30px;
+    color: white;
+    font-size: 2rem;
+    font-weight: bold;
+    cursor: pointer;
+    background: rgba(255,255,255,0.2);
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.3s;
+}
+
+.photo-modal-close:hover {
+    background: rgba(255,255,255,0.4);
+}
+
+.photo-modal-counter {
+    position: absolute;
+    top: 20px;
+    left: 30px;
+    color: white;
+    font-size: 1.2rem;
+    background: rgba(0,0,0,0.5);
+    padding: 5px 15px;
+    border-radius: 20px;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+/* Анимация для смены фото */
+.photo-fade {
+    animation: fade 0.5s;
+}
+
+@keyframes fade {
+    from { opacity: 0.4; }
+    to { opacity: 1; }
+}
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="header-actions">
+    <a href="/" class="btn-back">← Назад</a>
+    <a href="/auth/logout" class="btn-logout">🚪 Выйти</a>
+</div>
+
+    <header>
+        <h1>
+            {% if request.query_params.get('user_id') %}
+            <a href="/claims/" style="text-decoration: none; color: inherit;">
+                Заявки пользователя №{{ request.query_params.get('user_id') }}<br>
+                ↩️ назад
+            </a>
+            {% else %}
+            Управление заявками
+            {% endif %}
+        </h1>
+        <p class="summary">Всего заявок: {{ claims|length }}</p>
+    </header>
+
+    <div class="filters">
+        <form id="filter-form" method="GET">
+            <div class="filter-row">
+                {% if request.query_params.get('user_id') %}
+                <input type="hidden" name="user_id" value="{{ request.query_params.get('user_id') }}">
+                {% endif %}
+
+                <div class="filter-group">
+                    <label for="date_from">Дата от:</label>
+                    <input type="date" id="date_from" name="date_from"
+                           value="{{ date_from or '' }}">
+                </div>
+
+                <div class="filter-group">
+                    <label for="date_to">Дата до:</label>
+                    <input type="date" id="date_to" name="date_to"
+                           value="{{ date_to or '' }}">
+                </div>
+
+                <div class="filter-group">
+    <label for="number">Номер заявки:</label>
+    <input type="number" id="number" name="number"
+           value="{{ number or '' }}">
+</div>
+
+                <div class="filter-group">
+                    <label for="status">Статус:</label>
+                    <select id="status" name="status">
+                        <option value="">Все статусы</option>
+                        {% for s in statuses %}
+                        <option value="{{ s.id }}" {% if status == s.id %}selected{% endif %}>{{ s.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <button type="submit" class="filter-button">🔍 Фильтр</button>
+                <a href="/claims/" class="filter-button"style="text-decoration:none; background-color: #8f8f8f;">❌ Сброс</a>
+            </div>
+        </form>
+    </div>
+
+    {% for claim in claims %}
+    <div class="claim" data-claim-id="{{ claim.claim_id }}" data-user-id="{{ claim.user_id }}">
+        <div class="claim-header" onclick="toggleClaimDetails(this.parentElement)">
+            <div class="claim-number">
+                {% if claim.has_unanswered %}
+                <span style="color: red; font-weight: bold;">📩 </span>
+                {% endif %}
+                Заявка №{{ claim.claim_id }} от {{ claim.created_at.strftime('%d.%m.%Y') }}
+                </div>
+            <div>
+                <div class="claim-status status-{{ claim.claim_status }}">
+                    {% if claim.claim_status == 'process' %}🆕 Не обработано
+                    {% elif claim.claim_status == 'pending' %}✅ Подтверждёно
+                    {% elif claim.claim_status == 'cancelled' %}❌ Отменёно
+                    {% else %}{{ claim.claim_status }}{% endif %}
+                </div>
+                <span class="toggle-icon">▼</span>
+            </div>
+        </div>
+
+        <div class="claim-details">
+            <p><strong>📅 Дата:</strong> {{ claim.created_at.strftime('%d.%m.%Y %H:%M') }}</p>
+
+
+           <div class="customer-info">
+    {% if claim.payment_method == 'phone' %}
+    <p>👤 <strong>Пользователь: <a href="/claims/?user_id={{ claim.user_id }}">{{ claim.username or claim.user_id }}</a></strong>
+               {% if claim.banned %}
+        <button class="btn-unban" onclick="toggleUserBan('{{ claim.user_id }}', '{{ claim.claim_id }}', false)">
+            ✅ Разблокировать
+        </button>
+        {% else %}
+        <button class="btn-ban" onclick="toggleUserBan('{{ claim.user_id }}', '{{ claim.claim_id }}', true)">
+            🚫 Заблокировать
+        </button>
+        {% endif %}</p>
+    <p>📋 <strong>Кол-во заявок пользователя:</strong> {{ claim.old_claims }}</p>
+    <p>🔐 <strong>Код:</strong> <code>{{ claim.code }}</code></p>
+    <p>📱 <strong>Телефон:</strong> {{ claim.phone }}</p>
+    <p>📲 <strong>СБП:</strong> {{ claim.bank }} </p>
+    <!-- ВЫПАДАЮЩИЙ СПИСОК БАНКОВ -->
+    <div class="bank-selector">
+        <label for="bank-select-{{ claim.claim_id }}">🏦 <strong>Банк:</strong></label>
+        <select id="bank-select-{{ claim.claim_id }}"
+                class="bank-select"
+                data-claim-id="{{ claim.claim_id }}"
+                onchange="updateBankMemberId('{{ claim.claim_id }}', this.value)">
+            <option value="">— Выберите банк —</option>
+            {% for bank_id, bank_name in banks.items() %}
+            <option value="{{ bank_id }}"
+                    {% if claim.bank_member_id == bank_id %}selected{% endif %}>
+                {{ bank_name }}
+            </option>
+            {% endfor %}
+        </select>
+
+        <!-- Текущее значение -->
+        <div style="margin-top: 5px; font-size: 0.9rem; color: var(--gray);">
+            Текущий ID: <code id="current-bank-{{ claim.claim_id }}">{{ claim.bank_member_id or '—' }}</code>
+            <span id="bank-status-{{ claim.claim_id }}" style="margin-left: 10px;"></span>
+        </div>
+    </div>
+
+    <p>{% if claim.review_text %}📝 <strong>Отзыв:</strong> {{ claim.review_text }}{% endif %}</p>
+    {% endif %}
+
+    {% if claim.payment_method == 'card' %}
+    <p>👤 <strong>Пользователь: <a href="/claims/?user_id={{ claim.user_id }}">{{ claim.username or claim.user_id }}</a></strong>
+               {% if claim.banned %}
+        <button class="btn-unban" onclick="toggleUserBan('{{ claim.user_id }}', '{{ claim.claim_id }}', false)">
+            ✅ Разблокировать
+        </button>
+        {% else %}
+        <button class="btn-ban" onclick="toggleUserBan('{{ claim.user_id }}', '{{ claim.claim_id }}', true)">
+            🚫 Заблокировать
+        </button>
+        {% endif %}</p>
+    <p>📋 <strong>Кол-во заявок пользователя:</strong> {{ claim.old_claims }}</p>
+    <p>🔐 <strong>Код:</strong> <code>{{ claim.code }}</code></p>
+    <p>💳 <strong>Карта:</strong> {{ claim.card or '—' }}</p>
+    <p>{% if claim.review_text %}📝 <strong>Отзыв:</strong> {{ claim.review_text }}{% endif %}</p>
+    {% endif %}
+    <!-- ГАЛЕРЕЯ ФОТО -->
+    {% if claim.photo_count > 0 %}
+<div style="margin-top: 15px;">
+    <p><strong>📸 Фотографии ({{ claim.photo_count }}):</strong></p>
+    <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-top: 10px;">
+        {% for i in range(claim.photo_count) %}
+        <div style="text-align: center;">
+            <img src="/claims/{{ claim.claim_id }}/photos/{{ i }}"
+                 alt="Фото {{ i+1 }}"
+                 style="width: 100px; height: 100px; object-fit: cover; border-radius: 8px; border: 2px solid var(--primary); cursor: pointer;"
+                 onclick="openPhotoModal('{{ claim.claim_id }}', {{ i }}, {{ claim.photo_count }})"
+                 onerror="this.style.display='none'">
+            <div style="font-size: 0.8rem; margin-top: 5px;">Фото {{ i+1 }}</div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+</div>
+
+            <!-- СЕКЦИЯ ЧАТА -->
+            <div class="chat-section">
+                {% if claim.claim_status == 'process' %}
+                <button class="chat-toggle" onclick="toggleChat(this, '{{ claim.claim_id }}', {{ claim.user_id }})">
+                    💬 Чат с клиентом
+                    {% if claim.is_chat_active %}
+                    <span class="unread-badge" id="unread-badge-{{ claim.claim_id }}" style="display: none;">0</span>
+                    {% endif %}
+                </button>
+                {% endif %}
+                <div class="chat-container" id="chat-{{ claim.claim_id }}">
+                    <div class="chat-messages" id="messages-{{ claim.claim_id }}">
+                        <!-- Сообщения загружаются JS -->
+                    </div>
+                    <form class="chat-input-form" onsubmit="sendMessage(event, '{{ claim.claim_id }}', {{ claim.user_id }})">
+                        <input type="text" class="chat-input" id="message-input-{{ claim.claim_id }}" placeholder="Введите сообщение..." required>
+                        <button type="submit" class="chat-send">Отправить</button>
+                    </form>
+                </div>
+            </div>
+
+            <div class="order-footer" style="display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                    {% if claim.claim_status == 'process' %}
+                    <button class="btn-confirm" onclick="updateStatus('{{ claim.claim_id }}', 'pending')">✅ Подтвердить</button>
+                    <button class="btn-cancel" onclick="updateStatus('{{ claim.claim_id }}', 'cancelled')">❌ Отменить</button>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+    {% else %}
+    <div style="text-align: center; padding: 40px; background: white; border-radius: var(--radius); box-shadow: 0 4px 12px var(--shadow);">
+        <h3>📭 Нет заявок</h3>
+        <p>Заявок пока не поступало.</p>
+    </div>
+    {% endfor %}
+</div>
+
+<script>
+    const chatIntervals = {};
+    const unreadCounters = {};
+
+    function toggleClaimDetails(element) {
+        element.classList.toggle('expanded');
+    }
+
+    async function toggleUserBan(userId, claimId, ban) {
+    const action = ban ? 'блокировку' : 'разблокировку';
+
+    if (!confirm(`Вы уверены, что хотите выполнить ${action} пользователя ${userId}?`)) {
+        return;
+    }
+
+    try {
+        const endpoint = ban ? '/claims/user/ban' : '/claims/user/unban';
+
+        const response = await fetch(endpoint, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                user_id: parseInt(userId),
+                claim_id: claimId
+            })
+        });
+
+        const result = await response.json();
+
+        if (result.ok) {
+            alert(`✅ ${result.message}`);
+            location.reload(); // Перезагружаем страницу для обновления статуса
+        } else {
+            alert(`❌ Ошибка: ${result.error}`);
+        }
+
+    } catch (error) {
+        console.error('Ошибка блокировки/разблокировки:', error);
+        alert('❌ Ошибка соединения');
+    }
+}
+
+    async function updateBankMemberId(claimId, bankId) {
+    const statusElement = document.getElementById(`bank-status-${claimId}`);
+    const currentBankElement = document.getElementById(`current-bank-${claimId}`);
+
+    if (!bankId) {
+        statusElement.textContent = "❌ Банк не выбран";
+        statusElement.className = "bank-error";
+        return;
+    }
+
+    try {
+        statusElement.textContent = "⏳ Сохранение...";
+        statusElement.className = "bank-saving";
+
+        const response = await fetch('/claims/update_bank', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                claim_id: claimId,
+                bank_member_id: bankId
+            })
+        });
+
+        const result = await response.json();
+
+        if (result.ok) {
+            statusElement.textContent = "✅ Банк сохранен";
+            statusElement.className = "bank-success";
+            currentBankElement.textContent = bankId;
+
+            // Автоматически скрываем сообщение через 3 секунды
+            setTimeout(() => {
+                statusElement.textContent = "";
+            }, 3000);
+        } else {
+            statusElement.textContent = `❌ Ошибка: ${result.error}`;
+            statusElement.className = "bank-error";
+        }
+
+    } catch (error) {
+        console.error('Ошибка обновления банка:', error);
+        statusElement.textContent = "❌ Ошибка соединения";
+        statusElement.className = "bank-error";
+    }
+}
+
+    async function startChatSession(claimId) {
+        try {
+            const res = await fetch('/claims/chat/start', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ claim_id: claimId })
+            });
+            const data = await res.json();
+            if (!data.ok) throw new Error('Failed to start chat');
+        } catch (e) {
+            console.error('Start chat error:', e);
+        }
+    }
+
+    async function toggleChat(button, claimId, userId) {
+        const chatContainer = document.getElementById(`chat-${claimId}`);
+        const isActive = chatContainer.classList.contains('active');
+
+        if (!isActive) {
+            await startChatSession(claimId);
+            await loadChatHistory(claimId);
+            startPolling(claimId);
+        } else {
+            stopPolling(claimId);
+        }
+
+        chatContainer.classList.toggle('active');
+    }
+
+    async function loadChatHistory(claimId) {
+        console.log(`📥 Загрузка истории чата для claimId: ${claimId}`);
+
+        try {
+            const res = await fetch(`/claims/chat/history?claim_id=${claimId}`);
+            console.log(`📨 Статус ответа: ${res.status}`);
+
+            if (!res.ok) {
+                console.error(`❌ Ошибка HTTP: ${res.status}`);
+                return;
+            }
+
+            const messages = await res.json();
+            console.log(`✅ Загружено сообщений: ${messages.length}`, messages);
+
+            displayMessages(claimId, messages);
+            resetUnreadCount(claimId);
+        } catch (e) {
+            console.error('💥 Ошибка загрузки истории:', e);
+        }
+    }
+
+    async function displayMessages(claimId, messages) {
+    const container = document.getElementById(`messages-${claimId}`);
+    console.log('🔍 [CHAT] Сообщения:', messages);
+
+    container.innerHTML = '';
+
+    // Предварительно получим все URL фото
+    const photoUrls = {};
+    for (const msg of messages) {
+        if (msg.has_photo && msg.photo_file_id) {
+            try {
+                const resp = await fetch(`/claims/chat/photo-url/${msg.id}`);
+                if (resp.ok) {
+                    const data = await resp.json();
+                    photoUrls[msg.id] = data.url;
+                }
+            } catch (e) {
+                console.error(`❌ Ошибка получения URL для ${msg.id}:`, e);
+                photoUrls[msg.id] = 'https://via.placeholder.com/200x200/333/fff?text=🖼️';
+            }
+        }
+    }
+
+    messages.forEach((msg, index) => {
+        console.log(`🔍 [CHAT] Сообщение ${index}:`, msg);
+
+        const div = document.createElement('div');
+        div.className = `message ${msg.is_bot ? 'bot' : 'user'}`;
+        const time = new Date(msg.timestamp).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+
+        let content = '';
+
+        if (msg.has_photo && msg.photo_file_id) {
+            const photoUrl = photoUrls[msg.id] || 'https://via.placeholder.com/200x200/333/fff?text=🖼️';
+
+            content = `
+                <div style="margin-bottom: 8px;">
+                    <img src="${photoUrl}"
+                         alt="Фото из чата"
+                         style="max-width: 200px; max-height: 200px; border-radius: 8px; border: 2px solid var(--primary); cursor: pointer;"
+                         onclick="openChatPhoto('${msg.id}')"
+                         onload="console.log('✅ Фото загружено: ${msg.id}')"
+                         onerror="this.src='https://via.placeholder.com/200x200/333/fff?text=🖼️'; console.error('❌ Ошибка загрузки фото: ${msg.id}')">
+                </div>
+                ${msg.message ? `<div style="margin-top: 8px;">${msg.message}</div>` : ''}
+                <div class="message-time">${time}</div>
+            `;
+        } else {
+            content = `
+                <div>${msg.message || '(пустое сообщение)'}</div>
+                <div class="message-time">${time}</div>
+            `;
+        }
+
+        div.innerHTML = content;
+        container.appendChild(div);
+    });
+
+    container.scrollTop = container.scrollHeight;
+}
+
+    async function sendMessage(event, claimId, userId) {
+        event.preventDefault();
+        const input = document.getElementById(`message-input-${claimId}`);
+        const text = input.value.trim();
+        if (!text) return;
+
+        try {
+            const res = await fetch('/claims/chat/send', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ claim_id: claimId, text, is_bot: true })
+            });
+
+            if (res.ok) {
+                input.value = '';
+                await loadChatHistory(claimId);
+            } else {
+                alert('❌ Ошибка отправки');
+            }
+        } catch (e) {
+            console.error('Send message:', e);
+            alert('Ошибка подключения');
+        }
+    }
+
+    function startPolling(claimId) {
+        stopPolling(claimId);
+
+        chatIntervals[claimId] = setInterval(async () => {
+            try {
+                const res = await fetch(`/claims/chat/history?claim_id=${claimId}`);
+                const messages = await res.json();
+                const container = document.getElementById(`messages-${claimId}`);
+                const currentCount = container.children.length;
+
+                if (messages.length > currentCount) {
+                    displayMessages(claimId, messages);
+                    if (!document.getElementById(`chat-${claimId}`).classList.contains('active')) {
+                        incrementUnreadCount(claimId);
+                    }
+                }
+            } catch (e) {
+                console.error('Poll error:', e);
+            }
+        }, 3000);
+    }
+
+    function stopPolling(claimId) {
+        if (chatIntervals[claimId]) {
+            clearInterval(chatIntervals[claimId]);
+            delete chatIntervals[claimId];
+        }
+    }
+
+    function incrementUnreadCount(claimId) {
+        unreadCounters[claimId] = (unreadCounters[claimId] || 0) + 1;
+        const badge = document.getElementById(`unread-badge-${claimId}`);
+        badge.textContent = unreadCounters[claimId];
+        badge.style.display = 'inline-flex';
+    }
+
+    function resetUnreadCount(claimId) {
+        unreadCounters[claimId] = 0;
+        const badge = document.getElementById(`unread-badge-${claimId}`);
+        badge.style.display = 'none';
+    }
+
+    async function updateStatus(claimId, newStatus) {
+    if (!confirm(`Изменить статус заявки №${claimId} на "${newStatus}"?`)) return;
+
+    try {
+        const res = await fetch('/claims/status/update', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                claim_id: claimId,
+                new_status: newStatus,
+                close_chat: true
+            })
+        });
+
+        const result = await res.json();
+
+        if (result.ok) {
+            // Закрываем чат на фронтенде если он открыт
+            const chatContainer = document.getElementById(`chat-${claimId}`);
+            if (chatContainer && chatContainer.classList.contains('active')) {
+                toggleChat(null, claimId);
+            }
+
+            alert('✅ Статус обновлен' + (newStatus === 'pending' ? ', платеж создан' : ''));
+            location.reload();
+        } else {
+            alert(`❌ ${result.error || 'Ошибка'}`);
+        }
+    } catch (e) {
+        alert('❌ Ошибка подключения');
+    }
+}
+
+    async function requestScreenshot(claimId) {
+        try {
+            const res = await fetch('/claims/request/screenshot', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ claim_id: claimId })
+            });
+            const data = await res.json();
+            if (data.ok) {
+                alert('✅ Запрос на скриншот отправлен');
+            } else {
+                alert(`❌ ${data.error}`);
+            }
+        } catch (e) {
+            alert('❌ Ошибка');
+        }
+    }
+
+    async function openChatPhoto(messageId) {
+    try {
+        // Получаем URL фото
+        const resp = await fetch(`/claims/chat/photo-url/${messageId}`);
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+
+        const { url } = await resp.json();
+
+        // Создаём модалку
+        const modal = document.createElement('div');
+        modal.style.cssText = `
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.95); z-index: 10000;
+            display: flex; flex-direction: column; justify-content: center; align-items: center;
+            cursor: pointer; padding: 20px;
+        `;
+
+        modal.innerHTML = `
+            <button onclick="this.parentElement.remove()"
+                    style="align-self: flex-end; background: #fff; color: #000;
+                           border: none; width: 36px; height: 36px; border-radius: 50%;
+                           font-size: 1.4rem; margin-bottom: 10px; cursor: pointer;">
+                ×
+            </button>
+            <img src="${url}"
+                 alt="Фото из чата"
+                 style="max-width: 95%; max-height: 85vh; object-fit: contain;
+                        border-radius: 4px; box-shadow: 0 4px 12px rgba(0,0,0,0.5);"
+                 onerror="this.src='https://via.placeholder.com/400x300/333/999?text=🖼️+Ошибка+загрузки'">
+        `;
+
+        // Закрытие по клику на фон или Esc
+        modal.onclick = (e) => {
+            if (e.target === modal) modal.remove();
+        };
+        const escClose = (e) => {
+            if (e.key === 'Escape') modal.remove();
+        };
+        document.addEventListener('keydown', escClose);
+        modal._escHandler = escClose;
+
+        document.body.appendChild(modal);
+
+    } catch (error) {
+        console.error("❌ openChatPhoto error:", error);
+        alert(`❌ Не удалось открыть фото: ${error.message}`);
+    }
+}
+
+    // При загрузке — проверяем активные чаты и запускаем polling для них
+    document.addEventListener('DOMContentLoaded', () => {
+        document.querySelectorAll('.chat-container.active').forEach(container => {
+            const claimId = container.id.replace('chat-', '');
+            startPolling(claimId);
+        });
+    });
+
+    let currentPhotoIndex = 0;
+let currentClaimId = '';
+let totalPhotos = 0;
+
+function openPhotoModal(claimId, photoIndex, photoCount) {
+    currentClaimId = claimId;
+    currentPhotoIndex = photoIndex;
+    totalPhotos = photoCount;
+
+    // Создаем или находим модальное окно
+    let modal = document.getElementById('photoModal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'photoModal';
+        modal.className = 'photo-modal';
+        modal.innerHTML = `
+            <span class="photo-modal-close">&times;</span>
+            <div class="photo-modal-counter" id="photoCounter">1 / ${totalPhotos}</div>
+            <button class="photo-modal-nav photo-modal-prev" onclick="changePhoto(-1)">❮</button>
+            <button class="photo-modal-nav photo-modal-next" onclick="changePhoto(1)">❯</button>
+            <img class="photo-modal-content photo-fade" id="modalPhoto">
+        `;
+        document.body.appendChild(modal);
+
+        // Закрытие по клику на крестик или вне фото
+        modal.querySelector('.photo-modal-close').onclick = closePhotoModal;
+        modal.onclick = function(event) {
+            if (event.target === modal) {
+                closePhotoModal();
+            }
+        };
+
+        // Закрытие по ESC
+        document.addEventListener('keydown', handlePhotoModalKeydown);
+    }
+
+    // Показываем фото
+    updateModalPhoto();
+    modal.style.display = 'block';
+
+    // Блокируем прокрутку body
+    document.body.style.overflow = 'hidden';
+}
+
+function closePhotoModal() {
+    const modal = document.getElementById('photoModal');
+    if (modal) {
+        modal.style.display = 'none';
+        document.body.style.overflow = 'auto';
+    }
+
+    // Удаляем обработчик ESC
+    document.removeEventListener('keydown', handlePhotoModalKeydown);
+}
+
+function handlePhotoModalKeydown(event) {
+    if (event.key === 'Escape') {
+        closePhotoModal();
+    } else if (event.key === 'ArrowLeft') {
+        changePhoto(-1);
+    } else if (event.key === 'ArrowRight') {
+        changePhoto(1);
+    }
+}
+
+function changePhoto(direction) {
+    currentPhotoIndex += direction;
+
+    // Зацикливаем навигацию
+    if (currentPhotoIndex >= totalPhotos) {
+        currentPhotoIndex = 0;
+    } else if (currentPhotoIndex < 0) {
+        currentPhotoIndex = totalPhotos - 1;
+    }
+
+    updateModalPhoto();
+}
+
+function updateModalPhoto() {
+    const modalPhoto = document.getElementById('modalPhoto');
+    const photoCounter = document.getElementById('photoCounter');
+
+    if (modalPhoto && photoCounter) {
+        // Добавляем анимацию
+        modalPhoto.classList.remove('photo-fade');
+        void modalPhoto.offsetWidth; // Trigger reflow
+        modalPhoto.classList.add('photo-fade');
+
+        // Обновляем фото и счетчик
+        modalPhoto.src = `/claims/${currentClaimId}/photos/${currentPhotoIndex}`;
+        modalPhoto.alt = `Фото ${currentPhotoIndex + 1}`;
+        photoCounter.textContent = `${currentPhotoIndex + 1} / ${totalPhotos}`;
+
+        // Показываем/скрываем кнопки навигации если фото одно
+        const prevBtn = document.querySelector('.photo-modal-prev');
+        const nextBtn = document.querySelector('.photo-modal-next');
+
+        if (totalPhotos <= 1) {
+            if (prevBtn) prevBtn.style.display = 'none';
+            if (nextBtn) nextBtn.style.display = 'none';
+        } else {
+            if (prevBtn) prevBtn.style.display = 'block';
+            if (nextBtn) nextBtn.style.display = 'block';
+        }
+    }
+}
+
+// Закрытие по ESC (глобальный обработчик)
+document.addEventListener('keydown', function(event) {
+    const modal = document.getElementById('photoModal');
+    if (modal && modal.style.display === 'block' && event.key === 'Escape') {
+        closePhotoModal();
+    }
+});
+</script>
+</body>
+</html>

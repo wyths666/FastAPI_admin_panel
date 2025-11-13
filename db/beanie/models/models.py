@@ -1,10 +1,13 @@
+import hashlib
+import secrets
+
 import pytz
 from typing import List, Dict, Any, Union
 from datetime import datetime
 from decimal import Decimal
 from beanie import Document
 from typing import get_origin, get_args, Optional
-from pydantic import TypeAdapter, ValidationError
+from pydantic import TypeAdapter, ValidationError, Field, ConfigDict
 from typing import get_type_hints
 MOSCOW_TZ = pytz.timezone('Europe/Moscow')
 
@@ -140,6 +143,7 @@ class Claim(ModelAdmin):
 
     # === Реквизиты из заявки (не дублируются в User) ===
     phone: Optional[str] = None  # если выбрана СБП
+    bank: Optional[str] = None
     card: Optional[str] = None  # если выбрана карта
     bank_member_id: Optional[str] = None  # если выбрана СБП
 
@@ -211,8 +215,74 @@ class KonsolPayment(ModelAdmin):
             "card_number"
         ]
 
+class ChatSession(Document):
+    claim_id: str
+    user_id: int
+    admin_chat_id: Optional[int] = None
+    is_active: bool = True
+    has_unanswered: bool = False
+    created_at: datetime = Field(default_factory=datetime.now)
+    last_interaction: datetime = Field(default_factory=datetime.now)  # ← новое поле
+    closed_at: Optional[datetime] = None
+
+    class Settings:
+        name = "chat_sessions"
+
+class UserMessage(Document):
+    user_id: int
+    claim_id: str
+    text: str
+    is_from_user: bool
+    admin_id: Optional[int] = None
+    # ДОБАВЛЯЕМ ЗНАЧЕНИЕ ПО УМОЛЧАНИЮ
+    created_at: datetime = Field(default_factory=datetime.now)
+    photo_file_id: Optional[str] = None
+
+    class Settings:
+        name = "user_messages"
 
 
+class Administrators(ModelAdmin):
+    admin_id: int = Field(..., description="ID администратора в Telegram")
+    login: str = Field(..., description="Логин для входа")
+    password: str = Field(..., description="Пароль (в открытом виде)")
+    is_active: bool = Field(default=True)
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    session_token: Optional[str] = None
+    last_login: Optional[datetime] = None
+
+    class Settings:
+        name = "administrators"
+
+    def verify_password(self, password: str) -> bool:
+        """Проверка пароля - сравниваем как есть"""
+        return self.password == password
+
+    @classmethod
+    def generate_session_token(cls) -> str:
+        return secrets.token_urlsafe(32)
+
+
+class ChatMessage(Document):
+    session_id: str
+    claim_id: str
+    user_id: int
+    message: str = ""  # делаем по умолчанию пустую строку
+    is_bot: bool = False
+    has_photo: bool = False
+    photo_file_id: Optional[str] = None
+    photo_caption: Optional[str] = None
+    timestamp: datetime = Field(default_factory=datetime.now)
+
+    class Settings:
+        name = "chat_messages"
+        use_state_management = True
+
+    @classmethod
+    async def create(cls, **kwargs):
+        obj = cls(**kwargs)
+        await obj.insert()
+        return obj
 
 
 

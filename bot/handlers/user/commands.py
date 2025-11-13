@@ -317,79 +317,79 @@ async def finalize_claim(user_tg_id: int, state: FSMContext):
         bank_info = ""
         payment_method_label = "card"
 
-    user_claims = await Claim.filter(user_id=user_tg_id)
-    claim_ids = [claim.claim_id for claim in user_claims if claim.claim_id != claim_id]
-    user_claims_ids = ', '.join(claim_ids) if claim_ids else "Не найдены"
+    # user_claims = await Claim.filter(user_id=user_tg_id)
+    # claim_ids = [claim.claim_id for claim in user_claims if claim.claim_id != claim_id]
+    # user_claims_ids = ', '.join(claim_ids) if claim_ids else "Не найдены"
+    #
+    # claim_text = (
+    #     f"Номер заявки: {claim_id}\n"
+    #     f"Текст: {review_text}\n"
+    #     f"Предыдущие заявки пользователя: {user_claims_ids}\n"
+    #     f"{bank_info}"
+    #     f"{payment_info}\n"
+    #     f"Статус заявки: Не обработано"
+    # )
 
-    claim_text = (
-        f"Номер заявки: {claim_id}\n"
-        f"Текст: {review_text}\n"
-        f"Предыдущие заявки пользователя: {user_claims_ids}\n"
-        f"{bank_info}"
-        f"{payment_info}\n"
-        f"Статус заявки: Не обработано"
-    )
-
-    # === Отправка в группу ===
-    MANAGER_GROUP_ID = cnf.bot.GROUP_ID
-
-    # === Определяем клавиатуру ===
-    if phone:  # Если СБП - показываем кнопку для ввода ID банка
-        keyboard = tadmin.claim_action_ikb_with_bank_button(claim_id)
-    else:  # Если карта - обычная клавиатура
-        keyboard = tadmin.claim_action_ikb(claim_id)
-
-    # === Отправка фото и текста ===
-    if photo_ids:
-        if len(photo_ids) == 1:
-            # ОДНО ФОТО: отправляем фото с подписью и кнопками
-            await bot.send_photo(
-                chat_id=MANAGER_GROUP_ID,
-                photo=photo_ids[0],
-                caption=f"{claim_text}",
-                reply_markup=keyboard  # Используем правильную клавиатуру
-            )
-        else:
-            # НЕСКОЛЬКО ФОТО: создаем медиагруппу
-            media_group = []
-            for i, fid in enumerate(photo_ids):
-                if i == 0:  # Только у первого фото может быть подпись
-                    media_group.append(types.InputMediaPhoto(
-                        media=fid,
-                        caption=f"{claim_text}"
-                    ))
-                else:
-                    media_group.append(types.InputMediaPhoto(media=fid))
-
-            try:
-                await bot.send_media_group(chat_id=MANAGER_GROUP_ID, media=media_group)
-                # Отправляем кнопки отдельно после медиагруппы
-                await bot.send_message(
-                    chat_id=MANAGER_GROUP_ID,
-                    text=f"Действия по заявке №{claim_id}:",
-                    reply_markup=keyboard  # Используем правильную клавиатуру
-                )
-            except Exception as e:
-                print(f"Ошибка отправки медиагруппы: {e}")
-                # Fallback: отправляем по одному
-                for i, fid in enumerate(photo_ids):
-                    caption = f"{claim_text}\n\n📸 Скриншот {i + 1}/{len(photo_ids)}" if i == 0 else None
-                    await bot.send_photo(
-                        chat_id=MANAGER_GROUP_ID,
-                        photo=fid,
-                        caption=caption
-                    )
-                await bot.send_message(
-                    chat_id=MANAGER_GROUP_ID,
-                    text=f"Действия по заявке №{claim_id}:",
-                    reply_markup=keyboard  # Используем правильную клавиатуру
-                )
-    else:
-        await bot.send_message(
-            chat_id=MANAGER_GROUP_ID,
-            text=claim_text,
-            reply_markup=keyboard  # Используем правильную клавиатуру
-        )
+    # # === Отправка в группу ===
+    # MANAGER_GROUP_ID = cnf.bot.GROUP_ID
+    #
+    # # === Определяем клавиатуру ===
+    # if phone:  # Если СБП - показываем кнопку для ввода ID банка
+    #     keyboard = tadmin.claim_action_ikb_with_bank_button(claim_id)
+    # else:  # Если карта - обычная клавиатура
+    #     keyboard = tadmin.claim_action_ikb(claim_id)
+    #
+    # # === Отправка фото и текста ===
+    # if photo_ids:
+    #     if len(photo_ids) == 1:
+    #         # ОДНО ФОТО: отправляем фото с подписью и кнопками
+    #         await bot.send_photo(
+    #             chat_id=MANAGER_GROUP_ID,
+    #             photo=photo_ids[0],
+    #             caption=f"{claim_text}",
+    #             reply_markup=keyboard  # Используем правильную клавиатуру
+    #         )
+    #     else:
+    #         # НЕСКОЛЬКО ФОТО: создаем медиагруппу
+    #         media_group = []
+    #         for i, fid in enumerate(photo_ids):
+    #             if i == 0:  # Только у первого фото может быть подпись
+    #                 media_group.append(types.InputMediaPhoto(
+    #                     media=fid,
+    #                     caption=f"{claim_text}"
+    #                 ))
+    #             else:
+    #                 media_group.append(types.InputMediaPhoto(media=fid))
+    #
+    #         try:
+    #             await bot.send_media_group(chat_id=MANAGER_GROUP_ID, media=media_group)
+    #             # Отправляем кнопки отдельно после медиагруппы
+    #             await bot.send_message(
+    #                 chat_id=MANAGER_GROUP_ID,
+    #                 text=f"Действия по заявке №{claim_id}:",
+    #                 reply_markup=keyboard  # Используем правильную клавиатуру
+    #             )
+    #         except Exception as e:
+    #             print(f"Ошибка отправки медиагруппы: {e}")
+    #             # Fallback: отправляем по одному
+    #             for i, fid in enumerate(photo_ids):
+    #                 caption = f"{claim_text}\n\n📸 Скриншот {i + 1}/{len(photo_ids)}" if i == 0 else None
+    #                 await bot.send_photo(
+    #                     chat_id=MANAGER_GROUP_ID,
+    #                     photo=fid,
+    #                     caption=caption
+    #                 )
+    #             await bot.send_message(
+    #                 chat_id=MANAGER_GROUP_ID,
+    #                 text=f"Действия по заявке №{claim_id}:",
+    #                 reply_markup=keyboard  # Используем правильную клавиатуру
+    #             )
+    # else:
+    #     await bot.send_message(
+    #         chat_id=MANAGER_GROUP_ID,
+    #         text=claim_text,
+    #         reply_markup=keyboard  # Используем правильную клавиатуру
+    #     )
 
     # === Подготавливаем данные для обновления ===
     update_data = {
@@ -403,11 +403,12 @@ async def finalize_claim(user_tg_id: int, state: FSMContext):
     # Добавляем данные в зависимости от выбранного способа оплаты
     if phone:  # Если выбран телефон
         update_data["phone"] = phone
+        update_data["bank"] = bank
         update_data["card"] = None
     elif card:  # Если выбрана карта
         update_data["card"] = card
         update_data["phone"] = None
-
+        update_data["bank"] = bank
     # === Обновляем заявку ===
     await claim.update(**update_data)
 
@@ -416,24 +417,24 @@ async def finalize_claim(user_tg_id: int, state: FSMContext):
     await state.clear()
 
 
-@router.callback_query(F.data.startswith("reply_"))
-async def reply_to_admin(call: CallbackQuery):
-    claim_id = call.data.replace("reply_", "")
-    claim = await Claim.get(claim_id=claim_id)
-    if not claim:
-        await call.answer("Заявка не найдена", show_alert=True)
-        return
-
-    # Сохраняем в ОБЩИЙ словарь
-    pending_actions[call.from_user.id] = {
-        "type": "user_reply",
-        "claim_id": claim_id
-    }
-
-
-
-    await call.message.answer(
-        "💬 Введите ваш ответ администратору:",
-        reply_markup=ForceReply(input_field_placeholder="Ваш ответ...")
-    )
-    await call.answer()
+# @router.callback_query(F.data.startswith("reply_"))
+# async def reply_to_admin(call: CallbackQuery):
+#     claim_id = call.data.replace("reply_", "")
+#     claim = await Claim.get(claim_id=claim_id)
+#     if not claim:
+#         await call.answer("Заявка не найдена", show_alert=True)
+#         return
+#
+#     # Сохраняем в ОБЩИЙ словарь
+#     pending_actions[call.from_user.id] = {
+#         "type": "user_reply",
+#         "claim_id": claim_id
+#     }
+#
+#
+#
+#     await call.message.answer(
+#         "💬 Введите ваш ответ администратору:",
+#         reply_markup=ForceReply(input_field_placeholder="Ваш ответ...")
+#     )
+#     await call.answer()

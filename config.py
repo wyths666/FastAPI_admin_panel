@@ -49,6 +49,35 @@ class BotConfig(BaseSettings):
             raise ValueError('ADMINS value must be int,int,int')
 
 
+class Bot1Config(BaseSettings):
+    TOKEN: str
+    ADMINS: List[int] | None = []
+    COMMANDS: List[BotCommand] = [
+        BotCommand(
+            command='start',
+            description='Запуск'
+        )]
+    ADMIN_COMMANDS: List[BotCommand] = [
+        BotCommand(
+            command='admin',
+            description='Админ-Панель'
+        )
+    ]
+
+    class Config:
+        env_prefix = 'BOT1_'
+        env_file = '.env'
+        extra = 'ignore'
+
+    @field_validator('ADMINS', mode='before')
+    def split_admins(cls, v):
+        try:
+            return [int(admin_id) for admin_id in str(v).split(',')]
+
+        except Exception:
+            raise ValueError('ADMINS value must be int,int,int')
+
+
 class MongoConfig(BaseSettings):
     NAME: str
     PORT: int
@@ -56,6 +85,21 @@ class MongoConfig(BaseSettings):
 
     class Config:
         env_prefix = 'MONGO_'
+        env_file = '.env'
+        extra = 'ignore'
+
+    @property
+    def URL(self) -> str:
+        return f"mongodb://{self.HOST}:{self.PORT}/{self.NAME}"
+
+
+class MongoBot1Config(BaseSettings):
+    NAME: str
+    PORT: int
+    HOST: str
+
+    class Config:
+        env_prefix = 'MONGO_BOT1_'
         env_file = '.env'
         extra = 'ignore'
 
@@ -93,7 +137,9 @@ class KonsolConfig(BaseSettings):
 
 class Config:
     mongo = MongoConfig()
+    mongo_bot1 = MongoBot1Config()
     bot = BotConfig()
+    bot1 = Bot1Config()
     proj = ProjConfig()
     mysql = MysqlConfig()
     konsol = KonsolConfig()

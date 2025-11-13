@@ -1,0 +1,20 @@
+<!-- templates/bot1.html -->
+{% extends "base.html" %}
+
+{% block content %}
+<div class="header-actions">
+    <a href="/" class="btn" style="background: var(--gray);">← Назад</a>
+    <a href="/auth/logout" class="btn btn-logout">🚪 Выйти</a>
+</div>
+
+<header>
+    <h1>🤖 Бот 1</h1>
+    <p>Панель управления первым ботом</p>
+</header>
+
+<div class="card">
+    <h2>📊 Статистика Бота 1</h2>
+    <p>Здесь будет статистика и управление первым ботом...</p>
+    <!-- Добавьте ваш контент для бота 1 -->
+</div>
+{% endblock %}

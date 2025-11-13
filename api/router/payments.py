@@ -31,9 +31,10 @@ router = APIRouter(prefix="/payments", tags=["payments"])
 
 
 @router.get("/create", response_class=HTMLResponse)
-async def payment_form_page(request: Request):
+async def payment_form_page(request: Request, admin=Depends(get_current_admin)):
     """Страница с формой создания выплаты"""
-
+    if not admin:
+        return RedirectResponse("/auth/login")
     # Загружаем банки из JSON файла
     banks_data = {}
     banks_file = Path("utils/banks.json")
@@ -64,8 +65,10 @@ async def payment_form_page(request: Request):
 
 
 @router.post("/create-payment", response_model=PaymentResponse)
-async def create_payment(payment_data: PaymentCreateRequest):
+async def create_payment(payment_data: PaymentCreateRequest, admin=Depends(get_current_admin)):
     """Создание ручной выплаты через Konsol API"""
+    if not admin:
+        return RedirectResponse("/auth/login")
     try:
         print(f"🔍 Получены данные для ручной выплаты: {payment_data}")
 

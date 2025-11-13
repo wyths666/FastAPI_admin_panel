@@ -1,25 +1,63 @@
-services:
-  mongo:
-    image: mongo
-    restart: unless-stopped
-    environment:
-      MONGO_INITDB_DATABASE: ${MONGO_NAME}
-    expose:
-      - '27017'
-    volumes:
-      - mongo-data:/data/db
+version: '3.8'
 
-  bot:
+services:
+  # MongoDB для основного бота (pure_bot)
+  mongodb_pure:
+    image: mongo:6.0
+    restart: unless-stopped
+    ports:
+      - "27017"
+    volumes:
+      - mongodb_pure_data:/data/db
+    environment:
+      - MONGO_INITDB_DATABASE=pure_bot
+
+  # MongoDB для второго бота (wb)
+  mongodb_wb:
+    image: mongo:6.0
+    restart: unless-stopped
+    ports:
+      - "27017"
+    volumes:
+      - mongodb_wb_data:/data/db
+    environment:
+      - MONGO_INITDB_DATABASE=wb
+
+  # Основной бот (pure_bot)
+  bot_pure:
     build:
       context: .
       dockerfile: bot.dockerfile
     restart: unless-stopped
     depends_on:
-      - mongo
+      - mongodb_pure
     env_file:
       - .env
+    environment:
+      - MONGO_HOST=mongodb_pure
+      - MONGO_PORT=27017
+      - MONGO_NAME=pure_bot
     volumes:
-      - ./:/bot
+      - ./utils:/bot/utils
+      - ./db/beanie:/bot/db/beanie
+
+  # Второй бот (wb)
+  bot_wb:
+    build:
+      context: .
+      dockerfile: bot1.dockerfile
+    restart: unless-stopped
+    depends_on:
+      - mongodb_wb
+    env_file:
+      - .env
+    environment:
+      - MONGO_BOT1_HOST=mongodb_wb
+      - MONGO_BOT1_PORT=27017
+      - MONGO_BOT1_NAME=wb
+    volumes:
+      - ./utils:/bot/utils
+      - ./db/beanie_bot1:/bot/db/beanie_bot1  # монтируем структуру БД для wb
 
   api:
     build:
@@ -27,13 +65,25 @@ services:
       dockerfile: api.dockerfile
     restart: unless-stopped
     depends_on:
-      - mongo
+      - mongodb_pure
+      - mongodb_wb
     env_file:
       - .env
+    environment:
+      - MONGO_HOST=mongodb_pure
+      - MONGO_PORT=27017
+      - MONGO_NAME=pure_bot
+      - MONGO_BOT1_HOST=mongodb_wb
+      - MONGO_BOT1_PORT=27017
+      - MONGO_BOT1_NAME=wb
     ports:
-      - "9010:9000"
+      - "8000"
     volumes:
-      - ./:/api
+      - ./utils:/bot/utils
+      - ./db:/bot/db
+    working_dir: /api  # если отличается WORKDIR
+    command: python -u web_admin.py
 
 volumes:
-  mongo-data:
+  mongodb_pure_data:
+  mongodb_wb_data:

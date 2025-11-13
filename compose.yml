@@ -2,88 +2,56 @@ version: '3.8'
 
 services:
   # MongoDB для основного бота (pure_bot)
-  mongodb_pure:
+  mongodb:
     image: mongo:6.0
     restart: unless-stopped
-    ports:
+    expose:
       - "27017"
     volumes:
-      - mongodb_pure_data:/data/db
-    environment:
-      - MONGO_INITDB_DATABASE=pure_bot
-
-  # MongoDB для второго бота (wb)
-  mongodb_wb:
-    image: mongo:6.0
-    restart: unless-stopped
-    ports:
-      - "27017"
-    volumes:
-      - mongodb_wb_data:/data/db
-    environment:
-      - MONGO_INITDB_DATABASE=wb
+      - mongodb_data:/data/db
 
   # Основной бот (pure_bot)
   bot_pure:
     build:
+      dockerfile: service.dockerfile
       context: .
-      dockerfile: bot.dockerfile
+    command: python -u bot.py
     restart: unless-stopped
     depends_on:
-      - mongodb_pure
+      - mongodb
     env_file:
       - .env
-    environment:
-      - MONGO_HOST=mongodb_pure
-      - MONGO_PORT=27017
-      - MONGO_NAME=pure_bot
     volumes:
-      - ./utils:/bot/utils
-      - ./db/beanie:/bot/db/beanie
+      - ./:/bot
 
   # Второй бот (wb)
   bot_wb:
     build:
+      dockerfile: service.dockerfile
       context: .
-      dockerfile: bot1.dockerfile
-    restart: unless-stopped
+    command: python -u bot1.py
+    restart: unless-stopped    
     depends_on:
-      - mongodb_wb
+      - mongodb
     env_file:
       - .env
-    environment:
-      - MONGO_BOT1_HOST=mongodb_wb
-      - MONGO_BOT1_PORT=27017
-      - MONGO_BOT1_NAME=wb
     volumes:
-      - ./utils:/bot/utils
-      - ./db/beanie_bot1:/bot/db/beanie_bot1  # монтируем структуру БД для wb
+      - ./:/bot
 
   api:
     build:
       context: .
-      dockerfile: api.dockerfile
+      dockerfile: service.dockerfile
+    command: python -u web_admin.py
     restart: unless-stopped
     depends_on:
-      - mongodb_pure
-      - mongodb_wb
+      - mongodb
     env_file:
       - .env
-    environment:
-      - MONGO_HOST=mongodb_pure
-      - MONGO_PORT=27017
-      - MONGO_NAME=pure_bot
-      - MONGO_BOT1_HOST=mongodb_wb
-      - MONGO_BOT1_PORT=27017
-      - MONGO_BOT1_NAME=wb
     ports:
-      - "8000"
+      - "${API_PORT}:8000"
     volumes:
-      - ./utils:/bot/utils
-      - ./db:/bot/db
-    working_dir: /api  # если отличается WORKDIR
-    command: python -u web_admin.py
+      - ./:/app
 
 volumes:
-  mongodb_pure_data:
-  mongodb_wb_data:
+  mongodb_data:

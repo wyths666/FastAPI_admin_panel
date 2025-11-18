@@ -41,7 +41,7 @@ class Messages(Document):
     from_id: int
     message_object: Optional[str] = ""
     checked: str = "0"
-    date: datetime
+    date: datetime = Field(default_factory=lambda: datetime.now())
     file_id: str
     file_type: str = "none"
     from_operator: str = "0"

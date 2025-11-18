@@ -9,7 +9,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.responses import Response, RedirectResponse
 from api.router.auth import get_current_admin
-from api.schemas.response import ClaimResponse, ChatMessageSchema
+from api.schemas.response import ClaimResponse, ChatMessageSchema, CloseChatRequest
 
 from config import cnf
 from core.bot import bot
@@ -397,9 +397,9 @@ async def update_claim_status(data: dict):
 
         # Закрываем чат-сессию если нужно
         if close_chat:
-            await close_chat_session(claim_id)
+            await close_chat_session(claim_id, claim.user_id)  # Передаем user_id
 
-        logger.info(f"✅ Статус заявки {claim_id} обновлен на {new_status}, чат закрыт: {close_chat}")
+        logger.info(f"✅ Статус заявки {claim_id} обновлен на {new_status}")
 
         return {
             "ok": True,
@@ -531,8 +531,29 @@ async def process_claim_approval_admin(claim: Claim):
         return False
 
 
-async def close_chat_session(claim_id: str):
-    """Закрытие чат-сессии для заявки"""
+@router.post("/chat/close/")
+async def close_chat_session_api(request: CloseChatRequest):
+    """API endpoint для закрытия чат-сессии"""
+    try:
+        # Получаем user_id из базы данных по claim_id
+        from db.beanie.models.models import ChatSession, Claim
+
+        # Находим заявку чтобы получить user_id
+        claim = await Claim.find_one({"claim_id": request.claim_id})
+        if not claim:
+            raise HTTPException(status_code=404, detail="Заявка не найдена")
+
+        user_id = claim.user_id
+
+        # Закрываем чат-сессию
+        await close_chat_session(request.claim_id, user_id)
+        return {"success": True, "message": "Чат успешно завершен"}
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Ошибка закрытия чата: {str(e)}")
+
+async def close_chat_session(claim_id: str, user_id: int = None):
+    """Закрытие чат-сессии для заявки с отправкой уведомления пользователю"""
     try:
         # Находим активную сессию
         chat_session = await ChatSession.find_one({
@@ -549,14 +570,25 @@ async def close_chat_session(claim_id: str):
 
             logger.info(f"✅ Чат-сессия закрыта для заявки {claim_id}")
 
-
-
+            # Отправляем уведомление пользователю в Telegram
+            if user_id:
+                try:
+                    await bot.send_message(
+                        chat_id=user_id,
+                        text="💬 Чат с администратором завершен."
+                    )
+                    logger.info(f"✅ Уведомление отправлено пользователю {user_id}")
+                except Exception as tg_error:
+                    logger.error(f"❌ Ошибка отправки уведомления в Telegram: {tg_error}")
+                finally:
+                    await bot.session.close()
 
         else:
             logger.info(f"ℹ️ Активная чат-сессия не найдена для заявки {claim_id}")
 
     except Exception as e:
         logger.error(f"❌ Ошибка закрытия чат-сессии: {e}")
+        raise
 
 
 async def notify_user_about_chat_close(user_id: int, claim_id: str):

@@ -720,14 +720,24 @@
 
             <!-- СЕКЦИЯ ЧАТА -->
             <div class="chat-section">
-                {% if claim.claim_status == 'process' %}
-                <button class="chat-toggle" onclick="toggleChat(this, '{{ claim.claim_id }}', {{ claim.user_id }})">
-                    💬 Чат с клиентом
-                    {% if claim.is_chat_active %}
-                    <span class="unread-badge" id="unread-badge-{{ claim.claim_id }}" style="display: none;">0</span>
-                    {% endif %}
-                </button>
-                {% endif %}
+    {% if claim.claim_status == 'process' %}
+    <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
+        <button class="chat-toggle" onclick="toggleChat(this, '{{ claim.claim_id }}', {{ claim.user_id }})">
+            💬 Чат с клиентом
+            {% if claim.is_chat_active %}
+            <span class="unread-badge" id="unread-badge-{{ claim.claim_id }}" style="display: none;">0</span>
+            {% endif %}
+        </button>
+
+        <!-- КНОПКА ЗАВЕРШИТЬ ЧАТ -->
+        {% if claim.is_chat_active %}
+        <button class="chat-toggle" onclick="closeChatSession('{{ claim.claim_id }}', {{ claim.user_id }})"
+                >
+            🔒 Завершить чат
+        </button>
+        {% endif %}
+    </div>
+    {% endif %}
                 <div class="chat-container" id="chat-{{ claim.claim_id }}">
                     <div class="chat-messages" id="messages-{{ claim.claim_id }}">
                         <!-- Сообщения загружаются JS -->
@@ -1007,7 +1017,86 @@
             }
         }, 3000);
     }
+    async function closeChatSession(claimId) {
+    if (!confirm('Вы уверены, что хотите завершить чат? Пользователь получит уведомление о завершении.')) {
+        return;
+    }
 
+    try {
+        const response = await fetch('/claims/chat/close/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                claim_id: claimId
+                // user_id больше не передаем - получаем из базы на сервере
+            })
+        });
+
+        if (response.ok) {
+            const result = await response.json();
+
+            if (result.success) {
+                // Скрываем кнопку завершения чата
+                const endChatBtn = document.querySelector(`[onclick="closeChatSession('${claimId}')"]`);
+                if (endChatBtn) {
+                    endChatBtn.style.display = 'none';
+                }
+
+                // Показываем уведомление
+                showNotification('✅ Чат завершен', 'success');
+
+                // Обновляем интерфейс чата
+                const chatContainer = document.getElementById(`chat-${claimId}`);
+                if (chatContainer) {
+                    chatContainer.style.display = 'none';
+                }
+
+                // Обновляем кнопку чата
+                const chatToggle = document.querySelector(`[onclick="toggleChat(this, '${claimId}', ${userId})"]`);
+                if (chatToggle) {
+                    chatToggle.innerHTML = '💬 Чат с клиентом (завершен)';
+                    chatToggle.disabled = true;
+                }
+
+            } else {
+                showNotification('❌ Ошибка при завершении чата', 'error');
+            }
+        } else {
+            const errorData = await response.json();
+            throw new Error(errorData.detail || 'Network error');
+        }
+    } catch (error) {
+        console.error('Ошибка закрытия чата:', error);
+        showNotification('❌ Ошибка при завершении чата: ' + error.message, 'error');
+    }
+}
+// Функция показа уведомлений (можно заменить на toast-уведомления)
+function showNotification(message, type = 'info') {
+    // Создаем элемент уведомления
+    const notification = document.createElement('div');
+    notification.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        padding: 12px 20px;
+        border-radius: 8px;
+        color: white;
+        font-weight: 500;
+        z-index: 10000;
+        animation: slideIn 0.3s ease;
+        ${type === 'success' ? 'background: #4CAF50;' : 'background: #f44336;'}
+    `;
+    notification.textContent = message;
+
+    document.body.appendChild(notification);
+
+    // Удаляем через 3 секунды
+    setTimeout(() => {
+        notification.remove();
+    }, 3000);
+}
     function stopPolling(claimId) {
         if (chatIntervals[claimId]) {
             clearInterval(chatIntervals[claimId]);

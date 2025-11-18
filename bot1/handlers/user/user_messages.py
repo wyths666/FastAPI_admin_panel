@@ -3,7 +3,7 @@ from aiogram.types import Message, ContentType
 from aiogram.filters import Command, StateFilter
 from core.logger import bot_1_logger as logger
 from core.bot1 import bot1
-from db.beanie_bot1.models.models import Messages
+from db.beanie_bot1.models.models import Messages, Users
 from datetime import datetime, timezone
 from utils.database import get_database_bot1
 
@@ -23,12 +23,27 @@ user_messages_router.message.filter(StateFilter(None))
 }))
 async def handle_unsupported_content(message: Message):
     """Сообщает пользователю о неподдерживаемых типах контента"""
+    user_id = message.from_user.id
+    db = get_database_bot1()
+    users_collection = db.users
+    user = await users_collection.find_one({"id": user_id})
 
+    if user and user.get("banned") == "1":
+        return
+
+    # Если пользователь не найден - создаем нового
+    if not user:
+        new_user = {
+            "id": user_id,
+            "username": message.from_user.username or "",
+            "full_name": message.from_user.full_name,
+            "role": "user",
+            "banned": "0"
+        }
+        await users_collection.insert_one(new_user)
     # Пропускаем служебные сообщения
     if not message.from_user:
         return
-
-    user_id = message.from_user.id
 
     try:
         # Отправляем информационное сообщение
@@ -55,12 +70,28 @@ async def handle_unsupported_content(message: Message):
 }))
 async def handle_user_message(message: Message):
     """Обрабатывает только текст, фото и документы"""
+    user_id = message.from_user.id
+    db = get_database_bot1()
+    users_collection = db.users
+    user = await users_collection.find_one({"id": user_id})
 
+    if user and user.get("banned") == "1":
+        return
+
+    # Если пользователь не найден - создаем нового
+    if not user:
+        new_user = {
+            "id": user_id,
+            "username": message.from_user.username or "",
+            "full_name": message.from_user.full_name,
+            "role": "user",
+            "banned": "0"
+        }
+        await users_collection.insert_one(new_user)
     # Пропускаем служебные сообщения
     if not message.from_user:
         return
 
-    user_id = message.from_user.id
     username = message.from_user.username
     full_name = get_full_name(message.from_user)
 

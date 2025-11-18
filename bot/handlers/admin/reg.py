@@ -12,7 +12,7 @@ from bot.templates.user.menu import user_reply_ikb
 from config import cnf
 from db.beanie.models import Claim, AdminMessage, KonsolPayment
 from core.bot import bot, bot_config
-from db.beanie.models.models import MOSCOW_TZ, ChatSession, UserMessage, Administrators
+from db.beanie.models.models import ChatSession, UserMessage, Administrators
 from utils.konsol_client import konsol_client
 from utils.pending_storage import pending_actions
 

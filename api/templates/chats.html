@@ -723,7 +723,50 @@ let lastScrollTop = 0;
 function toggleChatDetails(element) {
     element.classList.toggle('expanded');
 }
+function formatMoscowTime(timestamp) {
+    try {
+        // Пробуем разные форматы timestamp
+        let date;
 
+        if (typeof timestamp === 'number') {
+            // Если timestamp в секундах (Telegram)
+            if (timestamp < 10000000000) {
+                date = new Date(timestamp * 1000);
+            }
+            // Если timestamp в миллисекундах
+            else {
+                date = new Date(timestamp);
+            }
+        }
+        // Если это ISO строка
+        else if (typeof timestamp === 'string') {
+            date = new Date(timestamp);
+        }
+        else {
+            console.warn('Неизвестный формат timestamp:', timestamp);
+            return '--:--';
+        }
+
+        // Проверяем валидность даты
+        if (isNaN(date.getTime())) {
+            console.warn('Invalid date для timestamp:', timestamp);
+            return '--:--';
+        }
+
+        // Москва = UTC+3
+        const moscowOffset = 3 * 60 * 60 * 1000;
+        const moscowTime = new Date(date.getTime() + moscowOffset);
+
+        return moscowTime.toLocaleTimeString('ru-RU', {
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: false
+        });
+    } catch (error) {
+        console.error('Ошибка в formatMoscowTime:', error, 'timestamp:', timestamp);
+        return '--:--';
+    }
+}
 function openChatModal(userId, username) {
     currentChatUserId = userId;
     const modal = document.getElementById('chatModal');
@@ -769,10 +812,7 @@ async function loadChatHistory(userId, container) {
             const messageDiv = document.createElement('div');
             messageDiv.className = `message ${msg.from_operator ? 'operator' : 'user'}`;
 
-            const messageTime = new Date(msg.date).toLocaleTimeString('ru-RU', {
-                hour: '2-digit',
-                minute: '2-digit'
-            });
+            const messageTime = formatMoscowTime(msg.date);
 
             let content = '';
 

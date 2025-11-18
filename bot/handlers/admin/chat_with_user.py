@@ -9,7 +9,7 @@ from bot.templates.user.menu import user_reply_ikb
 from config import cnf
 from db.beanie.models import Claim, AdminMessage, KonsolPayment
 from core.bot import bot, bot_config
-from db.beanie.models.models import MOSCOW_TZ, ChatSession, UserMessage, ChatMessage
+from db.beanie.models.models import ChatSession, UserMessage, ChatMessage, User
 from utils.konsol_client import konsol_client
 from utils.pending_storage import pending_actions
 router = Router()
@@ -384,6 +384,10 @@ async def send_payment_request(call: CallbackQuery):
 
 @router.message(F.chat.type == "private")
 async def handle_all_user_messages(message: Message):
+    user_id = message.from_user.id
+    user = await User.get(tg_id=user_id)
+    if user.banned:
+        return
     try:
         user_id = message.from_user.id
 

@@ -34,3 +34,5 @@ class ChatMessageSchema(BaseModel):
     class Config:
         from_attributes = True
 
+class CloseChatRequest(BaseModel):
+    claim_id: str

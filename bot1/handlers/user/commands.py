@@ -3,6 +3,7 @@ from aiogram.types import Message, CallbackQuery
 from aiogram.filters import CommandStart, Command
 
 from bot1.templates.user.keyboards import product_reaction_kb
+from db.beanie_bot1.models import Users
 from utils.database import get_database_bot1
 
 router = Router()
@@ -10,6 +11,25 @@ router = Router()
 
 @router.message(CommandStart())
 async def cmd_start_with_product(message: Message):
+    user_id = message.from_user.id
+    db = get_database_bot1()
+    users_collection = db.users
+    user = await users_collection.find_one({"id": user_id})
+
+    if user and user.get("banned") == "1":
+        return
+
+    # Если пользователь не найден - создаем нового
+    if not user:
+        new_user = {
+            "id": user_id,
+            "username": message.from_user.username or "",
+            "full_name": message.from_user.full_name,
+            "role": "user",
+            "banned": "0"
+        }
+        await users_collection.insert_one(new_user)
+
     # Получаем аргументы после /start
     args = message.text.split()
 

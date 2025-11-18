@@ -1,7 +1,5 @@
 import hashlib
 import secrets
-
-import pytz
 from typing import List, Dict, Any, Union
 from datetime import datetime
 from decimal import Decimal
@@ -9,7 +7,7 @@ from beanie import Document
 from typing import get_origin, get_args, Optional
 from pydantic import TypeAdapter, ValidationError, Field, ConfigDict
 from typing import get_type_hints
-MOSCOW_TZ = pytz.timezone('Europe/Moscow')
+
 
 # Базовый класс для CRUD-операций
 class ModelAdmin(Document):
@@ -111,7 +109,7 @@ class AdminMessage(ModelAdmin):
     to_user_id: int
     message_text: str = ""
     is_reply: bool = False
-    created_at: datetime = datetime.now(MOSCOW_TZ)
+    created_at: datetime = datetime.now()
 
     class Settings:
         name = "admin_messages"
@@ -124,7 +122,7 @@ class User(ModelAdmin):
     banned: bool = False
     # === Поля для Konsol API ===
     kind: str = "individual"  # всегда "individual"
-    created_at: datetime = datetime.now(MOSCOW_TZ)
+    created_at: datetime = Field(default_factory=lambda: datetime.now())
 
     class Settings:
         name = "users"
@@ -153,8 +151,8 @@ class Claim(ModelAdmin):
     # === Связь с платежом ===
     konsol_payment_id: Optional[str] = None  # ID в коллекции konsol_payments
 
-    created_at: datetime = datetime.now(MOSCOW_TZ)
-    updated_at: datetime = datetime.now(MOSCOW_TZ)
+    created_at: datetime = Field(default_factory=lambda: datetime.now())
+    updated_at: datetime = Field(default_factory=lambda: datetime.now())
 
     class Settings:
         name = "claims"
@@ -164,7 +162,7 @@ class Claim(ModelAdmin):
         """Метод для обновления статусов"""
         self.claim_status = claim_status
         self.process_status = process_status
-        self.updated_at = datetime.now(MOSCOW_TZ)
+        self.updated_at = datetime.now()
 
     @classmethod
     async def generate_next_claim_id(cls) -> str:
@@ -198,8 +196,8 @@ class KonsolPayment(ModelAdmin):
     user_id: Optional[int] = None  # tg_id пользователя (для удобства поиска)
 
     # === Временные метки ===
-    created_at: datetime = datetime.now(MOSCOW_TZ)
-    updated_at: datetime = datetime.now(MOSCOW_TZ)
+    created_at: datetime = Field(default_factory=lambda: datetime.now())
+    updated_at: datetime = Field(default_factory=lambda: datetime.now())
     paid_at: Optional[datetime] = None  # Заполняется при статусе "executed"
 
     class Settings:
@@ -221,8 +219,8 @@ class ChatSession(Document):
     admin_chat_id: Optional[int] = None
     is_active: bool = True
     has_unanswered: bool = False
-    created_at: datetime = Field(default_factory=datetime.now)
-    last_interaction: datetime = Field(default_factory=datetime.now)  # ← новое поле
+    created_at: datetime = Field(default_factory=lambda: datetime.now())
+    last_interaction: datetime = Field(default_factory=lambda: datetime.now())  # ← новое поле
     closed_at: Optional[datetime] = None
 
     class Settings:
@@ -235,7 +233,7 @@ class UserMessage(Document):
     is_from_user: bool
     admin_id: Optional[int] = None
     # ДОБАВЛЯЕМ ЗНАЧЕНИЕ ПО УМОЛЧАНИЮ
-    created_at: datetime = Field(default_factory=datetime.now)
+    created_at: datetime = Field(default_factory=lambda: datetime.now())
     photo_file_id: Optional[str] = None
 
     class Settings:
@@ -247,7 +245,7 @@ class Administrators(ModelAdmin):
     login: str = Field(..., description="Логин для входа")
     password: str = Field(..., description="Пароль (в открытом виде)")
     is_active: bool = Field(default=True)
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now())
     session_token: Optional[str] = None
     last_login: Optional[datetime] = None
 
@@ -272,7 +270,7 @@ class ChatMessage(Document):
     has_photo: bool = False
     photo_file_id: Optional[str] = None
     photo_caption: Optional[str] = None
-    timestamp: datetime = Field(default_factory=datetime.now)
+    timestamp: datetime = Field(default_factory=lambda: datetime.now())
 
     class Settings:
         name = "chat_messages"

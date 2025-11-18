@@ -1028,48 +1028,24 @@
             headers: {
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify({
-                claim_id: claimId
-                // user_id больше не передаем - получаем из базы на сервере
-            })
+            body: JSON.stringify({ claim_id: claimId })
         });
 
         if (response.ok) {
             const result = await response.json();
 
             if (result.success) {
-                // Скрываем кнопку завершения чата
-                const endChatBtn = document.querySelector(`[onclick="closeChatSession('${claimId}')"]`);
-                if (endChatBtn) {
-                    endChatBtn.style.display = 'none';
-                }
-
-                // Показываем уведомление
                 showNotification('✅ Чат завершен', 'success');
 
-                // Обновляем интерфейс чата
-                const chatContainer = document.getElementById(`chat-${claimId}`);
-                if (chatContainer) {
-                    chatContainer.style.display = 'none';
-                }
-
-                // Обновляем кнопку чата
-                const chatToggle = document.querySelector(`[onclick="toggleChat(this, '${claimId}', ${userId})"]`);
-                if (chatToggle) {
-                    chatToggle.innerHTML = '💬 Чат с клиентом (завершен)';
-                    chatToggle.disabled = true;
-                }
-
-            } else {
-                showNotification('❌ Ошибка при завершении чата', 'error');
+                // Просто перезагружаем страницу через секунду
+                setTimeout(() => {
+                    window.location.reload();
+                }, 1000);
             }
-        } else {
-            const errorData = await response.json();
-            throw new Error(errorData.detail || 'Network error');
         }
     } catch (error) {
         console.error('Ошибка закрытия чата:', error);
-        showNotification('❌ Ошибка при завершении чата: ' + error.message, 'error');
+        showNotification('❌ Ошибка при завершении чата', 'error');
     }
 }
 // Функция показа уведомлений (можно заменить на toast-уведомления)

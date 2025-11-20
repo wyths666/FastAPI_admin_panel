@@ -128,6 +128,7 @@
         }
         .bank-selector {
             margin: 10px 0;
+            position: relative;
         }
 
         .bank-select {
@@ -139,6 +140,95 @@
             margin-left: 10px;
             min-width: 200px;
         }
+
+        /* Стили для улучшенного выпадающего списка с поиском */
+        .bank-search-container {
+            position: relative;
+            display: inline-block;
+            min-width: 250px;
+        }
+
+        .bank-search-input {
+            width: 100%;
+            padding: 10px 35px 10px 12px;
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            font-size: 14px;
+            background: white;
+        }
+
+        .bank-search-input:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 2px rgba(67, 97, 238, 0.2);
+        }
+
+        .bank-search-clear {
+            position: absolute;
+            right: 8px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: none;
+            border: none;
+            font-size: 18px;
+            cursor: pointer;
+            color: var(--gray);
+            padding: 0;
+            width: 20px;
+            height: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .bank-search-clear:hover {
+            color: var(--danger);
+        }
+
+        .bank-dropdown {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            background: white;
+            border: 1px solid var(--border);
+            border-top: none;
+            border-radius: 0 0 4px 4px;
+            max-height: 200px;
+            overflow-y: auto;
+            z-index: 1000;
+            box-shadow: 0 4px 8px var(--shadow);
+            display: none;
+        }
+
+        .bank-dropdown.active {
+            display: block;
+        }
+
+        .bank-option {
+            padding: 10px 12px;
+            cursor: pointer;
+            border-bottom: 1px solid var(--border);
+            transition: background-color 0.2s;
+        }
+
+        .bank-option:hover {
+            background-color: #f8f9fa;
+        }
+
+        .bank-option:last-child {
+            border-bottom: none;
+        }
+
+        .bank-option.selected {
+            background-color: var(--primary);
+            color: white;
+        }
+
+        .bank-option.highlight {
+            background-color: #e3f2fd;
+        }
+
         .btn-ban {
             background: var(--danger);
             color: white;
@@ -656,21 +746,27 @@
     <p>🔐 <strong>Код:</strong> <code>{{ claim.code }}</code></p>
     <p>📱 <strong>Телефон:</strong> {{ claim.phone }}</p>
     <p>📲 <strong>СБП:</strong> {{ claim.bank }} </p>
-    <!-- ВЫПАДАЮЩИЙ СПИСОК БАНКОВ -->
+    <!-- УЛУЧШЕННЫЙ ВЫПАДАЮЩИЙ СПИСОК БАНКОВ С ПОИСКОМ -->
     <div class="bank-selector">
-        <label for="bank-select-{{ claim.claim_id }}">🏦 <strong>Банк:</strong></label>
-        <select id="bank-select-{{ claim.claim_id }}"
-                class="bank-select"
-                data-claim-id="{{ claim.claim_id }}"
-                onchange="updateBankMemberId('{{ claim.claim_id }}', this.value)">
-            <option value="">— Выберите банк —</option>
-            {% for bank_id, bank_name in banks.items() %}
-            <option value="{{ bank_id }}"
-                    {% if claim.bank_member_id == bank_id %}selected{% endif %}>
-                {{ bank_name }}
-            </option>
-            {% endfor %}
-        </select>
+        <label for="bank-search-{{ claim.claim_id }}">🏦 <strong>Банк:</strong></label>
+        <div class="bank-search-container">
+            <input type="text"
+                   id="bank-search-{{ claim.claim_id }}"
+                   class="bank-search-input"
+                   placeholder="Начните вводить название банка..."
+                   value="{% if claim.bank_member_id %}{{ banks.get(claim.bank_member_id, '') }}{% endif %}"
+                   data-claim-id="{{ claim.claim_id }}"
+                   oninput="filterBanks('{{ claim.claim_id }}', this.value)"
+                   onfocus="showBankDropdown('{{ claim.claim_id }}')"
+                   onblur="hideBankDropdown('{{ claim.claim_id }}')">
+            <button type="button" class="bank-search-clear" onclick="clearBankSearch('{{ claim.claim_id }}')">×</button>
+            <div class="bank-dropdown" id="bank-dropdown-{{ claim.claim_id }}"></div>
+        </div>
+
+        <!-- Скрытое поле для хранения выбранного bank_id -->
+        <input type="hidden"
+               id="bank-id-{{ claim.claim_id }}"
+               value="{{ claim.bank_member_id or '' }}">
 
         <!-- Текущее значение -->
         <div style="margin-top: 5px; font-size: 0.9rem; color: var(--gray);">
@@ -771,6 +867,9 @@
     const chatIntervals = {};
     const unreadCounters = {};
 
+    // Глобальный объект для хранения данных банков
+    const banksData = {{ banks|tojson }};
+
     function toggleClaimDetails(element) {
         element.classList.toggle('expanded');
     }
@@ -811,15 +910,117 @@
     }
 }
 
+    // Функции для работы с поиском банков
+    function filterBanks(claimId, searchText) {
+        const dropdown = document.getElementById(`bank-dropdown-${claimId}`);
+        const searchInput = document.getElementById(`bank-search-${claimId}`);
+        const hiddenInput = document.getElementById(`bank-id-${claimId}`);
+
+        dropdown.innerHTML = '';
+
+        if (!searchText.trim()) {
+            // Если поиск пустой, показываем все банки
+            populateBankDropdown(claimId, banksData);
+            return;
+        }
+
+        const filteredBanks = {};
+        const searchLower = searchText.toLowerCase();
+
+        // Фильтруем банки по названию
+        for (const [bankId, bankName] of Object.entries(banksData)) {
+            if (bankName.toLowerCase().includes(searchLower)) {
+                filteredBanks[bankId] = bankName;
+            }
+        }
+
+        populateBankDropdown(claimId, filteredBanks);
+
+        // Если найден ровно один банк, автоматически выбираем его
+        if (Object.keys(filteredBanks).length === 1) {
+            const [singleBankId, singleBankName] = Object.entries(filteredBanks)[0];
+            selectBank(claimId, singleBankId, singleBankName);
+        }
+    }
+
+    function populateBankDropdown(claimId, banks) {
+        const dropdown = document.getElementById(`bank-dropdown-${claimId}`);
+        const hiddenInput = document.getElementById(`bank-id-${claimId}`);
+
+        if (Object.keys(banks).length === 0) {
+            dropdown.innerHTML = '<div class="bank-option">Банки не найдены</div>';
+            return;
+        }
+
+        for (const [bankId, bankName] of Object.entries(banks)) {
+            const option = document.createElement('div');
+            option.className = 'bank-option';
+            option.textContent = bankName;
+            option.dataset.bankId = bankId;
+            option.dataset.bankName = bankName;
+
+            option.onmousedown = (e) => {
+                e.preventDefault(); // Предотвращаем потерю фокуса
+                selectBank(claimId, bankId, bankName);
+                hideBankDropdown(claimId);
+            };
+
+            dropdown.appendChild(option);
+        }
+    }
+
+    function selectBank(claimId, bankId, bankName) {
+        const searchInput = document.getElementById(`bank-search-${claimId}`);
+        const hiddenInput = document.getElementById(`bank-id-${claimId}`);
+        const currentBankElement = document.getElementById(`current-bank-${claimId}`);
+
+        searchInput.value = bankName;
+        hiddenInput.value = bankId;
+        currentBankElement.textContent = bankId;
+
+        // Сохраняем выбор
+        updateBankMemberId(claimId, bankId);
+    }
+
+    function showBankDropdown(claimId) {
+        const dropdown = document.getElementById(`bank-dropdown-${claimId}`);
+        const searchInput = document.getElementById(`bank-search-${claimId}`);
+
+        if (!searchInput.value.trim()) {
+            // Если поле пустое, показываем все банки
+            populateBankDropdown(claimId, banksData);
+        }
+
+        dropdown.classList.add('active');
+    }
+
+    function hideBankDropdown(claimId) {
+        // Небольшая задержка чтобы клик на опцию успел обработаться
+        setTimeout(() => {
+            const dropdown = document.getElementById(`bank-dropdown-${claimId}`);
+            dropdown.classList.remove('active');
+        }, 200);
+    }
+
+    function clearBankSearch(claimId) {
+        const searchInput = document.getElementById(`bank-search-${claimId}`);
+        const hiddenInput = document.getElementById(`bank-id-${claimId}`);
+        const currentBankElement = document.getElementById(`current-bank-${claimId}`);
+
+        searchInput.value = '';
+        hiddenInput.value = '';
+        currentBankElement.textContent = '—';
+
+        // Очищаем выбранный банк в базе
+        updateBankMemberId(claimId, '');
+
+        const dropdown = document.getElementById(`bank-dropdown-${claimId}`);
+        dropdown.innerHTML = '';
+    }
+
     async function updateBankMemberId(claimId, bankId) {
     const statusElement = document.getElementById(`bank-status-${claimId}`);
     const currentBankElement = document.getElementById(`current-bank-${claimId}`);
-
-    if (!bankId) {
-        statusElement.textContent = "❌ Банк не выбран";
-        statusElement.className = "bank-error";
-        return;
-    }
 
     try {
         statusElement.textContent = "⏳ Сохранение...";
@@ -841,7 +1042,7 @@
         if (result.ok) {
             statusElement.textContent = "✅ Банк сохранен";
             statusElement.className = "bank-success";
-            currentBankElement.textContent = bankId;
+            currentBankElement.textContent = bankId || '—';
 
             // Автоматически скрываем сообщение через 3 секунды
             setTimeout(() => {

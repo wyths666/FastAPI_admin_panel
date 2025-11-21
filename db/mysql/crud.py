@@ -44,6 +44,6 @@ async def get_and_delete_code(code_text: str):
                 return False
 
             # Удаляем код
-            # await cur.execute("DELETE FROM oc_qrcode WHERE code_text = %s", (code_text,))
+            await cur.execute("DELETE FROM oc_qrcode WHERE code_text = %s", (code_text,))
 
             return True

@@ -512,6 +512,22 @@
     background: #e71d36;
     transform: translateY(-2px);
 }
+.chat-input {
+    padding: 12px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font-family: inherit;
+    font-size: 1rem;
+    transition: border-color 0.2s;
+    outline: none;
+    width: 100%;
+    box-sizing: border-box;
+    background: white;
+}
+.chat-input:focus {
+    border-color: var(--primary);
+    box-shadow: 0 0 0 2px rgba(67, 97, 238, 0.2);
+}
     </style>
 </head>
 <body>
@@ -702,7 +718,14 @@
 
         <div class="chat-input-area">
             <form class="chat-input-form" onsubmit="sendChatMessage(event)">
-                <input type="text" class="chat-input" id="chatMessageInput" placeholder="Введите сообщение..." required>
+                <textarea id="chatMessageInput"
+          class="chat-input"
+          placeholder="Введите сообщение..."
+          rows="1"
+          style="resize: none;"
+          oninput="this.style.height = 'auto'; this.style.height = (this.scrollHeight) + 'px';"
+          onkeydown="if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); document.querySelector('.chat-input-form').dispatchEvent(new Event('submit', { cancelable: true })); }"
+></textarea>
                 <button type="submit" class="chat-send">Отправить</button>
             </form>
         </div>
@@ -807,7 +830,9 @@ async function loadChatHistory(userId, container) {
 
         container.innerHTML = '';
 
-        // Отображаем сообщения
+        // Стили для текста — обеспечивают перенос и сохранение форматирования
+        const textStyles = 'word-wrap: break-word; word-break: break-word; white-space: pre-wrap; margin: 0;';
+
         messages.forEach((msg, index) => {
             const messageDiv = document.createElement('div');
             messageDiv.className = `message ${msg.from_operator ? 'operator' : 'user'}`;
@@ -816,29 +841,35 @@ async function loadChatHistory(userId, container) {
 
             let content = '';
 
+            // Обёртка для обработки текста: экранирование + перенос (раскомментируйте escapeHtml при необходимости)
+            const renderText = (text) => text ? `<div style="margin-top: 8px; ${textStyles}">${text}</div>` : '';
+
             if (msg.has_photo) {
                 // Фото
                 content = `
                     <div style="margin-bottom: 8px;">
-                            <img src="/chats/photo/${msg.id}"
+                        <img src="/chats/photo/${msg.id}"
                              alt="Фото из чата"
-                 style="max-width: 200px; max-height: 200px; border-radius: 8px; border: 2px solid var(--primary); cursor: pointer;"
-                 onclick="openChatPhoto('${msg.id}')"
-                 onerror="console.error('❌ Ошибка загрузки фото: ${msg.id}'); this.style.display='none'">
-        </div>
-                    ${msg.message ? `<div style="margin-top: 8px;">${msg.message}</div>` : ''}
-    `;
-} else if (msg.has_document) {
+                             style="max-width: 200px; max-height: 200px; border-radius: 8px; border: 2px solid var(--primary); cursor: pointer;"
+                             onclick="openChatPhoto('${msg.id}')"
+                             onerror="console.error('❌ Ошибка загрузки фото: ${msg.id}'); this.style.display='none'">
+                    </div>
+                    ${renderText(msg.message)}
+                `;
+            } else if (msg.has_document) {
                 // Документ (файл)
                 const fileSize = msg.file_size ? ` (${formatFileSize(msg.file_size)})` : '';
+                const fileName = msg.file_name || 'Файл';
+                const mimeType = msg.mime_type || 'Неизвестный тип';
+
                 content = `
                     <div style="margin-bottom: 8px; padding: 10px; background: #f0f8ff; border-radius: 8px; border: 1px solid #d1e7ff;">
                         <div style="display: flex; align-items: center; gap: 10px;">
                             <span style="font-size: 1.5rem;">📎</span>
                             <div style="flex: 1;">
-                                <div style="font-weight: bold;">${msg.file_name || 'Файл'}</div>
-                                <div style="font-size: 0.8rem; color: #666;">
-                                    ${msg.mime_type || 'Неизвестный тип'}${fileSize}
+                                <div style="font-weight: bold; ${textStyles}">${fileName}</div>
+                                <div style="font-size: 0.8rem; color: #666; ${textStyles}">
+                                    ${mimeType}${fileSize}
                                 </div>
                             </div>
                             <button onclick="downloadFile('${msg.id}')"
@@ -847,7 +878,7 @@ async function loadChatHistory(userId, container) {
                             </button>
                         </div>
                     </div>
-                    ${msg.message ? `<div style="margin-top: 8px;">${msg.message}</div>` : ''}
+                    ${renderText(msg.message)}
                 `;
             } else if (msg.has_audio) {
                 // Аудио или голосовое
@@ -855,15 +886,16 @@ async function loadChatHistory(userId, container) {
                 const icon = isVoice ? '🎤' : '🎵';
                 const label = isVoice ? 'Голосовое сообщение' : 'Аудио';
                 const fileSize = msg.file_size ? ` (${formatFileSize(msg.file_size)})` : '';
+                const mimeType = msg.mime_type || '';
 
                 content = `
                     <div style="margin-bottom: 8px; padding: 10px; background: #fff0f5; border-radius: 8px; border: 1px solid #ffd1dc;">
                         <div style="display: flex; align-items: center; gap: 10px;">
                             <span style="font-size: 1.5rem;">${icon}</span>
                             <div style="flex: 1;">
-                                <div style="font-weight: bold;">${label}</div>
-                                <div style="font-size: 0.8rem; color: #666;">
-                                    ${msg.mime_type || ''}${fileSize}
+                                <div style="font-weight: bold; ${textStyles}">${label}</div>
+                                <div style="font-size: 0.8rem; color: #666; ${textStyles}">
+                                    ${mimeType}${fileSize}
                                 </div>
                             </div>
                             <button onclick="playAudio('${msg.id}')"
@@ -872,7 +904,7 @@ async function loadChatHistory(userId, container) {
                             </button>
                         </div>
                     </div>
-                    ${msg.message ? `<div style="margin-top: 8px;">${msg.message}</div>` : ''}
+                    ${renderText(msg.message)}
                 `;
             } else if (msg.has_video) {
                 // Видео
@@ -880,15 +912,16 @@ async function loadChatHistory(userId, container) {
                 const icon = isVideoNote ? '📹' : '🎥';
                 const label = isVideoNote ? 'Видео-кружочек' : 'Видео';
                 const fileSize = msg.file_size ? ` (${formatFileSize(msg.file_size)})` : '';
+                const mimeType = msg.mime_type || '';
 
                 content = `
                     <div style="margin-bottom: 8px; padding: 10px; background: #f0f0f0; border-radius: 8px; border: 1px solid #ddd;">
                         <div style="display: flex; align-items: center; gap: 10px;">
                             <span style="font-size: 1.5rem;">${icon}</span>
                             <div style="flex: 1;">
-                                <div style="font-weight: bold;">${label}</div>
-                                <div style="font-size: 0.8rem; color: #666;">
-                                    ${msg.mime_type || ''}${fileSize}
+                                <div style="font-weight: bold; ${textStyles}">${label}</div>
+                                <div style="font-size: 0.8rem; color: #666; ${textStyles}">
+                                    ${mimeType}${fileSize}
                                 </div>
                             </div>
                             <button onclick="playVideo('${msg.id}')"
@@ -897,21 +930,19 @@ async function loadChatHistory(userId, container) {
                             </button>
                         </div>
                     </div>
-                    ${msg.message ? `<div style="margin-top: 8px;">${msg.message}</div>` : ''}
+                    ${renderText(msg.message)}
                 `;
             } else if (msg.file_type === 'sticker') {
-                // Стикер
+                // Стикер (текст стикера тоже может быть длинным — добавим перенос)
                 content = `
                     <div style="margin-bottom: 8px; text-align: center;">
-                        <div style="font-size: 3rem;">${msg.message}</div>
+                        <div style="font-size: 3rem; ${textStyles}">${msg.message || '🖼️'}</div>
                         <div style="font-size: 0.8rem; color: #666;">Стикер</div>
                     </div>
                 `;
             } else {
-                // Текстовое сообщение
-                content = `
-                    <div>${msg.message || ''}</div>
-                `;
+                // Чисто текстовое сообщение
+                content = `<div style="${textStyles}">${msg.message || '(пустое сообщение)'}</div>`;
             }
 
             content += `<div class="message-time">${messageTime}</div>`;

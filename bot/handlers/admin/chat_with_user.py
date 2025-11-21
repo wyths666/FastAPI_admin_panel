@@ -402,7 +402,9 @@ async def handle_all_user_messages(message: Message):
             return
 
         claim_id = chat_session.claim_id
-
+        if not message.text and not message.photo:
+            await message.answer("❌ Поддерживаются только текстовые сообщения и фото.")
+            return
         # Получаем текст сообщения или подпись к фото
         if message.text:
             text = message.text

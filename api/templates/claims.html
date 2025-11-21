@@ -642,6 +642,20 @@
     from { opacity: 0.4; }
     to { opacity: 1; }
 }
+.chat-input {
+    flex: 1;
+    padding: 12px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font-family: inherit;
+    resize: none; /* Запрещаем ручное изменение размера */
+    min-height: 44px; /* Минимальная высота */
+    max-height: 120px; /* Максимальная высота перед появлением скролла */
+    overflow-y: auto; /* Скролл если текст не помещается */
+    line-height: 1.4;
+    white-space: pre-wrap; /* Сохраняем переносы строк */
+    word-wrap: break-word; /* Перенос длинных слов */
+}
     </style>
 </head>
 <body>
@@ -839,7 +853,7 @@
                         <!-- Сообщения загружаются JS -->
                     </div>
                     <form class="chat-input-form" onsubmit="sendMessage(event, '{{ claim.claim_id }}', {{ claim.user_id }})">
-                        <input type="text" class="chat-input" id="message-input-{{ claim.claim_id }}" placeholder="Введите сообщение..." required>
+                        <textarea class="chat-input" id="message-input-{{ claim.claim_id }}" placeholder="Введите сообщение..." rows="1" required></textarea>
                         <button type="submit" class="chat-send">Отправить</button>
                     </form>
                 </div>
@@ -1129,7 +1143,7 @@
                 }
             } catch (e) {
                 console.error(`❌ Ошибка получения URL для ${msg.id}:`, e);
-                photoUrls[msg.id] = 'https://via.placeholder.com/200x200/333/fff?text=🖼️';
+                photoUrls[msg.id] = 'https://via.placeholder.com/200x200/333/fff?text=  🖼️';
             }
         }
     }
@@ -1143,8 +1157,11 @@
 
         let content = '';
 
+        // Стили для текстового блока — обеспечивает перенос строк и сохранение форматирования
+        const textStyles = 'word-wrap: break-word; word-break: break-word; white-space: pre-wrap; margin: 0;';
+
         if (msg.has_photo && msg.photo_file_id) {
-            const photoUrl = photoUrls[msg.id] || 'https://via.placeholder.com/200x200/333/fff?text=🖼️';
+            const photoUrl = photoUrls[msg.id] || 'https://via.placeholder.com/200x200/333/fff?text=  🖼️';
 
             content = `
                 <div style="margin-bottom: 8px;">
@@ -1153,14 +1170,16 @@
                          style="max-width: 200px; max-height: 200px; border-radius: 8px; border: 2px solid var(--primary); cursor: pointer;"
                          onclick="openChatPhoto('${msg.id}')"
                          onload="console.log('✅ Фото загружено: ${msg.id}')"
-                         onerror="this.src='https://via.placeholder.com/200x200/333/fff?text=🖼️'; console.error('❌ Ошибка загрузки фото: ${msg.id}')">
+                         onerror="this.src='https://via.placeholder.com/200x200/333/fff?text=  🖼️'; console.error('❌ Ошибка загрузки фото: ${msg.id}')">
                 </div>
-                ${msg.message ? `<div style="margin-top: 8px;">${msg.message}</div>` : ''}
+                ${msg.message
+                    ? `<div style="margin-top: 8px; ${textStyles}">${msg.message}</div>`
+                    : ''}
                 <div class="message-time">${time}</div>
             `;
         } else {
             content = `
-                <div>${msg.message || '(пустое сообщение)'}</div>
+                <div style="${textStyles}">${msg.message || '(пустое сообщение)'}</div>
                 <div class="message-time">${time}</div>
             `;
         }
@@ -1169,33 +1188,75 @@
         container.appendChild(div);
     });
 
+    // Прокрутка вниз после рендеринга
     container.scrollTop = container.scrollHeight;
 }
 
     async function sendMessage(event, claimId, userId) {
-        event.preventDefault();
-        const input = document.getElementById(`message-input-${claimId}`);
-        const text = input.value.trim();
-        if (!text) return;
+    event.preventDefault();
+    const input = document.getElementById(`message-input-${claimId}`);
+    const text = input.value.trim();
+    if (!text) return;
 
-        try {
-            const res = await fetch('/claims/chat/send', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ claim_id: claimId, text, is_bot: true })
-            });
+    try {
+        const res = await fetch('/claims/chat/send', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ claim_id: claimId, text, is_bot: true })
+        });
 
-            if (res.ok) {
-                input.value = '';
-                await loadChatHistory(claimId);
-            } else {
-                alert('❌ Ошибка отправки');
-            }
-        } catch (e) {
-            console.error('Send message:', e);
-            alert('Ошибка подключения');
+        if (res.ok) {
+            input.value = '';
+            resetTextareaHeight(input); // Сбрасываем высоту после отправки
+            await loadChatHistory(claimId);
+        } else {
+            alert('❌ Ошибка отправки');
         }
+    } catch (e) {
+        console.error('Send message:', e);
+        alert('Ошибка подключения');
     }
+}
+
+// Функция для автоматического изменения высоты textarea
+function autoResizeTextarea(textarea) {
+    // Сбрасываем высоту чтобы получить правильный scrollHeight
+    textarea.style.height = 'auto';
+
+    // Устанавливаем высоту based on content
+    const newHeight = Math.min(textarea.scrollHeight, 120); // 120px - max-height из CSS
+    textarea.style.height = newHeight + 'px';
+}
+
+// Функция для сброса высоты
+function resetTextareaHeight(textarea) {
+    textarea.style.height = 'auto';
+    textarea.style.height = '44px'; // Возвращаем к минимальной высоте
+}
+
+// Обработчик события input для автоподстройки высоты
+document.addEventListener('DOMContentLoaded', function() {
+    // Добавляем обработчики для всех textarea чата
+    document.addEventListener('input', function(e) {
+        if (e.target.classList.contains('chat-input')) {
+            autoResizeTextarea(e.target);
+        }
+    });
+
+    // Также обрабатываем нажатие Enter (но без отправки по Shift+Enter)
+    document.addEventListener('keydown', function(e) {
+        if (e.target.classList.contains('chat-input') && e.key === 'Enter') {
+            if (!e.shiftKey) {
+                // Enter без Shift - отправляем сообщение
+                e.preventDefault();
+                const claimId = e.target.id.replace('message-input-', '');
+                const userId = document.querySelector(`[data-claim-id="${claimId}"]`).dataset.userId;
+                sendMessage(e, claimId, userId);
+            }
+            // Shift+Enter - обычный перенос строки (обрабатывается автоматически)
+        }
+    });
+});
 
     function startPolling(claimId) {
         stopPolling(claimId);

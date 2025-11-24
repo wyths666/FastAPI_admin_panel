@@ -304,7 +304,7 @@
             transition: all 0.3s ease;
         }
 
-        /* Модальное окно чата */
+        /* Модальное окно чата с возможностью изменения размера */
         .chat-modal {
             display: none;
             position: fixed;
@@ -321,19 +321,28 @@
         .chat-modal-content {
             background: white;
             border-radius: var(--radius);
-            width: 90%;
-            max-width: 800px;
-            height: 80%;
             display: flex;
             flex-direction: column;
+            position: absolute;
+            min-width: 400px;
+            min-height: 300px;
+            max-width: 95vw;
+            max-height: 95vh;
+            resize: both;
+            overflow: auto;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
         }
 
         .chat-modal-header {
-            padding: 20px;
+            padding: 15px 20px;
             border-bottom: 1px solid var(--border);
             display: flex;
             justify-content: space-between;
             align-items: center;
+            background: linear-gradient(to right, #f8f9fa, #e9ecef);
+            cursor: move;
+            user-select: none;
+            border-radius: var(--radius) var(--radius) 0 0;
         }
 
         .chat-modal-close {
@@ -345,6 +354,40 @@
             border-radius: 50%;
             cursor: pointer;
             font-size: 1.2rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s ease;
+        }
+
+        .chat-modal-close:hover {
+            background: #c1121f;
+            transform: scale(1.1);
+        }
+
+        .chat-modal-controls {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+
+        .modal-control-btn {
+            background: var(--gray);
+            color: white;
+            border: none;
+            width: 28px;
+            height: 28px;
+            border-radius: 4px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.9rem;
+            transition: all 0.2s ease;
+        }
+
+        .modal-control-btn:hover {
+            background: #5a6268;
         }
 
         .chat-messages {
@@ -383,6 +426,7 @@
         .chat-input-area {
             padding: 20px;
             border-top: 1px solid var(--border);
+            background: #f8f9fa;
         }
 
         .chat-input-form {
@@ -456,6 +500,39 @@
             border-color: var(--border);
         }
 
+        /* Стили для изменения размера */
+        .resize-handle {
+            position: absolute;
+            background: transparent;
+            z-index: 10;
+        }
+
+        .resize-handle.right {
+            right: 0;
+            top: 0;
+            bottom: 0;
+            width: 8px;
+            cursor: ew-resize;
+        }
+
+        .resize-handle.bottom {
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 8px;
+            cursor: ns-resize;
+        }
+
+        .resize-handle.corner {
+            right: 0;
+            bottom: 0;
+            width: 15px;
+            height: 15px;
+            cursor: nwse-resize;
+            background: linear-gradient(135deg, transparent 50%, var(--primary) 50%);
+            border-radius: 0 0 10px 0;
+        }
+
         @media (max-width: 768px) {
             .filter-row {
                 flex-direction: column;
@@ -475,59 +552,82 @@
             .message {
                 max-width: 85%;
             }
+            .chat-modal-content {
+                min-width: 95vw;
+                min-height: 80vh;
+                resize: none;
+            }
         }
         .chat-header.has-unread {
-    background: linear-gradient(to right, #fff3cd, #ffeaa7) !important;
-    border-left: 4px solid #ffc107 !important;
-}
+            background: linear-gradient(to right, #fff3cd, #ffeaa7) !important;
+            border-left: 4px solid #ffc107 !important;
+        }
 
-.chat-header.has-unread .chat-username {
-    color: #e74c3c !important;
-    font-weight: bold !important;
-}
+        .chat-header.has-unread .chat-username {
+            color: #e74c3c !important;
+            font-weight: bold !important;
+        }
 
-/* Анимация появления новых сообщений */
-@keyframes pulse-new {
-    0% { background-color: transparent; }
-    50% { background-color: #fff3cd; }
-    100% { background-color: transparent; }
-}
+        /* Анимация появления новых сообщений */
+        @keyframes pulse-new {
+            0% { background-color: transparent; }
+            50% { background-color: #fff3cd; }
+            100% { background-color: transparent; }
+        }
 
-.chat-header.new-message {
-    animation: pulse-new 2s ease-in-out;
-}
-.btn-delete-chat {
-    background: var(--warning);
-    color: white;
-    border: none;
-    padding: 10px 20px;
-    border-radius: 4px;
-    cursor: pointer;
-    font-weight: 500;
+        .chat-header.new-message {
+            animation: pulse-new 2s ease-in-out;
+        }
+        .btn-delete-chat {
+            background: var(--warning);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: all 0.3s ease;
+        }
 
-    transition: all 0.3s ease;
-}
+        .btn-delete-chat:hover {
+            background: #e71d36;
+            transform: translateY(-2px);
+        }
+        .chat-input {
+            padding: 12px;
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            font-family: inherit;
+            font-size: 1rem;
+            transition: border-color 0.2s;
+            outline: none;
+            width: 100%;
+            box-sizing: border-box;
+            background: white;
+        }
+        .chat-input:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 2px rgba(67, 97, 238, 0.2);
+        }
 
-.btn-delete-chat:hover {
-    background: #e71d36;
-    transform: translateY(-2px);
-}
-.chat-input {
-    padding: 12px;
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    font-family: inherit;
-    font-size: 1rem;
-    transition: border-color 0.2s;
-    outline: none;
-    width: 100%;
-    box-sizing: border-box;
-    background: white;
-}
-.chat-input:focus {
-    border-color: var(--primary);
-    box-shadow: 0 0 0 2px rgba(67, 97, 238, 0.2);
-}
+        /* Индикатор изменения размера */
+        .resize-indicator {
+            position: absolute;
+            bottom: 5px;
+            right: 5px;
+            background: rgba(0,0,0,0.7);
+            color: white;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 0.7rem;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+
+        .chat-modal-content.resizing .resize-indicator {
+            opacity: 1;
+        }
     </style>
 </head>
 <body>
@@ -632,28 +732,26 @@
                 </div>
             </div>
 
-
-
             <div class="chat-actions">
-    <button class="btn-open-chat" onclick="openChatModal({{ chat.user_id }}, '{{ chat.username }}')">
-        💬 Открыть чат
-    </button>
+                <button class="btn-open-chat" onclick="openChatModal({{ chat.user_id }}, '{{ chat.username }}')">
+                    💬 Открыть чат
+                </button>
 
-    {% if chat.banned == '1' %}
-    <button class="btn-unban" onclick="toggleUserBan({{ chat.user_id }}, false)">
-        ✅ Разблокировать
-    </button>
-    {% else %}
-    <button class="btn-ban" onclick="toggleUserBan({{ chat.user_id }}, true)">
-        🚫 Заблокировать
-    </button>
-    {% endif %}
+                {% if chat.banned == '1' %}
+                <button class="btn-unban" onclick="toggleUserBan({{ chat.user_id }}, false)">
+                    ✅ Разблокировать
+                </button>
+                {% else %}
+                <button class="btn-ban" onclick="toggleUserBan({{ chat.user_id }}, true)">
+                    🚫 Заблокировать
+                </button>
+                {% endif %}
 
-    <button class="btn-delete-chat" onclick="deleteChat({{ chat.user_id }})">
-        🗑️ Удалить чат
-    </button>
+                <button class="btn-delete-chat" onclick="deleteChat({{ chat.user_id }})">
+                    🗑️ Удалить чат
+                </button>
 
-    <a href="/payments/create/" class="btn-pay">💸 Оформить выплату</a>
+                <a href="/payments/create/" class="btn-pay">💸 Оформить выплату</a>
             </div>
         </div>
     </div>
@@ -706,10 +804,19 @@
 
 <!-- Модальное окно чата -->
 <div id="chatModal" class="chat-modal">
-    <div class="chat-modal-content">
-        <div class="chat-modal-header">
+    <div class="chat-modal-content" id="chatModalContent">
+        <div class="resize-handle right"></div>
+        <div class="resize-handle bottom"></div>
+        <div class="resize-handle corner"></div>
+        <div class="resize-indicator" id="resizeIndicator">800×600</div>
+
+        <div class="chat-modal-header" id="chatModalHeader">
             <h3 id="chatModalTitle">Чат с пользователем</h3>
-            <button class="chat-modal-close" onclick="closeChatModal()">×</button>
+            <div class="chat-modal-controls">
+                <button class="modal-control-btn" onclick="minimizeModal()" title="Свернуть">−</button>
+                <button class="modal-control-btn" onclick="maximizeModal()" title="Развернуть">⛶</button>
+                <button class="chat-modal-close" onclick="closeChatModal()" title="Закрыть">×</button>
+            </div>
         </div>
 
         <div class="chat-messages" id="chatModalMessages">
@@ -733,50 +840,47 @@
 </div>
 
 <script>
-function resetFilters() {
-    // Очищаем форму и отправляем
-    window.location.href = '/chats/';
-}
-
+// Переменные для управления модальным окном
 let currentChatUserId = null;
 let chatPollInterval = null;
 let isUserScrolling = false;
 let lastScrollTop = 0;
+let isResizing = false;
+let startX, startY, startWidth, startHeight;
+let originalSize = { width: 800, height: 600 };
+let isMinimized = false;
+let originalPosition = {};
+
+function resetFilters() {
+    window.location.href = '/chats/';
+}
 
 function toggleChatDetails(element) {
     element.classList.toggle('expanded');
 }
+
 function formatMoscowTime(timestamp) {
     try {
-        // Пробуем разные форматы timestamp
         let date;
 
         if (typeof timestamp === 'number') {
-            // Если timestamp в секундах (Telegram)
             if (timestamp < 10000000000) {
                 date = new Date(timestamp * 1000);
-            }
-            // Если timestamp в миллисекундах
-            else {
+            } else {
                 date = new Date(timestamp);
             }
-        }
-        // Если это ISO строка
-        else if (typeof timestamp === 'string') {
+        } else if (typeof timestamp === 'string') {
             date = new Date(timestamp);
-        }
-        else {
+        } else {
             console.warn('Неизвестный формат timestamp:', timestamp);
             return '--:--';
         }
 
-        // Проверяем валидность даты
         if (isNaN(date.getTime())) {
             console.warn('Invalid date для timestamp:', timestamp);
             return '--:--';
         }
 
-        // Москва = UTC+3
         const moscowOffset = 3 * 60 * 60 * 1000;
         const moscowTime = new Date(date.getTime() + moscowOffset);
 
@@ -790,47 +894,238 @@ function formatMoscowTime(timestamp) {
         return '--:--';
     }
 }
+
 function openChatModal(userId, username) {
     currentChatUserId = userId;
     const modal = document.getElementById('chatModal');
     const title = document.getElementById('chatModalTitle');
     const messagesContainer = document.getElementById('chatModalMessages');
+    const modalContent = document.getElementById('chatModalContent');
 
     title.textContent = `Чат с ${username} (ID: ${userId})`;
     modal.style.display = 'flex';
 
+    setModalMaximized();
+
     // Загружаем историю чата
     loadChatHistory(userId, messagesContainer);
 
-    // Запускаем обновление чата с увеличенным интервалом
+    // Запускаем обновление чата
     startChatPolling(userId, messagesContainer);
+
+    // Инициализируем перетаскивание и изменение размера
+    initModalDragAndResize();
 }
 
 function closeChatModal() {
     const modal = document.getElementById('chatModal');
     modal.style.display = 'none';
     currentChatUserId = null;
+    isMinimized = false;
 
-    // Останавливаем опрос
     if (chatPollInterval) {
         clearInterval(chatPollInterval);
         chatPollInterval = null;
     }
 }
 
+function minimizeModal() {
+    const modalContent = document.getElementById('chatModalContent');
+    if (!isMinimized) {
+        // Сохраняем оригинальный размер и позицию
+        originalSize = {
+            width: modalContent.offsetWidth,
+            height: modalContent.offsetHeight
+        };
+        originalPosition = {
+            left: modalContent.style.left,
+            top: modalContent.style.top
+        };
+
+        // Минимизируем
+        modalContent.style.width = '400px';
+        modalContent.style.height = '200px';
+        modalContent.style.left = 'calc(100% - 420px)';
+        modalContent.style.top = 'calc(100% - 220px)';
+        isMinimized = true;
+        updateResizeIndicator();
+    } else {
+        // Восстанавливаем размер
+        modalContent.style.width = originalSize.width + 'px';
+        modalContent.style.height = originalSize.height + 'px';
+        modalContent.style.left = originalPosition.left;
+        modalContent.style.top = originalPosition.top;
+        isMinimized = false;
+        updateResizeIndicator();
+    }
+}
+
+function setModalMaximized() {
+    const modalContent = document.getElementById('chatModalContent');
+    // Сохраняем начальный размер как "оригинальный"
+    originalSize = {
+        width: modalContent.offsetWidth,
+        height: modalContent.offsetHeight
+    };
+    originalPosition = {
+        left: modalContent.style.left || 'calc(50% - 400px)',
+        top: modalContent.style.top || 'calc(50% - 300px)'
+    };
+    // Максимизируем
+    modalContent.style.width = '95vw';
+    modalContent.style.height = '95vh';
+    modalContent.style.left = '2.5vw';
+    modalContent.style.top = '2.5vh';
+    updateResizeIndicator();
+}
+
+function maximizeModal() {
+    const modalContent = document.getElementById('chatModalContent');
+    const modal = document.getElementById('chatModal');
+
+    if (modalContent.style.width === '95vw' && modalContent.style.height === '95vh') {
+        // Восстанавливаем предыдущий размер
+        modalContent.style.width = originalSize.width + 'px';
+        modalContent.style.height = originalSize.height + 'px';
+        modalContent.style.left = originalPosition.left;
+        modalContent.style.top = originalPosition.top;
+    } else {
+        // Сохраняем текущий размер и позицию
+        originalSize = {
+            width: modalContent.offsetWidth,
+            height: modalContent.offsetHeight
+        };
+        originalPosition = {
+            left: modalContent.style.left,
+            top: modalContent.style.top
+        };
+
+        // Максимизируем
+        modalContent.style.width = '95vw';
+        modalContent.style.height = '95vh';
+        modalContent.style.left = '2.5vw';
+        modalContent.style.top = '2.5vh';
+    }
+    updateResizeIndicator();
+}
+
+function updateResizeIndicator() {
+    const modalContent = document.getElementById('chatModalContent');
+    const resizeIndicator = document.getElementById('resizeIndicator');
+    if (!modalContent || !resizeIndicator) return;
+    const width = modalContent.offsetWidth;
+    const height = modalContent.offsetHeight;
+    resizeIndicator.textContent = `${width}×${height}`;
+}
+
+function initModalDragAndResize() {
+    const modalContent = document.getElementById('chatModalContent');
+    const header = document.getElementById('chatModalHeader');
+    const resizeHandles = modalContent.querySelectorAll('.resize-handle');
+
+    // Перетаскивание за заголовок
+    let isDragging = false;
+    let dragOffset = { x: 0, y: 0 };
+
+    header.addEventListener('mousedown', startDrag);
+    document.addEventListener('mousemove', drag);
+    document.addEventListener('mouseup', stopDrag);
+
+    function startDrag(e) {
+        if (e.target.closest('.modal-control-btn, .chat-modal-close')) return;
+
+        isDragging = true;
+        const rect = modalContent.getBoundingClientRect();
+        dragOffset.x = e.clientX - rect.left;
+        dragOffset.y = e.clientY - rect.top;
+        modalContent.style.cursor = 'grabbing';
+    }
+
+    function drag(e) {
+        if (!isDragging) return;
+
+        const x = e.clientX - dragOffset.x;
+        const y = e.clientY - dragOffset.y;
+
+        // Ограничиваем перемещение в пределах окна
+        const maxX = window.innerWidth - modalContent.offsetWidth;
+        const maxY = window.innerHeight - modalContent.offsetHeight;
+
+        modalContent.style.left = Math.max(0, Math.min(x, maxX)) + 'px';
+        modalContent.style.top = Math.max(0, Math.min(y, maxY)) + 'px';
+    }
+
+    function stopDrag() {
+        isDragging = false;
+        modalContent.style.cursor = '';
+    }
+
+    // Изменение размера
+    resizeHandles.forEach(handle => {
+        handle.addEventListener('mousedown', startResize);
+    });
+
+    function startResize(e) {
+        e.preventDefault();
+        e.stopPropagation();
+
+        isResizing = true;
+        startX = e.clientX;
+        startY = e.clientY;
+        startWidth = parseInt(document.defaultView.getComputedStyle(modalContent).width, 10);
+        startHeight = parseInt(document.defaultView.getComputedStyle(modalContent).height, 10);
+
+        modalContent.classList.add('resizing');
+
+        document.addEventListener('mousemove', resize);
+        document.addEventListener('mouseup', stopResize);
+    }
+
+    function resize(e) {
+        if (!isResizing) return;
+
+        const dx = e.clientX - startX;
+        const dy = e.clientY - startY;
+
+        let newWidth = startWidth;
+        let newHeight = startHeight;
+
+        // Определяем, за какой край тянем
+        if (e.target.classList.contains('right') || e.target.classList.contains('corner')) {
+            newWidth = Math.max(400, startWidth + dx);
+        }
+        if (e.target.classList.contains('bottom') || e.target.classList.contains('corner')) {
+            newHeight = Math.max(300, startHeight + dy);
+        }
+
+        modalContent.style.width = newWidth + 'px';
+        modalContent.style.height = newHeight + 'px';
+
+        updateResizeIndicator();
+    }
+
+    function stopResize() {
+        isResizing = false;
+        modalContent.classList.remove('resizing');
+        document.removeEventListener('mousemove', resize);
+        document.removeEventListener('mouseup', stopResize);
+    }
+
+
+}
+
+// Остальные функции остаются без изменений (loadChatHistory, sendChatMessage, etc.)
 async function loadChatHistory(userId, container) {
     try {
         const response = await fetch(`/chats/history/?user_id=${userId}`);
         const messages = await response.json();
 
-        // Сохраняем позицию прокрутки
         const wasAtBottom = isScrolledToBottom(container);
         const previousScrollTop = container.scrollTop;
         const previousHeight = container.scrollHeight;
 
         container.innerHTML = '';
 
-        // Стили для текста — обеспечивают перенос и сохранение форматирования
         const textStyles = 'word-wrap: break-word; word-break: break-word; white-space: pre-wrap; margin: 0;';
 
         messages.forEach((msg, index) => {
@@ -841,11 +1136,9 @@ async function loadChatHistory(userId, container) {
 
             let content = '';
 
-            // Обёртка для обработки текста: экранирование + перенос (раскомментируйте escapeHtml при необходимости)
             const renderText = (text) => text ? `<div style="margin-top: 8px; ${textStyles}">${text}</div>` : '';
 
             if (msg.has_photo) {
-                // Фото
                 content = `
                     <div style="margin-bottom: 8px;">
                         <img src="/chats/photo/${msg.id}"
@@ -857,7 +1150,6 @@ async function loadChatHistory(userId, container) {
                     ${renderText(msg.message)}
                 `;
             } else if (msg.has_document) {
-                // Документ (файл)
                 const fileSize = msg.file_size ? ` (${formatFileSize(msg.file_size)})` : '';
                 const fileName = msg.file_name || 'Файл';
                 const mimeType = msg.mime_type || 'Неизвестный тип';
@@ -881,7 +1173,6 @@ async function loadChatHistory(userId, container) {
                     ${renderText(msg.message)}
                 `;
             } else if (msg.has_audio) {
-                // Аудио или голосовое
                 const isVoice = msg.file_type === 'voice';
                 const icon = isVoice ? '🎤' : '🎵';
                 const label = isVoice ? 'Голосовое сообщение' : 'Аудио';
@@ -907,7 +1198,6 @@ async function loadChatHistory(userId, container) {
                     ${renderText(msg.message)}
                 `;
             } else if (msg.has_video) {
-                // Видео
                 const isVideoNote = msg.file_type === 'video_note';
                 const icon = isVideoNote ? '📹' : '🎥';
                 const label = isVideoNote ? 'Видео-кружочек' : 'Видео';
@@ -933,7 +1223,6 @@ async function loadChatHistory(userId, container) {
                     ${renderText(msg.message)}
                 `;
             } else if (msg.file_type === 'sticker') {
-                // Стикер (текст стикера тоже может быть длинным — добавим перенос)
                 content = `
                     <div style="margin-bottom: 8px; text-align: center;">
                         <div style="font-size: 3rem; ${textStyles}">${msg.message || '🖼️'}</div>
@@ -941,7 +1230,6 @@ async function loadChatHistory(userId, container) {
                     </div>
                 `;
             } else {
-                // Чисто текстовое сообщение
                 content = `<div style="${textStyles}">${msg.message || '(пустое сообщение)'}</div>`;
             }
 
@@ -950,7 +1238,6 @@ async function loadChatHistory(userId, container) {
             container.appendChild(messageDiv);
         });
 
-        // Восстанавливаем позицию прокрутки
         if (wasAtBottom || isUserScrolling) {
             container.scrollTop = container.scrollHeight;
         } else {
@@ -973,24 +1260,19 @@ function formatFileSize(bytes) {
 }
 
 function downloadFile(messageId) {
-    // Реализация скачивания файла
     window.open(`/chats/download/${messageId}`, '_blank');
 }
 
 function playAudio(messageId) {
-    // Реализация воспроизведения аудио
     window.open(`/chats/audio/${messageId}`, '_blank');
 }
 
 function playVideo(messageId) {
-    // Реализация воспроизведения видео
     window.open(`/chats/video/${messageId}`, '_blank');
 }
 
-// Функция для открытия фото в полноэкранном режиме
 async function openChatPhoto(messageId) {
     try {
-        // Используем тот же proxy эндпоинт для полноэкранного просмотра
         const photoUrl = `/chats/photo/${messageId}`;
 
         const modal = document.createElement('div');
@@ -1034,6 +1316,10 @@ async function openChatPhoto(messageId) {
     }
 }
 
+function adjustTextareaHeight(textarea) {
+    textarea.style.height = 'auto';
+    textarea.style.height = Math.max(textarea.scrollHeight, 40) + 'px';
+}
 
 async function sendChatMessage(event) {
     event.preventDefault();
@@ -1053,7 +1339,7 @@ async function sendChatMessage(event) {
 
         if (result.ok) {
             input.value = '';
-            // Просто перезагружаем историю чата
+            adjustTextareaHeight(input);
             await loadChatHistory(currentChatUserId, document.getElementById('chatModalMessages'));
         } else {
             alert('Ошибка отправки: ' + (result.error || 'Неизвестная ошибка'));
@@ -1065,41 +1351,37 @@ async function sendChatMessage(event) {
 }
 
 function startChatPolling(userId, container) {
-    // Останавливаем предыдущий интервал
     if (chatPollInterval) {
         clearInterval(chatPollInterval);
     }
 
-    // Добавляем обработчик скролла для определения активности пользователя
     container.addEventListener('scroll', handleChatScroll);
 
-    // Запускаем обновление каждые 10 секунд (вместо 3)
     chatPollInterval = setInterval(async () => {
         if (currentChatUserId === userId && !isUserScrolling) {
             await loadChatHistory(userId, container);
         }
-    }, 10000); // 10 секунд вместо 3
+    }, 10000);
 }
+
 function handleChatScroll(event) {
     const container = event.target;
     const scrollTop = container.scrollTop;
 
-    // Определяем, скроллит ли пользователь
     if (Math.abs(scrollTop - lastScrollTop) > 5) {
         isUserScrolling = true;
 
-        // Сбрасываем таймер скроллинга
         clearTimeout(window.scrollTimeout);
         window.scrollTimeout = setTimeout(() => {
             isUserScrolling = false;
-        }, 2000); // Считаем что пользователь закончил скроллить через 2 секунды
+        }, 2000);
     }
 
     lastScrollTop = scrollTop;
 }
 
 function isScrolledToBottom(container) {
-    const threshold = 100; // пикселей от низа
+    const threshold = 100;
     return container.scrollHeight - container.scrollTop - container.clientHeight <= threshold;
 }
 
@@ -1165,14 +1447,12 @@ async function deleteChat(userId) {
 
         if (result.ok) {
             alert(`✅ ${result.message}`);
-            // Удаляем элемент чата из DOM
             const chatElement = document.querySelector(`[data-user-id="${userId}"]`);
             if (chatElement) {
                 chatElement.style.opacity = '0';
                 chatElement.style.transform = 'translateX(-100%)';
                 setTimeout(() => {
                     chatElement.remove();
-                    // Обновляем счетчик чатов
                     updateChatsCount();
                 }, 300);
             }
@@ -1186,7 +1466,6 @@ async function deleteChat(userId) {
     }
 }
 
-// Функция для обновления счетчика чатов
 function updateChatsCount() {
     const chatItems = document.querySelectorAll('.chat-item');
     const summaryElement = document.querySelector('.summary');
@@ -1202,10 +1481,9 @@ function updateChatsCount() {
 let refreshInterval = null;
 
 function startAutoRefresh() {
-    // Обновляем каждые 30 секунд
     refreshInterval = setInterval(() => {
         refreshChatsList();
-    }, 30000); // 30 секунд
+    }, 30000);
 
     console.log("🔄 Автообновление чатов запущено");
 }
@@ -1223,14 +1501,12 @@ async function refreshChatsList() {
         const currentUrl = new URL(window.location.href);
         const params = new URLSearchParams(currentUrl.search);
 
-        // Сохраняем текущие параметры фильтрации
         const username = params.get('username') || '';
         const dateFrom = params.get('date_from') || '';
         const dateTo = params.get('date_to') || '';
         const hasUnread = params.get('has_unread') || '';
         const page = params.get('page') || '1';
 
-        // Формируем URL для обновления
         let refreshUrl = `/chats/?page=${page}`;
         if (username) refreshUrl += `&username=${encodeURIComponent(username)}`;
         if (dateFrom) refreshUrl += `&date_from=${dateFrom}`;
@@ -1240,23 +1516,19 @@ async function refreshChatsList() {
         const response = await fetch(refreshUrl);
         const html = await response.text();
 
-        // Парсим HTML и обновляем только список чатов
         const parser = new DOMParser();
         const newDocument = parser.parseFromString(html, 'text/html');
         const newChatsContainer = newDocument.querySelector('.container');
 
         if (newChatsContainer) {
-            // Сохраняем текущее состояние открытых чатов
             const currentlyOpen = [];
             document.querySelectorAll('.chat-item.expanded').forEach(chat => {
                 const userId = chat.dataset.userId;
                 if (userId) currentlyOpen.push(userId);
             });
 
-            // Заменяем контейнер
             document.querySelector('.container').innerHTML = newChatsContainer.innerHTML;
 
-            // Восстанавливаем открытые чаты
             currentlyOpen.forEach(userId => {
                 const chatElement = document.querySelector(`[data-user-id="${userId}"]`);
                 if (chatElement) {

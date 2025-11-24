@@ -1,4 +1,9 @@
 import asyncio
+from fastapi import HTTPException
+from fastapi.responses import StreamingResponse
+import httpx
+import mimetypes
+from urllib.parse import quote
 from datetime import datetime, timezone
 from typing import Optional
 from fastapi import Request, Query, Depends, APIRouter
@@ -247,14 +252,48 @@ async def get_chat_history(
     return messages_data
 
 
+# @router.get("/chats/photo/{message_id}")
+# async def get_chat_photo_proxy(
+#         message_id: str,
+#         admin=Depends(get_current_admin)
+# ):
+#     """Proxy для отображения фото"""
+#     if not admin:
+#         return {"error": "Unauthorized"}
+#
+#     try:
+#         db = get_database_bot1()
+#         messages_collection = db["messages"]
+#
+#         from bson import ObjectId
+#         message = await messages_collection.find_one({"_id": ObjectId(message_id)})
+#
+#         if not message or message.get("file_type") != "photo" or not message.get("file_id"):
+#             return {"error": "Photo not found"}
+#
+#         # Получаем file_path через Telegram API
+#         file = await bot1.get_file(message["file_id"])
+#         if not file.file_path:
+#             return {"error": "File path missing"}
+#
+#         # Перенаправляем на Telegram CDN
+#         photo_url = f"https://api.telegram.org/file/bot{bot1.token}/{file.file_path}"
+#
+#         from fastapi.responses import RedirectResponse
+#         return RedirectResponse(photo_url)
+#
+#     except Exception as e:
+#         logger.error(f"❌ Ошибка получения фото {message_id}: {e}")
+#         return {"error": str(e)}
+
 @router.get("/chats/photo/{message_id}")
-async def get_chat_photo_proxy(
-        message_id: str,
-        admin=Depends(get_current_admin)
+async def get_chat_photo_stream(
+    message_id: str,
+    admin=Depends(get_current_admin)
 ):
-    """Proxy для отображения фото"""
+    """Прокси фото с корректным именем и Content-Type"""
     if not admin:
-        return {"error": "Unauthorized"}
+        raise HTTPException(status_code=401, detail="Unauthorized")
 
     try:
         db = get_database_bot1()
@@ -264,22 +303,51 @@ async def get_chat_photo_proxy(
         message = await messages_collection.find_one({"_id": ObjectId(message_id)})
 
         if not message or message.get("file_type") != "photo" or not message.get("file_id"):
-            return {"error": "Photo not found"}
+            raise HTTPException(status_code=404, detail="Photo not found")
 
-        # Получаем file_path через Telegram API
         file = await bot1.get_file(message["file_id"])
         if not file.file_path:
-            return {"error": "File path missing"}
+            raise HTTPException(status_code=404, detail="File path missing")
 
-        # Перенаправляем на Telegram CDN
         photo_url = f"https://api.telegram.org/file/bot{bot1.token}/{file.file_path}"
 
-        from fastapi.responses import RedirectResponse
-        return RedirectResponse(photo_url)
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.get(photo_url)
+            if resp.status_code != 200:
+                raise HTTPException(status_code=502, detail="Failed to fetch photo from Telegram")
 
+            # Определяем тип и расширение
+            content_type = resp.headers.get("content-type")
+            if not content_type:
+                # Telegram почти всегда отдаёт JPEG, fallback
+                content_type = "image/jpeg"
+
+            ext = mimetypes.guess_extension(content_type)
+            if ext == ".jpe" or not ext:
+                ext = ".jpg"
+
+            # Имя: photo_{user_id}_{message_id}.jpg
+            user_id = message.get("user_id", "unknown")
+            filename = f"photo_{user_id}_{message_id}{ext}"
+
+            headers = {
+                "Content-Type": content_type,
+                "Content-Disposition": f'attachment; filename="{quote(filename)}"',
+                "Cache-Control": "private, max-age=86400",
+            }
+
+            async def stream_file():
+                async for chunk in resp.aiter_bytes():
+                    yield chunk
+
+            return StreamingResponse(stream_file(), headers=headers)
+
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"❌ Ошибка получения фото {message_id}: {e}")
-        return {"error": str(e)}
+        logger.error(f"❌ get_chat_photo_stream({message_id}): {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
 
 # @router.get("/chats/photo-url/{message_id}")
 # async def get_chat_photo_url(
@@ -319,13 +387,13 @@ async def get_chat_photo_proxy(
 
 
 @router.get("/chats/download/{message_id}")
-async def download_file(
-        message_id: str,
-        admin=Depends(get_current_admin)
+async def download_file_stream(
+    message_id: str,
+    admin=Depends(get_current_admin)
 ):
-    """Скачать файл"""
+    """Скачивание файла (документ, аудио, видео и др.) с корректным именем и Content-Type"""
     if not admin:
-        return {"error": "Unauthorized"}
+        raise HTTPException(status_code=401, detail="Unauthorized")
 
     try:
         db = get_database_bot1()
@@ -335,40 +403,111 @@ async def download_file(
         message = await messages_collection.find_one({"_id": ObjectId(message_id)})
 
         if not message or not message.get("file_id"):
-            return {"error": "File not found"}
+            raise HTTPException(status_code=404, detail="File not found")
 
-        # Получаем файл через Telegram API
+        user_id = message.get("user_id", "unknown")
+        file_type = message.get("file_type", "file")
+        file_name_original = message.get("file_name")  # может быть None
+
+        # Получаем file_path через Telegram API
         file = await bot1.get_file(message["file_id"])
+        if not file.file_path:
+            raise HTTPException(status_code=404, detail="File path missing")
 
-        # Скачиваем файл
         file_url = f"https://api.telegram.org/file/bot{bot1.token}/{file.file_path}"
 
-        # Перенаправляем на прямой URL к файлу
-        from fastapi.responses import RedirectResponse
-        return RedirectResponse(file_url)
+        # Скачиваем потоком
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            response = await client.get(file_url)
+            if response.status_code != 200:
+                raise HTTPException(status_code=502, detail="Failed to fetch file from Telegram")
 
+            # 1️⃣ Определяем content_type
+            content_type = response.headers.get("content-type") or "application/octet-stream"
+
+            # 2️⃣ Определяем расширение
+            ext = mimetypes.guess_extension(content_type)
+            if not ext:
+                # fallback по file_path (часто есть .pdf, .ogg и т.д.)
+                path_ext = file.file_path.split('.')[-1].lower() if '.' in file.file_path else ''
+                if path_ext in {'pdf', 'doc', 'docx', 'xls', 'xlsx', 'txt', 'csv', 'json', 'xml', 'mp3', 'ogg', 'wav', 'mp4', 'mov', 'avi', 'mkv', 'jpg', 'jpeg', 'png', 'gif', 'webp'}:
+                    ext = '.' + path_ext
+                else:
+                    ext = '.bin'
+
+            if ext == '.jpe':
+                ext = '.jpg'
+
+            # 3️⃣ Генерируем имя файла
+            # Базовое имя по типу
+            type_name = {
+                'document': 'document',
+                'audio': 'audio',
+                'voice': 'voice',
+                'video': 'video',
+                'video_note': 'video_note',
+                'photo': 'photo',
+                'animation': 'animation',
+            }.get(file_type, 'file')
+
+            # Если есть оригинальное имя — используем его (без пути и с нормализацией расширения)
+            if file_name_original and file_name_original.strip():
+                # Очищаем от опасных символов (оставляем буквы, цифры, точки, подчёркивания, дефисы, пробелы)
+                safe_name = "".join(c if c.isalnum() or c in "._- " else "_" for c in file_name_original.strip())
+                # Сохраняем оригинальное расширение, если оно совпадает с реальным (или заменяем на корректное)
+                if '.' in safe_name:
+                    orig_ext = '.' + safe_name.rsplit('.', 1)[-1].lower()
+                    if orig_ext == ext or (orig_ext in {'.jpeg', '.jpg'} and ext in {'.jpeg', '.jpg'}):
+                        # Оставляем оригинальное расширение
+                        filename = f"{type_name}_{user_id}_{message_id}_{safe_name}"
+                    else:
+                        # Меняем расширение на корректное
+                        base = safe_name.rsplit('.', 1)[0]
+                        filename = f"{type_name}_{user_id}_{message_id}_{base}{ext}"
+                else:
+                    filename = f"{type_name}_{user_id}_{message_id}_{safe_name}{ext}"
+            else:
+                filename = f"{type_name}_{user_id}_{message_id}{ext}"
+
+            # 4️⃣ Заголовки
+            headers = {
+                "Content-Type": content_type,
+                "Content-Disposition": f'attachment; filename="{quote(filename)}"',
+                "Cache-Control": "private, max-age=86400",
+            }
+
+            # 5️⃣ Стриминг
+            async def file_stream():
+                async for chunk in response.aiter_bytes(8192):
+                    yield chunk
+
+            return StreamingResponse(file_stream(), headers=headers)
+
+    except HTTPException:
+        raise
     except Exception as e:
-        return {"error": str(e)}
+        logger.error(f"❌ Ошибка скачивания файла {message_id}: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
-@router.get("/chats/audio/{message_id}")
-async def stream_audio(
-        message_id: str,
-        admin=Depends(get_current_admin)
-):
-    """Воспроизвести аудио"""
-    # Аналогично download_file, но для аудио
-    return await download_file(message_id, admin)
-
-
-@router.get("/chats/video/{message_id}")
-async def stream_video(
-        message_id: str,
-        admin=Depends(get_current_admin)
-):
-    """Воспроизвести видео"""
-    # Аналогично download_file, но для видео
-    return await download_file(message_id, admin)
+# @router.get("/chats/audio/{message_id}")
+# async def stream_audio(
+#         message_id: str,
+#         admin=Depends(get_current_admin)
+# ):
+#     """Воспроизвести аудио"""
+#     # Аналогично download_file, но для аудио
+#     return await download_file(message_id, admin)
+#
+#
+# @router.get("/chats/video/{message_id}")
+# async def stream_video(
+#         message_id: str,
+#         admin=Depends(get_current_admin)
+# ):
+#     """Воспроизвести видео"""
+#     # Аналогично download_file, но для видео
+#     return await download_file(message_id, admin)
 
 
 @router.post("/chats/send/")

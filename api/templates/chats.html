@@ -859,6 +859,25 @@ function toggleChatDetails(element) {
     element.classList.toggle('expanded');
 }
 
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+// Делает ссылки кликабельными с защитой от XSS
+function linkify(text) {
+    if (!text) return '';
+    const escaped = escapeHtml(text);
+    // Поддержка https://, http://, www.
+    const urlRegex = /(\b(?:https?:\/\/|www\.)[^\s<>"{}|\\^`[\]]*\b)/gi;
+    return escaped.replace(urlRegex, (url) => {
+        const fullUrl = url.startsWith('http') ? url : 'http://' + url;
+        return `<a href="${fullUrl}" target="_blank" rel="noopener noreferrer"
+                   style="color: var(--primary); text-decoration: underline;">${url}</a>`;
+    });
+}
+
 function formatMoscowTime(timestamp) {
     try {
         let date;
@@ -1118,6 +1137,7 @@ function initModalDragAndResize() {
 async function loadChatHistory(userId, container) {
     try {
         const response = await fetch(`/chats/history/?user_id=${userId}`);
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const messages = await response.json();
 
         const wasAtBottom = isScrolledToBottom(container);
@@ -1133,23 +1153,65 @@ async function loadChatHistory(userId, container) {
             messageDiv.className = `message ${msg.from_operator ? 'operator' : 'user'}`;
 
             const messageTime = formatMoscowTime(msg.date);
-
             let content = '';
 
-            const renderText = (text) => text ? `<div style="margin-top: 8px; ${textStyles}">${text}</div>` : '';
+            // Оборачиваем текст (или caption) в linkify
+            const renderText = (text) => text ? `<div style="margin-top: 8px; ${textStyles}">${linkify(text)}</div>` : '';
 
-            if (msg.has_photo) {
+            // 1. Обработка медиагруппы (несколько фото)
+            if (Array.isArray(msg.media_group) && msg.media_group.length > 0) {
+                const photosHtml = msg.media_group.map(item => {
+                    const photoId = item.id || item.message_id || msg.id;
+                    const caption = item.caption || msg.caption;
+                    return `
+                        <div style="margin-bottom: 12px;">
+                            <img src="/chats/photo/${photoId}"
+                                 alt="Фото из чата"
+                                 style="max-width: 200px; max-height: 200px; border-radius: 8px; border: 2px solid var(--primary); cursor: pointer;"
+                                 onclick="openChatPhoto('${photoId}')"
+                                 onerror="console.error('❌ Ошибка загрузки фото: ${photoId}'); this.style.display='none'">
+                            <div style="margin-top: 6px; display: flex; gap: 6px; flex-wrap: wrap;">
+                                <button onclick="downloadPhoto('${photoId}', 'photo_${photoId}.jpg')"
+                                        style="background: #6c757d; color: white; border: none; padding: 4px 8px; font-size: 0.75rem; border-radius: 4px; cursor: pointer;">
+                                    📥 Скачать
+                                </button>
+                                <button onclick="openChatPhoto('${photoId}')"
+                                        style="background: var(--primary); color: white; border: none; padding: 4px 8px; font-size: 0.75rem; border-radius: 4px; cursor: pointer;">
+                                    🔍 Увеличить
+                                </button>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+
+                content = photosHtml + renderText(msg.caption || msg.message);
+            }
+            // 2. Одиночное фото
+            else if (msg.has_photo) {
+                const photoId = msg.id;
                 content = `
-                    <div style="margin-bottom: 8px;">
-                        <img src="/chats/photo/${msg.id}"
+                    <div style="margin-bottom: 12px;">
+                        <img src="/chats/photo/${photoId}"
                              alt="Фото из чата"
                              style="max-width: 200px; max-height: 200px; border-radius: 8px; border: 2px solid var(--primary); cursor: pointer;"
-                             onclick="openChatPhoto('${msg.id}')"
-                             onerror="console.error('❌ Ошибка загрузки фото: ${msg.id}'); this.style.display='none'">
+                             onclick="openChatPhoto('${photoId}')"
+                             onerror="console.error('❌ Ошибка загрузки фото: ${photoId}'); this.style.display='none'">
+                        <div style="margin-top: 6px; display: flex; gap: 6px; flex-wrap: wrap;">
+                            <button onclick="downloadPhoto('${photoId}', 'photo_${photoId}.jpg')"
+                                    style="background: #6c757d; color: white; border: none; padding: 4px 8px; font-size: 0.75rem; border-radius: 4px; cursor: pointer;">
+                                📥 Скачать
+                            </button>
+                            <button onclick="openChatPhoto('${photoId}')"
+                                    style="background: var(--primary); color: white; border: none; padding: 4px 8px; font-size: 0.75rem; border-radius: 4px; cursor: pointer;">
+                                🔍 Увеличить
+                            </button>
+                        </div>
                     </div>
-                    ${renderText(msg.message)}
+                    ${renderText(msg.caption || msg.message)}
                 `;
-            } else if (msg.has_document) {
+            }
+            // 3. Документ — оставляем как есть, но linkify caption/message
+            else if (msg.has_document) {
                 const fileSize = msg.file_size ? ` (${formatFileSize(msg.file_size)})` : '';
                 const fileName = msg.file_name || 'Файл';
                 const mimeType = msg.mime_type || 'Неизвестный тип';
@@ -1159,9 +1221,9 @@ async function loadChatHistory(userId, container) {
                         <div style="display: flex; align-items: center; gap: 10px;">
                             <span style="font-size: 1.5rem;">📎</span>
                             <div style="flex: 1;">
-                                <div style="font-weight: bold; ${textStyles}">${fileName}</div>
+                                <div style="font-weight: bold; ${textStyles}">${escapeHtml(fileName)}</div>
                                 <div style="font-size: 0.8rem; color: #666; ${textStyles}">
-                                    ${mimeType}${fileSize}
+                                    ${escapeHtml(mimeType)}${fileSize}
                                 </div>
                             </div>
                             <button onclick="downloadFile('${msg.id}')"
@@ -1170,9 +1232,11 @@ async function loadChatHistory(userId, container) {
                             </button>
                         </div>
                     </div>
-                    ${renderText(msg.message)}
+                    ${renderText(msg.caption || msg.message)}
                 `;
-            } else if (msg.has_audio) {
+            }
+            // 4. Аудио
+            else if (msg.has_audio) {
                 const isVoice = msg.file_type === 'voice';
                 const icon = isVoice ? '🎤' : '🎵';
                 const label = isVoice ? 'Голосовое сообщение' : 'Аудио';
@@ -1184,9 +1248,9 @@ async function loadChatHistory(userId, container) {
                         <div style="display: flex; align-items: center; gap: 10px;">
                             <span style="font-size: 1.5rem;">${icon}</span>
                             <div style="flex: 1;">
-                                <div style="font-weight: bold; ${textStyles}">${label}</div>
+                                <div style="font-weight: bold; ${textStyles}">${escapeHtml(label)}</div>
                                 <div style="font-size: 0.8rem; color: #666; ${textStyles}">
-                                    ${mimeType}${fileSize}
+                                    ${escapeHtml(mimeType)}${fileSize}
                                 </div>
                             </div>
                             <button onclick="playAudio('${msg.id}')"
@@ -1195,9 +1259,11 @@ async function loadChatHistory(userId, container) {
                             </button>
                         </div>
                     </div>
-                    ${renderText(msg.message)}
+                    ${renderText(msg.caption || msg.message)}
                 `;
-            } else if (msg.has_video) {
+            }
+            // 5. Видео
+            else if (msg.has_video) {
                 const isVideoNote = msg.file_type === 'video_note';
                 const icon = isVideoNote ? '📹' : '🎥';
                 const label = isVideoNote ? 'Видео-кружочек' : 'Видео';
@@ -1209,9 +1275,9 @@ async function loadChatHistory(userId, container) {
                         <div style="display: flex; align-items: center; gap: 10px;">
                             <span style="font-size: 1.5rem;">${icon}</span>
                             <div style="flex: 1;">
-                                <div style="font-weight: bold; ${textStyles}">${label}</div>
+                                <div style="font-weight: bold; ${textStyles}">${escapeHtml(label)}</div>
                                 <div style="font-size: 0.8rem; color: #666; ${textStyles}">
-                                    ${mimeType}${fileSize}
+                                    ${escapeHtml(mimeType)}${fileSize}
                                 </div>
                             </div>
                             <button onclick="playVideo('${msg.id}')"
@@ -1220,17 +1286,21 @@ async function loadChatHistory(userId, container) {
                             </button>
                         </div>
                     </div>
-                    ${renderText(msg.message)}
+                    ${renderText(msg.caption || msg.message)}
                 `;
-            } else if (msg.file_type === 'sticker') {
+            }
+            // 6. Стикер — без изменений
+            else if (msg.file_type === 'sticker') {
                 content = `
                     <div style="margin-bottom: 8px; text-align: center;">
-                        <div style="font-size: 3rem; ${textStyles}">${msg.message || '🖼️'}</div>
+                        <div style="font-size: 3rem; ${textStyles}">${escapeHtml(msg.message || '🖼️')}</div>
                         <div style="font-size: 0.8rem; color: #666;">Стикер</div>
                     </div>
                 `;
-            } else {
-                content = `<div style="${textStyles}">${msg.message || '(пустое сообщение)'}</div>`;
+            }
+            // 7. Обычное текстовое сообщение
+            else {
+                content = `<div style="${textStyles}">${linkify(msg.message || '(пустое сообщение)')}</div>`;
             }
 
             content += `<div class="message-time">${messageTime}</div>`;
@@ -1238,6 +1308,7 @@ async function loadChatHistory(userId, container) {
             container.appendChild(messageDiv);
         });
 
+        // Прокрутка
         if (wasAtBottom || isUserScrolling) {
             container.scrollTop = container.scrollHeight;
         } else {
@@ -1246,8 +1317,11 @@ async function loadChatHistory(userId, container) {
         }
 
     } catch (error) {
-        console.error('Ошибка загрузки истории:', error);
-        container.innerHTML = '<div style="text-align: center; color: var(--gray);">Ошибка загрузки сообщений</div>';
+        console.error('❌ loadChatHistory error:', error);
+        container.innerHTML = `<div style="text-align: center; color: var(--danger); padding: 20px;">
+            ❌ Ошибка загрузки истории чата.<br>
+            ${error.message || 'Неизвестная ошибка'}
+        </div>`;
     }
 }
 
@@ -1259,8 +1333,13 @@ function formatFileSize(bytes) {
     return (bytes / 1024 / 1024).toFixed(1) + ' MB';
 }
 
-function downloadFile(messageId) {
-    window.open(`/chats/download/${messageId}`, '_blank');
+function downloadFile(messageId, filename) {
+    const a = document.createElement('a');
+    a.href = `/chats/download/${messageId}`;
+    if (filename) a.download = filename; // для совместимости, если вдруг бэкенд не проставит Content-Disposition
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => document.body.removeChild(a), 100);
 }
 
 function playAudio(messageId) {
@@ -1549,10 +1628,25 @@ document.addEventListener('DOMContentLoaded', () => {
     startAutoRefresh();
 });
 
-// Останавливаем при уходе со страницы
-window.addEventListener('beforeunload', () => {
-    stopAutoRefresh();
-});
+
+
+function downloadPhoto(messageId, filename = `photo_${messageId}.jpg`) {
+    try {
+        const url = `/chats/photo/${messageId}`;
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(() => {
+            document.body.removeChild(a);
+        }, 100);
+    } catch (e) {
+        console.error('Ошибка скачивания фото:', e);
+        alert('Не удалось скачать фото');
+    }
+}
+
 </script>
 </body>
 </html>

@@ -40,7 +40,7 @@ async def start_new_user(msg: Message, state: FSMContext):
         return
 
     welcome_photo = FSInputFile("utils/IMG_1262.png")
-    welcome_text = "Привет! Это бот компании Pure. Введите секретный код, указанный на голограмме."
+    welcome_text = "👋 Привет! Это бот компании Pure. Введите секретный код, указанный на голограмме."
 
     await msg.answer_photo(
         photo=welcome_photo,
@@ -150,7 +150,7 @@ async def proceed_to_review(user_tg_id: int, state: FSMContext, code: str):
         code=code,
         code_status="valid",
         process_status="process",
-        claim_status="pending",
+        claim_status="not_completed",
         payment_method="unknown",
         review_text="",
         photo_file_ids=[]

@@ -734,6 +734,7 @@
                     {% if claim.claim_status == 'process' %}🆕 Не обработано
                     {% elif claim.claim_status == 'pending' %}✅ Подтверждёно
                     {% elif claim.claim_status == 'cancelled' %}❌ Отменёно
+                    {% elif claim.claim_status == 'not_completed' %}⭕️ Не оформлено
                     {% else %}{{ claim.claim_status }}{% endif %}
                 </div>
                 <span class="toggle-icon">▼</span>

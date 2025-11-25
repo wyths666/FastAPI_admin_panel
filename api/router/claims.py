@@ -82,23 +82,22 @@ async def claims_page(
     if not admin:
         return RedirectResponse("/auth/login")
 
-    query = {}  # начинаем с пустого словаря
+    query = {"process_status": "complete"}  # ← ДОБАВЛЕНО: фильтр по статусу процесса
 
     # Фильтр по пользователю
     if user_id:
         query["user_id"] = user_id
 
-    # Фильтр по статусу
+    # Фильтр по статусу заявки (claim_status)
     if status:
         query["claim_status"] = status
 
-    if number and number.strip():  # ← проверяем что строка не пустая
+    if number and number.strip():
         try:
             number_int = int(number.strip())
             claim_id_str = f"{number_int:06d}"
             query["claim_id"] = {"$regex": f"^{claim_id_str}$"}
         except ValueError:
-            # Если не число, игнорируем
             pass
 
     # Базовый запрос
@@ -129,9 +128,8 @@ async def claims_page(
     # АГРЕГАЦИЯ: подсчитываем заявки для каждого пользователя
     user_claims_count = {}
     for user_id in user_ids:
-        count = await Claim.find({"user_id": user_id}).count()
+        count = await Claim.find({"user_id": user_id, "process_status": "complete"}).count()  # ← ДОБАВЛЕН фильтр
         user_claims_count[str(user_id)] = count
-
 
     # Подготавливаем данные
     claims_data = []
@@ -143,7 +141,7 @@ async def claims_page(
 
         # ПРАВИЛЬНЫЙ СИНТАКСИС ДЛЯ ПОИСКА ЧАТ-СЕССИИ
         chat_session = await ChatSession.find_one(
-            {"claim_id": claim.claim_id, "is_active": True}  # ← словарь
+            {"claim_id": claim.claim_id, "is_active": True}
         )
 
         claims_data.append({
@@ -162,7 +160,7 @@ async def claims_page(
             "photo_count": len(claim.photo_file_ids),
             "photo_file_ids": claim.photo_file_ids,
             "claim_status": claim.claim_status,
-            "process_status": claim.process_status,
+            "process_status": claim.process_status,  # ← теперь всегда "complete"
             "created_at": claim.created_at,
             "is_chat_active": chat_session is not None,
             "has_unanswered": chat_session.has_unanswered if chat_session else False,

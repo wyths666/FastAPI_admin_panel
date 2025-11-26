@@ -340,8 +340,6 @@
             justify-content: space-between;
             align-items: center;
             background: linear-gradient(to right, #f8f9fa, #e9ecef);
-            cursor: move;
-            user-select: none;
             border-radius: var(--radius) var(--radius) 0 0;
         }
 
@@ -650,6 +648,12 @@
                     <input type="text" id="username" name="username" value="{{ username or '' }}"
                            placeholder="Введите имя пользователя...">
                 </div>
+
+                <div class="filter-group">
+    <label for="user_id">ID пользователя:</label>
+    <input type="number" id="user_id" name="user_id" value="{{ user_id or '' }}"
+           placeholder="Введите ID пользователя...">
+</div>
 
                 <div class="filter-group">
                     <label for="date_from">Дата от:</label>
@@ -1042,42 +1046,41 @@ function initModalDragAndResize() {
     const header = document.getElementById('chatModalHeader');
     const resizeHandles = modalContent.querySelectorAll('.resize-handle');
 
-    // Перетаскивание за заголовок
-    let isDragging = false;
-    let dragOffset = { x: 0, y: 0 };
-
-    header.addEventListener('mousedown', startDrag);
-    document.addEventListener('mousemove', drag);
-    document.addEventListener('mouseup', stopDrag);
-
-    function startDrag(e) {
-        if (e.target.closest('.modal-control-btn, .chat-modal-close')) return;
-
-        isDragging = true;
-        const rect = modalContent.getBoundingClientRect();
-        dragOffset.x = e.clientX - rect.left;
-        dragOffset.y = e.clientY - rect.top;
-        modalContent.style.cursor = 'grabbing';
-    }
-
-    function drag(e) {
-        if (!isDragging) return;
-
-        const x = e.clientX - dragOffset.x;
-        const y = e.clientY - dragOffset.y;
-
-        // Ограничиваем перемещение в пределах окна
-        const maxX = window.innerWidth - modalContent.offsetWidth;
-        const maxY = window.innerHeight - modalContent.offsetHeight;
-
-        modalContent.style.left = Math.max(0, Math.min(x, maxX)) + 'px';
-        modalContent.style.top = Math.max(0, Math.min(y, maxY)) + 'px';
-    }
-
-    function stopDrag() {
-        isDragging = false;
-        modalContent.style.cursor = '';
-    }
+    // // Перетаскивание за заголовок
+    // let isDragging = false;
+    // let dragOffset = { x: 0, y: 0 };
+    //
+    // document.addEventListener('mousemove', drag);
+    // document.addEventListener('mouseup', stopDrag);
+    //
+    // function startDrag(e) {
+    //     if (e.target.closest('.modal-control-btn, .chat-modal-close')) return;
+    //
+    //     isDragging = true;
+    //     const rect = modalContent.getBoundingClientRect();
+    //     dragOffset.x = e.clientX - rect.left;
+    //     dragOffset.y = e.clientY - rect.top;
+    //     modalContent.style.cursor = 'grabbing';
+    // }
+    //
+    // function drag(e) {
+    //     if (!isDragging) return;
+    //
+    //     const x = e.clientX - dragOffset.x;
+    //     const y = e.clientY - dragOffset.y;
+    //
+    //     // Ограничиваем перемещение в пределах окна
+    //     const maxX = window.innerWidth - modalContent.offsetWidth;
+    //     const maxY = window.innerHeight - modalContent.offsetHeight;
+    //
+    //     modalContent.style.left = Math.max(0, Math.min(x, maxX)) + 'px';
+    //     modalContent.style.top = Math.max(0, Math.min(y, maxY)) + 'px';
+    // }
+    //
+    // function stopDrag() {
+    //     isDragging = false;
+    //     modalContent.style.cursor = '';
+    // }
 
     // Изменение размера
     resizeHandles.forEach(handle => {

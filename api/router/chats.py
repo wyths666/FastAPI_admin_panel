@@ -1,7 +1,7 @@
-import asyncio
-from fastapi import HTTPException
 from fastapi.responses import StreamingResponse
 import httpx
+from typing import Union
+from fastapi import Query, HTTPException, Request, Depends
 import mimetypes
 from urllib.parse import quote
 from datetime import datetime, timezone
@@ -26,27 +26,37 @@ templates.env.globals["build_pagination_url"] = build_pagination_url
 
 @router.get("/chats/", response_class=HTMLResponse)
 async def chats_page(
-        request: Request,
-        username: Optional[str] = Query(None),
-        date_from: Optional[str] = Query(None),
-        date_to: Optional[str] = Query(None),
-        has_unread: Optional[bool] = Query(None),
-        page: int = Query(1, ge=1),
-        admin=Depends(get_current_admin)
+    request: Request,
+    username: Optional[str] = Query(None),
+    user_id: Union[str, None] = Query(None),  # ← принимаем как строку
+    date_from: Optional[str] = Query(None),
+    date_to: Optional[str] = Query(None),
+    has_unread: Optional[bool] = Query(None),
+    page: int = Query(1, ge=1),
+    admin=Depends(get_current_admin)
 ):
     if not admin:
         return RedirectResponse("/auth/login")
 
-    # Получаем прямое подключение к MongoDB
+    # Безопасное преобразование user_id → int | None
+    filter_user_id: Optional[int] = None
+    if user_id is not None and user_id.strip() != "":
+        try:
+            filter_user_id = int(user_id.strip())
+        except (ValueError, TypeError):
+            # Опционально: можно вернуть ошибку или игнорировать
+            # Например, игнорируем и не фильтруем по user_id
+            pass
+
+    # Подключение к БД
     db = get_database_bot1()
     messages_collection = db["messages"]
     users_collection = db["users"]
 
-    # Параметры пагинации
     page_size = 50
     skip = (page - 1) * page_size
 
-    # 1. Сначала получаем ID пользователей с сообщениями (с пагинацией)
+    # Агрегация
     pipeline = [
         {"$group": {
             "_id": "$from_id",
@@ -57,8 +67,8 @@ async def chats_page(
                     "$cond": [
                         {
                             "$and": [
-                                {"$eq": ["$checked", "0"]},  # не прочитано
-                                {"$eq": ["$from_operator", "0"]}  # от пользователя
+                                {"$eq": ["$checked", "0"]},
+                                {"$eq": ["$from_operator", "0"]}
                             ]
                         },
                         1,
@@ -70,9 +80,13 @@ async def chats_page(
         {"$sort": {"last_message_date": -1}}
     ]
 
-    # Добавляем фильтры если есть
     match_stage = {}
 
+    # Фильтр по user_id (уже int или None)
+    if filter_user_id is not None:
+        match_stage["from_id"] = filter_user_id
+
+    # Фильтр по дате
     if date_from or date_to:
         date_filter = {}
         if date_from:
@@ -92,84 +106,73 @@ async def chats_page(
     if match_stage:
         pipeline.insert(0, {"$match": match_stage})
 
-    # Получаем общее количество чатов для пагинации
+    # Подсчёт общего числа
     count_pipeline = pipeline + [{"$count": "total"}]
-    total_chats_result = await messages_collection.aggregate(count_pipeline).to_list()
+    total_chats_result = await messages_collection.aggregate(count_pipeline).to_list(length=None)
     total_chats = total_chats_result[0]["total"] if total_chats_result else 0
     total_pages = (total_chats + page_size - 1) // page_size
 
-    # Корректируем номер страницы
     if page > total_pages and total_pages > 0:
         page = total_pages
         skip = (page - 1) * page_size
 
-    # Применяем пагинацию
     pipeline.extend([
         {"$skip": skip},
         {"$limit": page_size}
     ])
 
-    # Выполняем агрегацию с пагинацией
-    chats_aggregation = await messages_collection.aggregate(pipeline).to_list()
+    chats_aggregation = await messages_collection.aggregate(pipeline).to_list(length=None)
 
-    # 2. Собираем данные для шаблона
+    # Получение пользователей
     chats_data = []
-    user_ids = [chat["_id"] for chat in chats_aggregation]
+    chat_user_ids = [chat["_id"] for chat in chats_aggregation]
 
-    if user_ids:
-        # Получаем информацию о пользователях
-        user_filter = {"id": {"$in": user_ids}}
-
-        # Фильтр по username если указан
+    users_dict = {}
+    if chat_user_ids:
+        user_filter = {"id": {"$in": chat_user_ids}}
         if username and username.strip():
             user_filter["username"] = {"$regex": username.strip(), "$options": "i"}
 
-        users_cursor = users_collection.find(user_filter)
-        users_list = await users_cursor.to_list(length=None)
-        users_dict = {user["id"]: user for user in users_list}
-    else:
-        users_dict = {}
+        users_list = await users_collection.find(user_filter).to_list(length=None)
+        users_dict = {u["id"]: u for u in users_list}
 
-    # 3. Обрабатываем каждый чат
+    # Формирование данных
     for chat in chats_aggregation:
-        user_id = chat["_id"]
-        user = users_dict.get(user_id)
-
-        # Пропускаем если пользователь не найден или не подходит под фильтр username
+        chat_user_id = chat["_id"]
+        user = users_dict.get(chat_user_id)
         if not user:
             continue
 
-        # Получаем последнее сообщение для превью
         last_message = await messages_collection.find_one(
-            {"from_id": user_id},
+            {"from_id": chat_user_id},
             sort=[("date", -1)]
         )
 
         last_message_text = ""
-        if last_message and last_message.get("message_object"):
-            message_text = last_message["message_object"]
-            last_message_text = message_text[:100] + "..." if len(message_text) > 100 else message_text
+        has_photo = False
+        if last_message:
+            msg_obj = last_message.get("message_object", "")
+            last_message_text = (msg_obj[:100] + "..." if len(msg_obj) > 100 else msg_obj) or "(без текста)"
+            has_photo = last_message.get("file_type") == "photo"
 
         chats_data.append({
-            "user_id": user_id,
-            "username": user.get("username", f"id{user_id}"),
+            "user_id": chat_user_id,
+            "username": user.get("username", f"id{chat_user_id}"),
             "full_name": user.get("full_name", "Неизвестный пользователь"),
             "banned": user.get("banned", "0"),
             "last_message_date": chat["last_message_date"],
             "message_count": chat["message_count"],
             "unread_count": chat["unread_count"],
-            "last_message_preview": last_message_text or "(без текста)",
-            "has_photo": last_message and last_message.get("file_type") == "photo" if last_message else False
+            "last_message_preview": last_message_text,
+            "has_photo": has_photo
         })
 
-    # 4. Фильтр по непрочитанным (после пагинации)
-    if has_unread:
-        chats_data = [chat for chat in chats_data if chat["unread_count"] > 0]
-        # Обновляем общее количество после фильтрации
+    # Фильтр по непрочитанным
+    if has_unread is True:
+        chats_data = [c for c in chats_data if c["unread_count"] > 0]
         total_chats = len(chats_data)
         total_pages = (total_chats + page_size - 1) // page_size
 
-    # 5. Рассчитываем диапазон отображаемых чатов
     start_chat = skip + 1
     end_chat = min(skip + len(chats_data), total_chats)
 
@@ -177,6 +180,7 @@ async def chats_page(
         "request": request,
         "chats": chats_data,
         "username": username,
+        "user_id": filter_user_id,  # ← int или None (безопасно)
         "date_from": date_from,
         "date_to": date_to,
         "has_unread": has_unread,

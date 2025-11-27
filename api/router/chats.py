@@ -1,5 +1,13 @@
 from fastapi.responses import StreamingResponse
 import httpx
+from fastapi import UploadFile, File
+from fastapi import FastAPI
+import time
+from typing import Dict, Any, Tuple
+import hashlib
+import json
+from aiogram.types import BufferedInputFile
+import time
 from typing import Union
 from fastapi import Query, HTTPException, Request, Depends
 import mimetypes
@@ -27,20 +35,56 @@ def build_pagination_url(page: int):
 templates.env.globals["build_pagination_url"] = build_pagination_url
 
 
+# In-memory кэш с улучшенной структурой
+chat_cache = {}
+CACHE_TTL = 300  # 5 минут
+
+
+def get_cache_key(username, user_id, date_from, date_to, has_unread, page):
+    """Создает уникальный ключ кэша на основе параметров"""
+    params_str = f"{username}_{user_id}_{date_from}_{date_to}_{has_unread}_{page}"
+    return hashlib.md5(params_str.encode()).hexdigest()
+
+
 @router.get("/chats/", response_class=HTMLResponse)
 async def chats_page(
-    request: Request,
-    username: Optional[str] = Query(None),
-    user_id: Union[str, None] = Query(None),
-    date_from: Optional[str] = Query(None),
-    date_to: Optional[str] = Query(None),
-    has_unread: Optional[bool] = Query(None),
-    page: int = Query(1, ge=1),
-    admin=Depends(get_current_admin)
+        request: Request,
+        username: Optional[str] = Query(None),
+        user_id: Union[str, None] = Query(None),
+        date_from: Optional[str] = Query(None),
+        date_to: Optional[str] = Query(None),
+        has_unread: Optional[bool] = Query(None),
+        page: int = Query(1, ge=1),
+        admin=Depends(get_current_admin)
 ):
     if not admin:
         return RedirectResponse("/auth/login")
 
+    # Создаем ключ кэша
+    cache_key = get_cache_key(username, user_id, date_from, date_to, has_unread, page)
+
+    # Проверяем кэш
+    current_time = time.time()
+    if cache_key in chat_cache:
+        cached_data, timestamp = chat_cache[cache_key]
+        if current_time - timestamp < CACHE_TTL:
+            logger.info(f"✅ Используем кэш для страницы {page}")
+            return templates.TemplateResponse("chats.html", {
+                "request": request,
+                "chats": cached_data["chats"],
+                "username": username,
+                "user_id": cached_data["user_id"],
+                "date_from": date_from,
+                "date_to": date_to,
+                "has_unread": has_unread,
+                "current_page": page,
+                "total_pages": cached_data["total_pages"],
+                "total_chats": cached_data["total_chats"],
+                "start_chat": cached_data["start_chat"],
+                "end_chat": cached_data["end_chat"]
+            })
+
+    # Если кэша нет или устарел, загружаем данные
     db = get_database_bot1()
     messages_collection = db["messages"]
 
@@ -187,11 +231,24 @@ async def chats_page(
     start_chat = skip + 1 if total_chats > 0 else 0
     end_chat = min(skip + len(chats_data), total_chats)
 
+    # Сохраняем в кэш
+    cache_data = {
+        "chats": chats_data,
+        "user_id": filter_user_id,
+        "total_pages": total_pages,
+        "total_chats": total_chats,
+        "start_chat": start_chat,
+        "end_chat": end_chat
+    }
+    chat_cache[cache_key] = (cache_data, current_time)
+
+    logger.info(f"✅ Данные закэшированы для страницы {page}")
+
     return templates.TemplateResponse("chats.html", {
         "request": request,
         "chats": chats_data,
         "username": username,
-        "user_id": filter_user_id,  # int | None → в шаблоне {{ user_id or '' }} работает
+        "user_id": filter_user_id,
         "date_from": date_from,
         "date_to": date_to,
         "has_unread": has_unread,
@@ -336,6 +393,8 @@ async def download_file_stream(
         raise HTTPException(status_code=401, detail="Unauthorized")
 
     try:
+        print(f"🎯 Скачивание файла {message_id}")
+
         db = get_database_bot1()
         messages_collection = db["messages"]
 
@@ -345,58 +404,42 @@ async def download_file_stream(
         if not message or not message.get("file_id"):
             raise HTTPException(status_code=404, detail="File not found")
 
-        user_id = message.get("user_id", "unknown")
-        file_type = message.get("file_type", "file")
-        file_name_original = message.get("file_name")
+        file_name_original = message.get("file_name", "")
+        db_mime_type = message.get("mime_type", "")
 
+        print(f"📁 Данные из БД: file_name='{file_name_original}', mime_type='{db_mime_type}'")
+
+        # Получаем file_path
         file = await bot1.get_file(message["file_id"])
         if not file.file_path:
             raise HTTPException(status_code=404, detail="File path missing")
 
         file_url = f"https://api.telegram.org/file/bot{bot1.token}/{file.file_path}"
 
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            response = await client.get(file_url)
-            if response.status_code != 200:
-                raise HTTPException(status_code=502, detail="Failed to fetch file from Telegram")
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            head_resp = await client.head(file_url)
+            if head_resp.status_code != 200:
+                raise HTTPException(status_code=502, detail="File unavailable on Telegram CDN")
 
-            content_type = response.headers.get("content-type") or "application/octet-stream"
+            # Определяем Content-Type
+            db_mime_type = (message.get("mime_type") or "").strip()
+            head_mime_type = (head_resp.headers.get("content-type") or "").strip()
+            content_type = db_mime_type or head_mime_type or "application/octet-stream"
 
-            ext = mimetypes.guess_extension(content_type)
-            if not ext:
-                path_ext = file.file_path.split('.')[-1].lower() if '.' in file.file_path else ''
-                if path_ext in {'pdf', 'doc', 'docx', 'xls', 'xlsx', 'txt', 'csv', 'json', 'xml', 'mp3', 'ogg', 'wav',
-                                'mp4', 'mov', 'avi', 'mkv', 'jpg', 'jpeg', 'png', 'gif', 'webp'}:
-                    ext = '.' + path_ext
+            # САМАЯ ПРОСТАЯ ЛОГИКА: используем ТОЛЬКО оригинальное имя файла
+            if file_name_original and file_name_original.strip():
+                # Очищаем имя от опасных символов, но сохраняем ВСЁ включая расширение
+                safe_name = "".join(c if c.isalnum() or c in "._- " else "_" for c in file_name_original.strip())
+                filename = safe_name
+            else:
+                # Если имени нет, используем только message_id с расширением из file_path
+                if file.file_path and '.' in file.file_path:
+                    ext = '.' + file.file_path.rsplit('.', 1)[-1].lower()
                 else:
                     ext = '.bin'
+                filename = f"{message_id}{ext}"
 
-            if ext == '.jpe':
-                ext = '.jpg'
-
-            type_name = {
-                'document': 'document',
-                'audio': 'audio',
-                'voice': 'voice',
-                'video': 'video',
-                'video_note': 'video_note',
-                'photo': 'photo',
-                'animation': 'animation',
-            }.get(file_type, 'file')
-
-            if file_name_original and file_name_original.strip():
-                safe_name = "".join(c if c.isalnum() or c in "._- " else "_" for c in file_name_original.strip())
-                if '.' in safe_name:
-                    orig_ext = '.' + safe_name.rsplit('.', 1)[-1].lower()
-                    if orig_ext == ext or (orig_ext in {'.jpeg', '.jpg'} and ext in {'.jpeg', '.jpg'}):
-                        filename = f"{type_name}_{user_id}_{message_id}_{safe_name}"
-                    else:
-                        base = safe_name.rsplit('.', 1)[0]
-                        filename = f"{type_name}_{user_id}_{message_id}_{base}{ext}"
-                else:
-                    filename = f"{type_name}_{user_id}_{message_id}_{safe_name}{ext}"
-            else:
-                filename = f"{type_name}_{user_id}_{message_id}{ext}"
+            print(f"📁 Финальное имя файла: {filename}")
 
             headers = {
                 "Content-Type": content_type,
@@ -404,8 +447,13 @@ async def download_file_stream(
                 "Cache-Control": "private, max-age=86400",
             }
 
+            # Стриминг файла
+            full_resp = await client.get(file_url)
+            if full_resp.status_code != 200:
+                raise HTTPException(status_code=502, detail="Failed to fetch file body")
+
             async def file_stream():
-                async for chunk in response.aiter_bytes(8192):
+                async for chunk in full_resp.aiter_bytes(65536):
                     yield chunk
 
             return StreamingResponse(file_stream(), headers=headers)
@@ -416,6 +464,50 @@ async def download_file_stream(
         logger.error(f"❌ Ошибка скачивания файла {message_id}: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
 
+
+@router.get("/chats/download-simple/{message_id}")
+async def download_file_simple(
+        message_id: str,
+        admin=Depends(get_current_admin)
+):
+    """Упрощенное скачивание файла"""
+    if not admin:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    db = get_database_bot1()
+    messages_collection = db["messages"]
+
+    from bson import ObjectId
+    message = await messages_collection.find_one({"_id": ObjectId(message_id)})
+
+    if not message or not message.get("file_id"):
+        raise HTTPException(status_code=404, detail="File not found")
+
+    # ПРОСТО ИСПОЛЬЗУЕМ ОРИГИНАЛЬНОЕ ИМЯ
+    filename = message.get("file_name", f"file_{message_id}").strip()
+
+    # Получаем file_path
+    file = await bot1.get_file(message["file_id"])
+    if not file.file_path:
+        raise HTTPException(status_code=404, detail="File path missing")
+
+    file_url = f"https://api.telegram.org/file/bot{bot1.token}/{file.file_path}"
+
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        resp = await client.get(file_url)
+        if resp.status_code != 200:
+            raise HTTPException(status_code=502, detail="Failed to fetch file")
+
+        headers = {
+            "Content-Type": resp.headers.get("content-type", "application/octet-stream"),
+            "Content-Disposition": f'attachment; filename="{quote(filename)}"',
+        }
+
+        async def file_stream():
+            async for chunk in resp.aiter_bytes(65536):
+                yield chunk
+
+        return StreamingResponse(file_stream(), headers=headers)
 
 @router.post("/chats/send/")
 async def send_operator_message(
@@ -490,6 +582,92 @@ async def send_operator_message(
         logger.error(f"❌ Ошибка отправки сообщения: {e}")
         return {"error": f"Внутренняя ошибка: {str(e)}"}
 
+# from fastapi import UploadFile, File
+#
+# @router.post("/chats/send/file/")
+# async def send_operator_file(
+#     user_id: int = Form(...),
+#     file: UploadFile = File(...),
+#     caption: str = Form(""),
+#     admin = Depends(get_current_admin)
+# ):
+#     if not admin:
+#         raise HTTPException(401)
+#
+#     # 1. Проверяем: не заблокирован ли
+#     db = get_database_bot1()
+#     users_collection = db["users"]
+#     user = await users_collection.find_one({"id": user_id})
+#     if user and user.get("banned") == "1":
+#         raise HTTPException(403, "Пользователь заблокирован")
+#
+#     # 2. Сохраняем временно на диск/в память
+#     contents = await file.read()
+#     mime_type = file.content_type or "application/octet-stream"
+#     filename = file.filename or f"file_{user_id}_{int(time.time())}"
+#
+#     # 3. Определяем, как отправлять
+#     try:
+#         if file.content_type and file.content_type.startswith("image/"):
+#             # Отправляем как фото
+#             input_file = BufferedInputFile(contents, filename=filename)
+#             msg = await bot1.send_photo(
+#                 chat_id=user_id,
+#                 photo=input_file,
+#                 caption=caption[:1024]
+#             )
+#             file_type = "photo"
+#
+#         elif file.content_type == "application/pdf" or filename.lower().endswith(('.pdf', '.doc', '.docx')):
+#             input_file = BufferedInputFile(contents, filename=filename)
+#             msg = await bot1.send_document(
+#                 chat_id=user_id,
+#                 document=input_file,
+#                 caption=caption[:1024]
+#             )
+#             file_type = "document"
+#
+#         elif file.content_type and file.content_type.startswith("audio/"):
+#             input_file = BufferedInputFile(contents, filename=filename)
+#             msg = await bot1.send_voice(
+#                 chat_id=user_id,
+#                 voice=input_file,
+#                 caption=caption[:1024]
+#             )
+#             file_type = "voice"  # или "audio"
+#
+#         else:
+#             # fallback — документ
+#             input_file = BufferedInputFile(contents, filename=filename)
+#             msg = await bot1.send_document(
+#                 chat_id=user_id,
+#                 document=input_file,
+#                 caption=caption[:1024]
+#             )
+#             file_type = "document"
+#
+#         # 4. Сохраняем в БД
+#         next_id = await get_next_message_id()
+#         await db["messages"].insert_one({
+#             "from_id": user_id,
+#             "message_object": caption,
+#             "file_id": msg.document.file_id if hasattr(msg, 'document') else
+#                       (msg.photo[-1].file_id if msg.photo else ""),
+#             "file_type": file_type,
+#             "file_name": filename,
+#             "mime_type": mime_type,
+#             "file_size": len(contents),
+#             "from_operator": "1",
+#             "checked": "1",
+#             "date": datetime.now(timezone.utc),
+#             "id": next_id
+#         })
+#
+#         return {"ok": True, "message_id": next_id}
+#
+#     except Exception as e:
+#         logger.error(f"Ошибка отправки файла админом: {e}")
+#         raise HTTPException(500, f"Не удалось отправить файл: {str(e)}")
 
 async def send_telegram_message(user_id: int, text: str) -> bool:
     """Отправить сообщение пользователю через Telegram Bot API"""

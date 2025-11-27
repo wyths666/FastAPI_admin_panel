@@ -1173,16 +1173,7 @@ async function loadChatHistory(userId, container) {
                                  style="max-width: 200px; max-height: 200px; border-radius: 8px; border: 2px solid var(--primary); cursor: pointer;"
                                  onclick="openChatPhoto('${photoId}')"
                                  onerror="console.error('❌ Ошибка загрузки фото: ${photoId}'); this.style.display='none'">
-                            <div style="margin-top: 6px; display: flex; gap: 6px; flex-wrap: wrap;">
-                                <button onclick="downloadPhoto('${photoId}', 'photo_${photoId}.jpg')"
-                                        style="background: #6c757d; color: white; border: none; padding: 4px 8px; font-size: 0.75rem; border-radius: 4px; cursor: pointer;">
-                                    📥 Скачать
-                                </button>
-                                <button onclick="openChatPhoto('${photoId}')"
-                                        style="background: var(--primary); color: white; border: none; padding: 4px 8px; font-size: 0.75rem; border-radius: 4px; cursor: pointer;">
-                                    🔍 Увеличить
-                                </button>
-                            </div>
+
                         </div>
                     `;
                 }).join('');
@@ -1199,108 +1190,26 @@ async function loadChatHistory(userId, container) {
                              style="max-width: 200px; max-height: 200px; border-radius: 8px; border: 2px solid var(--primary); cursor: pointer;"
                              onclick="openChatPhoto('${photoId}')"
                              onerror="console.error('❌ Ошибка загрузки фото: ${photoId}'); this.style.display='none'">
-                        <div style="margin-top: 6px; display: flex; gap: 6px; flex-wrap: wrap;">
-                            <button onclick="downloadPhoto('${photoId}', 'photo_${photoId}.jpg')"
-                                    style="background: #6c757d; color: white; border: none; padding: 4px 8px; font-size: 0.75rem; border-radius: 4px; cursor: pointer;">
-                                📥 Скачать
-                            </button>
-                            <button onclick="openChatPhoto('${photoId}')"
-                                    style="background: var(--primary); color: white; border: none; padding: 4px 8px; font-size: 0.75rem; border-radius: 4px; cursor: pointer;">
-                                🔍 Увеличить
-                            </button>
-                        </div>
+
                     </div>
                     ${renderText(msg.caption || msg.message)}
                 `;
             }
-            // 3. Документ — оставляем как есть, но linkify caption/message
+            // 3. Документ — название файла как ссылка для скачивания
             else if (msg.has_document) {
-                const fileSize = msg.file_size ? ` (${formatFileSize(msg.file_size)})` : '';
                 const fileName = msg.file_name || 'Файл';
-                const mimeType = msg.mime_type || 'Неизвестный тип';
-
                 content = `
-                    <div style="margin-bottom: 8px; padding: 10px; background: #f0f8ff; border-radius: 8px; border: 1px solid #d1e7ff;">
-                        <div style="display: flex; align-items: center; gap: 10px;">
-                            <span style="font-size: 1.5rem;">📎</span>
-                            <div style="flex: 1;">
-                                <div style="font-weight: bold; ${textStyles}">${escapeHtml(fileName)}</div>
-                                <div style="font-size: 0.8rem; color: #666; ${textStyles}">
-                                    ${escapeHtml(mimeType)}${fileSize}
-                                </div>
+                    <div style="flex: 1;">
+                                <a href="/chats/download-simple/${msg.id}"
+                                   style="font-weight: bold; ${textStyles} color: var(--primary); text-decoration: none; cursor: pointer;"
+                                   title="Скачать файл">
+                                    ${escapeHtml(fileName)}
+                                </a>
                             </div>
-                            <button onclick="downloadFile('${msg.id}')"
-                                    style="background: var(--primary); color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 0.8rem;">
-                                Скачать
-                            </button>
-                        </div>
-                    </div>
-                    ${renderText(msg.caption || msg.message)}
+                    ${renderText(msg.caption)}
                 `;
             }
-            // 4. Аудио
-            else if (msg.has_audio) {
-                const isVoice = msg.file_type === 'voice';
-                const icon = isVoice ? '🎤' : '🎵';
-                const label = isVoice ? 'Голосовое сообщение' : 'Аудио';
-                const fileSize = msg.file_size ? ` (${formatFileSize(msg.file_size)})` : '';
-                const mimeType = msg.mime_type || '';
 
-                content = `
-                    <div style="margin-bottom: 8px; padding: 10px; background: #fff0f5; border-radius: 8px; border: 1px solid #ffd1dc;">
-                        <div style="display: flex; align-items: center; gap: 10px;">
-                            <span style="font-size: 1.5rem;">${icon}</span>
-                            <div style="flex: 1;">
-                                <div style="font-weight: bold; ${textStyles}">${escapeHtml(label)}</div>
-                                <div style="font-size: 0.8rem; color: #666; ${textStyles}">
-                                    ${escapeHtml(mimeType)}${fileSize}
-                                </div>
-                            </div>
-                            <button onclick="playAudio('${msg.id}')"
-                                    style="background: var(--success); color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 0.8rem;">
-                                ▶️ Воспроизвести
-                            </button>
-                        </div>
-                    </div>
-                    ${renderText(msg.caption || msg.message)}
-                `;
-            }
-            // 5. Видео
-            else if (msg.has_video) {
-                const isVideoNote = msg.file_type === 'video_note';
-                const icon = isVideoNote ? '📹' : '🎥';
-                const label = isVideoNote ? 'Видео-кружочек' : 'Видео';
-                const fileSize = msg.file_size ? ` (${formatFileSize(msg.file_size)})` : '';
-                const mimeType = msg.mime_type || '';
-
-                content = `
-                    <div style="margin-bottom: 8px; padding: 10px; background: #f0f0f0; border-radius: 8px; border: 1px solid #ddd;">
-                        <div style="display: flex; align-items: center; gap: 10px;">
-                            <span style="font-size: 1.5rem;">${icon}</span>
-                            <div style="flex: 1;">
-                                <div style="font-weight: bold; ${textStyles}">${escapeHtml(label)}</div>
-                                <div style="font-size: 0.8rem; color: #666; ${textStyles}">
-                                    ${escapeHtml(mimeType)}${fileSize}
-                                </div>
-                            </div>
-                            <button onclick="playVideo('${msg.id}')"
-                                    style="background: var(--warning); color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 0.8rem;">
-                                ▶️ Смотреть
-                            </button>
-                        </div>
-                    </div>
-                    ${renderText(msg.caption || msg.message)}
-                `;
-            }
-            // 6. Стикер — без изменений
-            else if (msg.file_type === 'sticker') {
-                content = `
-                    <div style="margin-bottom: 8px; text-align: center;">
-                        <div style="font-size: 3rem; ${textStyles}">${escapeHtml(msg.message || '🖼️')}</div>
-                        <div style="font-size: 0.8rem; color: #666;">Стикер</div>
-                    </div>
-                `;
-            }
             // 7. Обычное текстовое сообщение
             else {
                 content = `<div style="${textStyles}">${linkify(msg.message || '(пустое сообщение)')}</div>`;
@@ -1334,23 +1243,6 @@ function formatFileSize(bytes) {
     if (bytes < 1024) return bytes + ' B';
     if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
     return (bytes / 1024 / 1024).toFixed(1) + ' MB';
-}
-
-function downloadFile(messageId, filename) {
-    const a = document.createElement('a');
-    a.href = `/chats/download/${messageId}`;
-    if (filename) a.download = filename; // для совместимости, если вдруг бэкенд не проставит Content-Disposition
-    document.body.appendChild(a);
-    a.click();
-    setTimeout(() => document.body.removeChild(a), 100);
-}
-
-function playAudio(messageId) {
-    window.open(`/chats/audio/${messageId}`, '_blank');
-}
-
-function playVideo(messageId) {
-    window.open(`/chats/video/${messageId}`, '_blank');
 }
 
 async function openChatPhoto(messageId) {

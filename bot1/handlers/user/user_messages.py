@@ -4,6 +4,7 @@ from aiogram.filters import Command, StateFilter
 from core.logger import bot_1_logger as logger
 from core.bot1 import bot1
 from db.beanie_bot1.models.models import Messages, Users
+import mimetypes
 from datetime import datetime, timezone
 from utils.database import get_database_bot1
 
@@ -139,25 +140,96 @@ async def extract_message_data_simple(message: Message) -> dict:
         file_type = "photo"
         file_size = message.photo[-1].file_size or 0
 
+
     elif message.document:
-        # Документ (файл)
-        message_object = message.caption or ""
-        file_id = message.document.file_id
+
+        doc = message.document
+        file_id = doc.file_id
+
         file_type = "document"
-        file_name = message.document.file_name or "Файл"
-        file_size = message.document.file_size or 0
-        mime_type = message.document.mime_type or ""
 
-        # Формируем информативное описание файла
+        file_size = doc.file_size or 0
+
+        # 1️⃣ Берём оригинальное имя, если есть
+
+        file_name = doc.file_name or ""
+
+        # 2️⃣ Определяем MIME-тип
+
+        mime_type = doc.mime_type or ""
+
+        # 3️⃣ Генерируем расширение — даже если нет имени и MIME
+
+        ext = ""
+
+        if mime_type:
+            ext = mimetypes.guess_extension(mime_type) or ""
+
+        if not ext and file_name and '.' in file_name:
+            ext = '.' + file_name.rsplit('.', 1)[-1].lower()
+
+        # 4️⃣ Если всё ещё нет — смотрим по file_id или типу
+
+        if not ext:
+
+            # Telegram часто даёт file_path в file_id через подстроку, но не надёжно.
+
+            # Лучше — fallback по размеру или типу
+
+            if file_size < 1024 * 1024 and mime_type == "":  # маленький файл → текст?
+
+                ext = ".txt"
+
+            elif mime_type.startswith("image/"):
+
+                ext = ".jpg"
+
+            elif mime_type.startswith("application/"):
+
+                ext = ".pdf"
+
+            else:
+
+                ext = ".bin"
+
+        # 5️⃣ Формируем file_name с расширением, если его не было
+
+        if file_name and '.' not in file_name:
+
+            file_name += ext
+
+        elif not file_name:
+
+            # Генерируем имя: document_{user_id}_{ts}{ext}
+
+            ts = int(datetime.now().timestamp())
+
+            file_name = f"document_{message.from_user.id}_{ts}{ext}"
+
+        # 6️⃣ Формируем caption (message_object)
+
+        message_object = message.caption or ""
+
         if not message_object:
-            file_info = []
-            if file_name:
-                file_info.append(f"📎 {file_name}")
-            if file_size:
-                size_mb = file_size / 1024 / 1024
-                file_info.append(f"({size_mb:.1f} MB)")
+            size_mb = file_size / 1024 / 1024
 
-            message_object = " ".join(file_info) if file_info else "📎 Файл"
+            message_object = f"📎 {file_name} ({size_mb:.1f} MB)" if file_size else f"📎 {file_name}"
+
+        return {
+
+            "message_object": message_object,
+
+            "file_id": file_id,
+
+            "file_type": file_type,
+
+            "file_name": file_name,
+
+            "file_size": file_size,
+
+            "mime_type": mime_type
+
+        }
 
     return {
         "message_object": message_object,

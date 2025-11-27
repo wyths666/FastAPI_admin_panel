@@ -39,7 +39,23 @@
             align-items: center;
             margin-bottom: 20px;
         }
-
+        .chat-attach-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    background: #f1f3f9;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font-size: 1.1rem;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+.chat-attach-btn:hover {
+    background: #e9ecef;
+    transform: scale(1.05);
+}
         .btn-logout {
             background: var(--danger);
             padding: 10px 20px;
@@ -828,18 +844,26 @@
         </div>
 
         <div class="chat-input-area">
-            <form class="chat-input-form" onsubmit="sendChatMessage(event)">
-                <textarea id="chatMessageInput"
+
+    <form class="chat-input-form" onsubmit="sendChatMessage(event)">
+        <textarea id="chatMessageInput"
           class="chat-input"
           placeholder="Введите сообщение..."
           rows="1"
           style="resize: none;"
           oninput="this.style.height = 'auto'; this.style.height = (this.scrollHeight) + 'px';"
           onkeydown="if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); document.querySelector('.chat-input-form').dispatchEvent(new Event('submit', { cancelable: true })); }"
-></textarea>
-                <button type="submit" class="chat-send">Отправить</button>
-            </form>
-        </div>
+        ></textarea>
+        <div style="display: flex; gap: 10px; align-items: center; margin-bottom: 5px;">
+        <label for="fileInput" class="chat-attach-btn" title="📎 Прикрепить файл">
+            📎
+        </label>
+        <input type="file" id="fileInput" style="display: none;" accept="*/*">
+        <div id="fileStatus" style="font-size: 0.9rem; color: var(--gray); flex: 1;"></div>
+    </div>
+        <button type="submit" class="chat-send">Отправить</button>
+    </form>
+</div>
     </div>
 </div>
 
@@ -1461,6 +1485,62 @@ async function sendChatMessage(event) {
         alert('Ошибка соединения');
     }
 }
+
+// === Отправка файла от оператора ===
+document.getElementById('fileInput').addEventListener('change', async function(e) {
+    const fileInput = e.target;
+    const file = fileInput.files[0];
+    const statusDiv = document.getElementById('fileStatus');
+    const chatInput = document.getElementById('chatMessageInput');
+
+    if (!file || !currentChatUserId) return;
+
+    // Очистим статус
+    statusDiv.textContent = `📤 Отправка ${file.name}...`;
+    statusDiv.style.color = '#6c757d';
+
+    const formData = new FormData();
+    formData.append('user_id', currentChatUserId);
+    formData.append('file', file);
+    const caption = chatInput.value.trim();
+    if (caption) {
+        formData.append('caption', caption);
+    }
+
+    try {
+        const response = await fetch('/chats/send/file/', {
+            method: 'POST',
+            body: formData
+        });
+
+        const result = await response.json();
+
+        if (response.ok && result.ok) {
+            statusDiv.textContent = `✅ ${file.name} отправлен`;
+            statusDiv.style.color = '#4cc9f0';
+            // Очищаем поле и инпут
+            chatInput.value = '';
+            adjustTextareaHeight(chatInput);
+            fileInput.value = ''; // сброс выбора
+            // Обновим чат
+            await loadChatHistory(currentChatUserId, document.getElementById('chatModalMessages'));
+        } else {
+            throw new Error(result.detail || 'Неизвестная ошибка');
+        }
+
+    } catch (error) {
+        console.error('❌ Ошибка отправки файла:', error);
+        statusDiv.textContent = `❌ ${error.message || 'Не удалось отправить файл'}`;
+        statusDiv.style.color = '#e63946';
+        // Не очищаем файл — дадим повторить
+    }
+
+    // Убираем статус через 3 сек
+    setTimeout(() => {
+        statusDiv.textContent = '';
+    }, 3000);
+});
+
 
 function startChatPolling(userId, container) {
     if (chatPollInterval) {

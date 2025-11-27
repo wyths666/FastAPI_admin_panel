@@ -1,7 +1,6 @@
 from fastapi.responses import StreamingResponse
 import httpx
-from fastapi import UploadFile, File
-from fastapi import FastAPI
+from fastapi import UploadFile, File, Form
 import time
 from typing import Dict, Any, Tuple
 import hashlib
@@ -586,92 +585,110 @@ async def send_operator_message(
         logger.error(f"❌ Ошибка отправки сообщения: {e}")
         return {"error": f"Внутренняя ошибка: {str(e)}"}
 
-# from fastapi import UploadFile, File
-#
-# @router.post("/chats/send/file/")
-# async def send_operator_file(
-#     user_id: int = Form(...),
-#     file: UploadFile = File(...),
-#     caption: str = Form(""),
-#     admin = Depends(get_current_admin)
-# ):
-#     if not admin:
-#         raise HTTPException(401)
-#
-#     # 1. Проверяем: не заблокирован ли
-#     db = get_database_bot1()
-#     users_collection = db["users"]
-#     user = await users_collection.find_one({"id": user_id})
-#     if user and user.get("banned") == "1":
-#         raise HTTPException(403, "Пользователь заблокирован")
-#
-#     # 2. Сохраняем временно на диск/в память
-#     contents = await file.read()
-#     mime_type = file.content_type or "application/octet-stream"
-#     filename = file.filename or f"file_{user_id}_{int(time.time())}"
-#
-#     # 3. Определяем, как отправлять
-#     try:
-#         if file.content_type and file.content_type.startswith("image/"):
-#             # Отправляем как фото
-#             input_file = BufferedInputFile(contents, filename=filename)
-#             msg = await bot1.send_photo(
-#                 chat_id=user_id,
-#                 photo=input_file,
-#                 caption=caption[:1024]
-#             )
-#             file_type = "photo"
-#
-#         elif file.content_type == "application/pdf" or filename.lower().endswith(('.pdf', '.doc', '.docx')):
-#             input_file = BufferedInputFile(contents, filename=filename)
-#             msg = await bot1.send_document(
-#                 chat_id=user_id,
-#                 document=input_file,
-#                 caption=caption[:1024]
-#             )
-#             file_type = "document"
-#
-#         elif file.content_type and file.content_type.startswith("audio/"):
-#             input_file = BufferedInputFile(contents, filename=filename)
-#             msg = await bot1.send_voice(
-#                 chat_id=user_id,
-#                 voice=input_file,
-#                 caption=caption[:1024]
-#             )
-#             file_type = "voice"  # или "audio"
-#
-#         else:
-#             # fallback — документ
-#             input_file = BufferedInputFile(contents, filename=filename)
-#             msg = await bot1.send_document(
-#                 chat_id=user_id,
-#                 document=input_file,
-#                 caption=caption[:1024]
-#             )
-#             file_type = "document"
-#
-#         # 4. Сохраняем в БД
-#         next_id = await get_next_message_id()
-#         await db["messages"].insert_one({
-#             "from_id": user_id,
-#             "message_object": caption,
-#             "file_id": msg.document.file_id if hasattr(msg, 'document') else
-#                       (msg.photo[-1].file_id if msg.photo else ""),
-#             "file_type": file_type,
-#             "file_name": filename,
-#             "mime_type": mime_type,
-#             "file_size": len(contents),
-#             "from_operator": "1",
-#             "checked": "1",
-#             "date": datetime.now(timezone.utc),
-#             "id": next_id
-#         })
-#
-#         return {"ok": True, "message_id": next_id}
-#
-#     except Exception as e:
-#         logger.error(f"Ошибка отправки файла админом: {e}")
-#         raise HTTPException(500, f"Не удалось отправить файл: {str(e)}")
+
+@router.post("/chats/send/file/")
+async def send_operator_file(
+    user_id: int = Form(...),
+    file: UploadFile = File(...),
+    caption: str = Form(""),
+    admin=Depends(get_current_admin)
+):
+    """Отправка файла от оператора пользователю — без Pydantic, как в /chats/send/"""
+    if not admin:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    try:
+        # 1. Проверка блокировки
+        db = get_database_bot1()
+        users_collection = db["users"]
+        user = await users_collection.find_one({"id": user_id})
+        if user and user.get("banned") == "1":
+            raise HTTPException(status_code=403, detail="Пользователь заблокирован")
+
+        # 2. Чтение файла
+        contents = await file.read()
+        file_size = len(contents)
+        if file_size > 50 * 1024 * 1024:
+            raise HTTPException(status_code=400, detail="Файл слишком большой (макс. 50MB)")
+
+        filename = file.filename or f"file_{int(time.time())}"
+        mime_type = file.content_type or "application/octet-stream"
+        input_file = BufferedInputFile(contents, filename=filename)
+
+        # 3. Отправка в Telegram
+        file_type = "document"
+        file_id = ""
+        msg = None
+
+        try:
+            if mime_type.startswith("image/"):
+                msg = await bot1.send_photo(chat_id=user_id, photo=input_file, caption=caption[:1024] or None)
+                file_type = "photo"
+                file_id = msg.photo[-1].file_id if msg.photo else ""
+            elif mime_type.startswith("video/"):
+                msg = await bot1.send_video(chat_id=user_id, video=input_file, caption=caption[:1024] or None)
+                file_type = "video"
+                file_id = msg.video.file_id if msg.video else ""
+            elif mime_type.startswith("audio/"):
+                msg = await bot1.send_audio(chat_id=user_id, audio=input_file, caption=caption[:1024] or None)
+                file_type = "audio"
+                file_id = msg.audio.file_id if msg.audio else ""
+            else:
+                msg = await bot1.send_document(chat_id=user_id, document=input_file, caption=caption[:1024] or None)
+                file_type = "document"
+                file_id = msg.document.file_id if msg.document else ""
+        except Exception as e:
+            logger.error(f"❌ Telegram отправка не удалась: {e}")
+            # Не прерываем — сохраним как "не доставлено", как в send/
+            pass
+
+        # 4. Генерация next_id — КАК В send/ !
+        messages_collection = db["messages"]
+        last_message = await messages_collection.find_one(
+            {},
+            sort=[("id", -1)],
+            projection={"id": 1}
+        )
+        next_id = last_message["id"] + 1 if last_message else 1
+
+        # 5. Подготовка данных — как в send/
+        message_text = caption or f"📎 {filename}"
+        if msg is None:  # Telegram не отправился
+            message_text += " (не доставлено)"
+
+        message_data = {
+            "from_id": user_id,
+            "message_object": message_text,
+            "checked": "1",
+            "date": datetime.now(timezone.utc),
+            "file_id": file_id,
+            "file_type": file_type,
+            "from_operator": "1",
+            "id": next_id,
+            "file_name": filename,
+            "file_size": file_size,
+            "mime_type": mime_type
+        }
+
+        # ❗❗❗ Ключевое — НЕ использовать Pydantic при вставке — просто dict
+        await messages_collection.insert_one(message_data)
+
+        # ✅ Возвращаем как в send/
+        return {
+            "ok": True,
+            "message_id": next_id,
+            "file_type": file_type,
+            "filename": filename,
+            "delivered": msg is not None
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ Ошибка отправки файла: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Не удалось отправить файл: {str(e)}")
+
+
 
 async def send_telegram_message(user_id: int, text: str) -> bool:
     """Отправить сообщение пользователю через Telegram Bot API"""

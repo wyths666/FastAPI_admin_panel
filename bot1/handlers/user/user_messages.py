@@ -251,17 +251,32 @@ def get_full_name(user):
 
 
 async def get_next_message_id() -> int:
-    """Получить следующий ID для сообщения"""
+    """Атомарное получение следующего ID через отдельную коллекцию счетчиков"""
     db = get_database_bot1()
-    messages_collection = db["messages"]
+    counters_collection = db["counters"]
 
-    # Находим последнее сообщение по полю id
-    last_message = await messages_collection.find_one(
-        {},
-        sort=[("id", -1)]
-    )
+    try:
+        # Атомарно инкрементируем счетчик
+        result = await counters_collection.find_one_and_update(
+            {"_id": "message_id"},
+            {"$inc": {"seq": 1}},
+            upsert=True,
+            return_document=True,
+            projection={"seq": 1}
+        )
 
-    return last_message["id"] + 1 if last_message else 1
+        return result["seq"]
+
+    except Exception as e:
+        logger.error(f"❌ Ошибка получения ID через счетчик: {e}")
+        # Fallback: пытаемся найти максимальный ID
+        messages_collection = db["messages"]
+        last_message = await messages_collection.find_one(
+            {},
+            sort=[("id", -1)],
+            projection={"id": 1}
+        )
+        return last_message["id"] + 1 if last_message else 1
 
 async def save_user_message(user_id: int, username: str, full_name: str,
                             message_data: dict, message_id: int):

@@ -1248,20 +1248,147 @@ async function openChatPhoto(messageId) {
             cursor: pointer; padding: 20px;
         `;
 
+        let scale = 1;
+        const minScale = 0.3;
+        const maxScale = 3;
+        const scaleStep = 0.2;
+
         modal.innerHTML = `
-            <button onclick="this.parentElement.remove()"
-                    style="align-self: flex-end; background: #fff; color: #000;
-                           border: none; width: 36px; height: 36px; border-radius: 50%;
-                           font-size: 1.4rem; margin-bottom: 10px; cursor: pointer;">
-                ×
-            </button>
-            <img src="${photoUrl}"
-                 alt="Фото из чата"
-                 style="max-width: 95%; max-height: 85vh; object-fit: contain;
-                        border-radius: 4px; box-shadow: 0 4px 12px rgba(0,0,0,0.5);"
-                 onerror="alert('Не удалось загрузить фото')">
+            <div style="position: absolute; top: 20px; right: 20px; display: flex; gap: 10px; z-index: 10001;">
+                <button onclick="downloadCurrentPhoto('${messageId}')"
+                        style="background: rgba(255,255,255,0.2); color: white; border: none;
+                               width: 40px; height: 40px; border-radius: 50%; font-size: 1.2rem;
+                               cursor: pointer; backdrop-filter: blur(10px); transition: all 0.2s;"
+                        onmouseover="this.style.background='rgba(255,255,255,0.3)'"
+                        onmouseout="this.style.background='rgba(255,255,255,0.2)'"
+                        title="Скачать фото">
+                    ⤓
+                </button>
+                <button onclick="this.closest('div').remove()"
+                        style="background: rgba(255,255,255,0.2); color: white; border: none;
+                               width: 40px; height: 40px; border-radius: 50%; font-size: 1.4rem;
+                               cursor: pointer; backdrop-filter: blur(10px); transition: all 0.2s;"
+                        onmouseover="this.style.background='rgba(255,0,0,0.3)'"
+                        onmouseout="this.style.background='rgba(255,255,255,0.2)'"
+                        title="Закрыть">
+                    ×
+                </button>
+            </div>
+
+            <div id="photoContainer" style="position: relative; display: flex; justify-content: center; align-items: center;">
+                <img id="modalPhoto" src="${photoUrl}"
+                     alt="Фото из чата"
+                     style="max-width: 95%; max-height: 85vh; object-fit: contain;
+                            border-radius: 4px; box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+                            transform: scale(1); transition: transform 0.3s ease; cursor: move;"
+                     onerror="alert('Не удалось загрузить фото')">
+
+                <!-- Кнопки масштабирования -->
+                <div style="position: absolute; bottom: -60px; left: 50%; transform: translateX(-50%);
+                            display: flex; gap: 15px; align-items: center; background: rgba(0,0,0,0.5);
+                            padding: 10px 20px; border-radius: 25px; backdrop-filter: blur(10px);">
+                    <button onclick="zoomOut()"
+                            style="background: rgba(255,255,255,0.2); color: white; border: none;
+                                   width: 36px; height: 36px; border-radius: 50%; font-size: 1.2rem;
+                                   cursor: pointer; transition: all 0.2s;"
+                            onmouseover="this.style.background='rgba(255,255,255,0.3)'"
+                            onmouseout="this.style.background='rgba(255,255,255,0.2)'"
+                            title="Уменьшить">
+                        −
+                    </button>
+
+                    <span id="scaleIndicator"
+                          style="color: white; font-size: 0.9rem; min-width: 50px; text-align: center;">
+                        100%
+                    </span>
+
+                    <button onclick="zoomIn()"
+                            style="background: rgba(255,255,255,0.2); color: white; border: none;
+                                   width: 36px; height: 36px; border-radius: 50%; font-size: 1.2rem;
+                                   cursor: pointer; transition: all 0.2s;"
+                            onmouseover="this.style.background='rgba(255,255,255,0.3)'"
+                            onmouseout="this.style.background='rgba(255,255,255,0.2)'"
+                            title="Увеличить">
+                        +
+                    </button>
+
+                    <button onclick="resetZoom()"
+                            style="background: rgba(255,255,255,0.2); color: white; border: none;
+                                   width: 36px; height: 36px; border-radius: 50%; font-size: 0.9rem;
+                                   cursor: pointer; transition: all 0.2s; margin-left: 10px;"
+                            onmouseover="this.style.background='rgba(255,255,255,0.3)'"
+                            onmouseout="this.style.background='rgba(255,255,255,0.2)'"
+                            title="Сбросить масштаб">
+                        ⟳
+                    </button>
+                </div>
+            </div>
         `;
 
+        // Функции масштабирования
+        window.zoomIn = function() {
+            if (scale < maxScale) {
+                scale = Math.min(maxScale, scale + scaleStep);
+                updateScale();
+            }
+        };
+
+        window.zoomOut = function() {
+            if (scale > minScale) {
+                scale = Math.max(minScale, scale - scaleStep);
+                updateScale();
+            }
+        };
+
+        window.resetZoom = function() {
+            scale = 1;
+            updateScale();
+        };
+
+        function updateScale() {
+            const img = modal.querySelector('#modalPhoto');
+            const indicator = modal.querySelector('#scaleIndicator');
+            if (img) {
+                img.style.transform = `scale(${scale})`;
+                indicator.textContent = `${Math.round(scale * 100)}%`;
+            }
+        }
+
+        // Drag to move (простая реализация)
+        let isDragging = false;
+        let startX, startY, scrollLeft, scrollTop;
+
+        const photoContainer = modal.querySelector('#photoContainer');
+        const img = modal.querySelector('#modalPhoto');
+
+        img.addEventListener('mousedown', (e) => {
+            if (scale > 1) {
+                isDragging = true;
+                startX = e.pageX - photoContainer.offsetLeft;
+                startY = e.pageY - photoContainer.offsetTop;
+                scrollLeft = photoContainer.scrollLeft;
+                scrollTop = photoContainer.scrollTop;
+                img.style.cursor = 'grabbing';
+            }
+        });
+
+        modal.addEventListener('mousemove', (e) => {
+            if (!isDragging) return;
+            e.preventDefault();
+            const x = e.pageX - photoContainer.offsetLeft;
+            const y = e.pageY - photoContainer.offsetTop;
+            const walkX = (x - startX) * 2;
+            const walkY = (y - startY) * 2;
+            photoContainer.scrollLeft = scrollLeft - walkX;
+            photoContainer.scrollTop = scrollTop - walkY;
+        });
+
+        modal.addEventListener('mouseup', () => {
+            isDragging = false;
+            img.style.cursor = scale > 1 ? 'grab' : 'move';
+        });
+
+        // Закрытие по клику на фон или Escape
         modal.onclick = (e) => {
             if (e.target === modal) modal.remove();
         };
@@ -1273,12 +1400,32 @@ async function openChatPhoto(messageId) {
             }
         });
 
+        // Wheel zoom
+        modal.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            if (e.deltaY < 0) {
+                zoomIn();
+            } else {
+                zoomOut();
+            }
+        });
+
         document.body.appendChild(modal);
 
     } catch (error) {
         console.error("❌ openChatPhoto error:", error);
         alert(`❌ Не удалось открыть фото: ${error.message}`);
     }
+}
+
+// Функция скачивания
+function downloadCurrentPhoto(messageId) {
+    const a = document.createElement('a');
+    a.href = `/chats/photo/${messageId}`;
+    a.download = `photo_${messageId}.jpg`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
 }
 
 function adjustTextareaHeight(textarea) {

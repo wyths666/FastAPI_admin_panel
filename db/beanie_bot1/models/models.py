@@ -63,8 +63,8 @@ class Messages(Document):
             # Для поиска непрочитанных сообщений
             IndexModel([("checked", ASCENDING), ("from_id", ASCENDING)]),
 
-            # Уникальный индекс для id сообщения
-            IndexModel([("id", ASCENDING)], unique=True)
+            # # Уникальный индекс для id сообщения
+            # IndexModel([("id", ASCENDING)], unique=True)
         ]
 
 

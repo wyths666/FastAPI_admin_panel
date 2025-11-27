@@ -42,6 +42,9 @@ async def init_database_bot1():
     _client_bot1 = AsyncIOMotorClient(cnf.mongo_bot1.URL)
     database = _client_bot1[cnf.mongo_bot1.NAME]
 
+    # 🔧 УДАЛЯЕМ ПРОБЛЕМНЫЕ ИНДЕКСЫ ПЕРЕД ИНИЦИАЛИЗАЦИЕЙ
+    await remove_problematic_indexes(database)
+
     await init_beanie(
         database=database,
         document_models=bot1_models
@@ -49,31 +52,6 @@ async def init_database_bot1():
 
     _is_initialized_bot1 = True
     print("✅ База данных Бот-1 инициализирована")
-
-    # Инициализация счетчика сообщений
-    counters_collection = database["counters"]
-    messages_collection = database["messages"]
-
-    try:
-        counter = await counters_collection.find_one({"_id": "message_id"})
-        if not counter:
-            # Находим максимальный ID в сообщениях
-            last_message = await messages_collection.find_one(
-                {},
-                sort=[("id", -1)],
-                projection={"id": 1}
-            )
-            initial_value = last_message["id"] + 1 if last_message else 1
-
-            await counters_collection.insert_one({
-                "_id": "message_id",
-                "seq": initial_value
-            })
-            print(f"✅ Инициализирован счетчик сообщений со значением: {initial_value}")
-        else:
-            print(f"✅ Счетчик сообщений уже инициализирован: {counter['seq']}")
-    except Exception as e:
-        print(f"⚠️ Предупреждение при инициализации счетчика: {e}")
 
     # Проверяем загрузку данных
     from db.beanie_bot1.models import Users, Products, Messages
@@ -85,6 +63,31 @@ async def init_database_bot1():
 
     return database
 
+
+async def remove_problematic_indexes(database):
+    """Удаляет проблемные индексы с детальной информацией"""
+    try:
+        messages_collection = database["messages"]
+        indexes = await messages_collection.index_information()
+
+        print("🔍 Проверка индексов коллекции messages:")
+        for name, info in indexes.items():
+            unique = info.get('unique', False)
+            print(f"   {name}: {info['key']} {'(UNIQUE)' if unique else ''}")
+
+        # Удаляем только уникальный индекс для id
+        if 'id_1' in indexes:
+            index_info = indexes['id_1']
+            if index_info.get('unique', False):
+                await messages_collection.drop_index('id_1')
+                print("✅ Удален уникальный индекс id_1")
+            else:
+                print("ℹ️ Индекс id_1 не уникальный, оставляем")
+        else:
+            print("ℹ️ Индекс id_1 не найден")
+
+    except Exception as e:
+        print(f"⚠️ Ошибка при проверке/удалении индексов: {e}")
 
 def get_database():
     """Получить основную базу данных"""

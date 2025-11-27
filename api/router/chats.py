@@ -35,15 +35,18 @@ def build_pagination_url(page: int):
 templates.env.globals["build_pagination_url"] = build_pagination_url
 
 
-# In-memory кэш с улучшенной структурой
+# In-memory кэш
 chat_cache = {}
-CACHE_TTL = 300  # 5 минут
+CACHE_TTL = 30
 
 
 def get_cache_key(username, user_id, date_from, date_to, has_unread, page):
     """Создает уникальный ключ кэша на основе параметров"""
     params_str = f"{username}_{user_id}_{date_from}_{date_to}_{has_unread}_{page}"
     return hashlib.md5(params_str.encode()).hexdigest()
+
+
+
 
 
 @router.get("/chats/", response_class=HTMLResponse)
@@ -298,6 +301,7 @@ async def get_chat_history(
                 "$set": {"checked": "1"}
             }
         )
+
 
     # 3. Преобразуем в нужный формат
     messages_data = []
@@ -712,8 +716,10 @@ async def ban_user_chat(
         )
 
         if result.modified_count > 0:
+
             return {"ok": True, "message": f"Пользователь {user_id} заблокирован"}
         else:
+
             return {"ok": False, "error": "Пользователь не найден или уже заблокирован"}
 
     except Exception as e:
@@ -743,8 +749,10 @@ async def unban_user_chat(
         )
 
         if result.modified_count > 0:
+
             return {"ok": True, "message": f"Пользователь {user_id} разблокирован"}
         else:
+
             return {"ok": False, "error": "Пользователь не найден или уже разблокирован"}
 
     except Exception as e:

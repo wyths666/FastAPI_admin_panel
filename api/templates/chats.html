@@ -1197,18 +1197,9 @@ async function loadChatHistory(userId, container) {
             }
             // 3. Документ — название файла как ссылка для скачивания
             else if (msg.has_document) {
-                const fileName = msg.file_name || 'Файл';
-                content = `
-                    <div style="flex: 1;">
-                                <a href="/chats/download-simple/${msg.id}"
-                                   style="font-weight: bold; ${textStyles} color: var(--primary); text-decoration: none; cursor: pointer;"
-                                   title="Скачать файл">
-                                    ${escapeHtml(fileName)}
-                                </a>
-                            </div>
-                    ${renderText(msg.caption)}
-                `;
-            }
+    const fileName = msg.file_name || 'Файл';
+    content = `<div style="display: flex; align-items: center; margin: 0;">📂&nbsp;<a href="/chats/download-simple/${msg.id}" style="font-weight: bold; ${textStyles} color: var(--primary); text-decoration: none; cursor: pointer;" title="Скачать файл">${escapeHtml(fileName)}</a></div>${msg.caption ? renderText(msg.caption) : ''}`;
+}
 
             // 7. Обычное текстовое сообщение
             else {

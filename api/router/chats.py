@@ -36,7 +36,7 @@ templates.env.globals["build_pagination_url"] = build_pagination_url
 
 # In-memory кэш
 chat_cache = {}
-CACHE_TTL = 30
+CACHE_TTL = 15
 
 
 def get_cache_key(username, user_id, date_from, date_to, has_unread, page):
@@ -345,39 +345,30 @@ async def get_chat_photo_stream(
         if not message or message.get("file_type") != "photo" or not message.get("file_id"):
             raise HTTPException(status_code=404, detail="Photo not found")
 
+        filename = f"photo_{message_id}.jpg"
+
         file = await bot1.get_file(message["file_id"])
         if not file.file_path:
             raise HTTPException(status_code=404, detail="File path missing")
 
-        photo_url = f"https://api.telegram.org/file/bot{bot1.token}/{file.file_path}"
+        file_url = f"https://api.telegram.org/file/bot{bot1.token}/{file.file_path}"
 
         async with httpx.AsyncClient(timeout=30.0) as client:
-            resp = await client.get(photo_url)
+            resp = await client.get(file_url)
             if resp.status_code != 200:
-                raise HTTPException(status_code=502, detail="Failed to fetch photo from Telegram")
-
-            content_type = resp.headers.get("content-type")
-            if not content_type:
-                content_type = "image/jpeg"
-
-            ext = mimetypes.guess_extension(content_type)
-            if ext == ".jpe" or not ext:
-                ext = ".jpg"
-
-            user_id = message.get("user_id", "unknown")
-            filename = f"photo_{user_id}_{message_id}{ext}"
+                raise HTTPException(status_code=502, detail="Failed to fetch photo")
 
             headers = {
-                "Content-Type": content_type,
+                "Content-Type": "image/jpeg",
                 "Content-Disposition": f'attachment; filename="{quote(filename)}"',
                 "Cache-Control": "private, max-age=86400",
             }
 
-            async def stream_file():
-                async for chunk in resp.aiter_bytes():
+            async def file_stream():
+                async for chunk in resp.aiter_bytes(65536):
                     yield chunk
 
-            return StreamingResponse(stream_file(), headers=headers)
+            return StreamingResponse(file_stream(), headers=headers)
 
     except HTTPException:
         raise
@@ -396,8 +387,6 @@ async def download_file_stream(
         raise HTTPException(status_code=401, detail="Unauthorized")
 
     try:
-        print(f"🎯 Скачивание файла {message_id}")
-
         db = get_database_bot1()
         messages_collection = db["messages"]
 
@@ -410,9 +399,7 @@ async def download_file_stream(
         file_name_original = message.get("file_name", "")
         db_mime_type = message.get("mime_type", "")
 
-        print(f"📁 Данные из БД: file_name='{file_name_original}', mime_type='{db_mime_type}'")
 
-        # Получаем file_path
         file = await bot1.get_file(message["file_id"])
         if not file.file_path:
             raise HTTPException(status_code=404, detail="File path missing")
@@ -424,18 +411,14 @@ async def download_file_stream(
             if head_resp.status_code != 200:
                 raise HTTPException(status_code=502, detail="File unavailable on Telegram CDN")
 
-            # Определяем Content-Type
             db_mime_type = (message.get("mime_type") or "").strip()
             head_mime_type = (head_resp.headers.get("content-type") or "").strip()
             content_type = db_mime_type or head_mime_type or "application/octet-stream"
 
-            # САМАЯ ПРОСТАЯ ЛОГИКА: используем ТОЛЬКО оригинальное имя файла
             if file_name_original and file_name_original.strip():
-                # Очищаем имя от опасных символов, но сохраняем ВСЁ включая расширение
                 safe_name = "".join(c if c.isalnum() or c in "._- " else "_" for c in file_name_original.strip())
                 filename = safe_name
             else:
-                # Если имени нет, используем только message_id с расширением из file_path
                 if file.file_path and '.' in file.file_path:
                     ext = '.' + file.file_path.rsplit('.', 1)[-1].lower()
                 else:
@@ -450,7 +433,6 @@ async def download_file_stream(
                 "Cache-Control": "private, max-age=86400",
             }
 
-            # Стриминг файла
             full_resp = await client.get(file_url)
             if full_resp.status_code != 200:
                 raise HTTPException(status_code=502, detail="Failed to fetch file body")
@@ -670,10 +652,8 @@ async def send_operator_file(
             "mime_type": mime_type
         }
 
-        # ❗❗❗ Ключевое — НЕ использовать Pydantic при вставке — просто dict
         await messages_collection.insert_one(message_data)
 
-        # ✅ Возвращаем как в send/
         return {
             "ok": True,
             "message_id": next_id,

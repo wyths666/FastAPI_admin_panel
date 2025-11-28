@@ -830,7 +830,7 @@
 
             <!-- СЕКЦИЯ ЧАТА -->
             <div class="chat-section">
-    {% if claim.claim_status == 'process' %}
+    {% if claim.claim_status != 'cancelled' %}
     <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
         <button class="chat-toggle" onclick="toggleChat(this, '{{ claim.claim_id }}', {{ claim.user_id }})">
             💬 Чат с клиентом

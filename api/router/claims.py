@@ -1,5 +1,9 @@
 import json
 from pathlib import Path
+from urllib.parse import quote
+from fastapi.responses import StreamingResponse
+import httpx
+from aiogram.types import BufferedInputFile
 from beanie import PydanticObjectId
 from core.logger import api_logger as logger
 from datetime import datetime, timezone
@@ -10,11 +14,11 @@ from fastapi.templating import Jinja2Templates
 from fastapi.responses import Response, RedirectResponse
 from api.router.auth import get_current_admin
 from api.schemas.response import ClaimResponse, ChatMessageSchema, CloseChatRequest
-
+from fastapi import Form, UploadFile, File
 from config import cnf
 from core.bot import bot
 from db.beanie.models import Claim, UserMessage, ChatSession, User, AdminMessage
-from db.beanie.models.models import ChatMessage, KonsolPayment
+from db.beanie.models.models import ChatMessage, KonsolPayment, SupportSession
 from utils.konsol_client import konsol_client
 
 router = APIRouter(prefix="/claims", tags=["Claims"])
@@ -82,13 +86,10 @@ async def claims_page(
     if not admin:
         return RedirectResponse("/auth/login")
 
-    query = {"process_status": "complete"}  # ← ДОБАВЛЕНО: фильтр по статусу процесса
+    query = {"process_status": "complete"}
 
-    # Фильтр по пользователю
     if user_id:
         query["user_id"] = user_id
-
-    # Фильтр по статусу заявки (claim_status)
     if status:
         query["claim_status"] = status
 
@@ -100,10 +101,8 @@ async def claims_page(
         except ValueError:
             pass
 
-    # Базовый запрос
     claims_query = Claim.find(query)
 
-    # Фильтр по дате (отдельно, т.к. это диапазон)
     if date_from:
         try:
             dt = datetime.fromisoformat(date_from).replace(tzinfo=timezone.utc)
@@ -122,24 +121,25 @@ async def claims_page(
 
     claims = await claims_query.sort("-created_at").to_list()
 
-    # СОБИРАЕМ ID всех пользователей в текущей выборке
     user_ids = list(set([claim.user_id for claim in claims]))
-
-    # АГРЕГАЦИЯ: подсчитываем заявки для каждого пользователя
     user_claims_count = {}
-    for user_id in user_ids:
-        count = await Claim.find({"user_id": user_id, "process_status": "complete"}).count()  # ← ДОБАВЛЕН фильтр
-        user_claims_count[str(user_id)] = count
+    for uid in user_ids:
+        count = await Claim.find({"user_id": uid, "process_status": "complete"}).count()
+        user_claims_count[str(uid)] = count
 
-    # Подготавливаем данные
     claims_data = []
     for claim in claims:
         user_id_str = str(claim.user_id)
         total_claims = user_claims_count.get(user_id_str, 1)
-        previous_claims = total_claims - 1
         user = await get_user_safe(claim.user_id)
 
-        # ПРАВИЛЬНЫЙ СИНТАКСИС ДЛЯ ПОИСКА ЧАТ-СЕССИИ
+        # 🔍 Проверка активной сессии поддержки
+        active_support = await SupportSession.find_one(
+            SupportSession.user_id == claim.user_id,
+            SupportSession.resolved == False
+        )
+        has_active_support_session = active_support is not None
+
         chat_session = await ChatSession.find_one(
             {"claim_id": claim.claim_id, "is_active": True}
         )
@@ -160,11 +160,12 @@ async def claims_page(
             "photo_count": len(claim.photo_file_ids),
             "photo_file_ids": claim.photo_file_ids,
             "claim_status": claim.claim_status,
-            "process_status": claim.process_status,  # ← теперь всегда "complete"
+            "process_status": claim.process_status,
             "created_at": claim.created_at,
             "is_chat_active": chat_session is not None,
             "has_unanswered": chat_session.has_unanswered if chat_session else False,
-            "old_claims": total_claims
+            "old_claims": total_claims,
+            "has_active_support_session": has_active_support_session,  # ← новое поле
         })
 
     banks = load_banks()
@@ -182,7 +183,7 @@ async def claims_page(
             {"id": "pending", "name": "✅ Подтверждёно"},
             {"id": "process", "name": "🆕 Не обработано"},
             {"id": "cancelled", "name": "❌ Отменёно"},
-            ]
+        ]
     })
 
 # --- 2. API: создать чат-сессию ---
@@ -251,7 +252,6 @@ async def send_chat_message_endpoint(data: dict):
     photo_file_id = data.get("photo_file_id")
     photo_caption = data.get("photo_caption", "")
 
-
     if not claim_id or (not text and not has_photo):
         error_msg = "claim_id and text or photo required"
         logger.error(f"❌ [ChatSend] {error_msg}")
@@ -265,8 +265,23 @@ async def send_chat_message_endpoint(data: dict):
             logger.error(f"❌ [ChatSend] {error_msg}")
             raise HTTPException(status_code=404, detail=error_msg)
 
+        # 🔍 Проверяем, есть ли у пользователя ОТКРЫТАЯ support-сессия
+        active_support_session = await SupportSession.find_one(
+            SupportSession.user_id == claim.user_id,
+            SupportSession.resolved == False
+        )
+        if active_support_session:
+            warning_msg = (
+                "У пользователя есть открытая сессия в технической поддержке. "
+                "Отправка сообщения невозможна, пока сессия не будет закрыта."
+            )
+            logger.warning(
+                f"⚠️ [ChatSend] claim_id={claim_id}, user_id={claim.user_id} — "
+                f"активная SupportSession (id={active_support_session.id}). Отмена отправки."
+            )
+            raise HTTPException(status_code=409, detail=warning_msg)  # 409 Conflict
 
-        # Отправляем в Telegram
+        # ✅ Продолжаем отправку — активной сессии нет
         if has_photo and photo_file_id:
             logger.info(f"📸 [ChatSend] Отправка фото: file_id={photo_file_id}")
             await bot.send_photo(
@@ -278,44 +293,123 @@ async def send_chat_message_endpoint(data: dict):
             logger.info(f"💬 [ChatSend] Отправка текста: '{text}'")
             await bot.send_message(chat_id=claim.user_id, text=text)
 
-
         # Сохраняем в БД
-        try:
-            msg = ChatMessage(
-                session_id=claim_id,  # используем claim_id как session_id
-                claim_id=claim_id,
-                user_id=claim.user_id,
-                message=text,
-                is_bot=is_bot,
-                has_photo=has_photo,
-                photo_file_id=photo_file_id,
-                photo_caption=photo_caption,
-                timestamp=datetime.now()
-            )
-            await msg.insert()
+        msg = ChatMessage(
+            session_id=claim_id,
+            claim_id=claim_id,
+            user_id=claim.user_id,
+            message=text,
+            is_bot=is_bot,
+            has_photo=has_photo,
+            photo_file_id=photo_file_id,
+            photo_caption=photo_caption,
+            timestamp=datetime.now()
+        )
+        await msg.insert()
 
-        except Exception as db_error:
-            logger.error(f"❌ [ChatSend] Ошибка сохранения в БД: {db_error}")
-            # НЕ выбрасываем исключение, т.к. сообщение уже отправлено в Telegram
-            # Просто логируем ошибку
+        # Обновляем сессию чата
+        session = await ChatSession.find_one({"claim_id": claim_id})
+        if session:
+            session.last_interaction = datetime.now()
+            session.has_unanswered = False
+            await session.save()
 
-        # Обновляем сессию
-        try:
-            session = await ChatSession.find_one({"claim_id": claim_id})
-            if session:
-                session.last_interaction = datetime.now()
-                session.has_unanswered = False  # сбрасываем т.к. админ ответил
-                await session.save()
-        except Exception as session_error:
-            logger.error(f"⚠️ [ChatSend] Ошибка обновления сессии: {session_error}")
+        return {"ok": True, "message_id": str(msg.id)}
 
-        return {"ok": True, "message_id": str(msg.id) if 'msg' in locals() else "unknown"}
-
+    except HTTPException:
+        raise  # прокидываем HTTP-ошибки выше
     except Exception as e:
         error_msg = f"Ошибка отправки сообщения: {str(e)}"
         logger.error(f"❌ [ChatSend] {error_msg}")
         raise HTTPException(status_code=500, detail=error_msg)
 
+
+from aiogram.types import BufferedInputFile
+import mimetypes
+from datetime import datetime
+
+
+@router.post("/chat/send-file")
+async def send_chat_file_endpoint(
+    claim_id: str = Form(...),
+    file: UploadFile = File(...),
+    caption: str = Form(""),
+    admin=Depends(get_current_admin)
+):
+    # 1. Проверка заявки
+    claim = await Claim.find_one({"claim_id": claim_id})
+    if not claim:
+        raise HTTPException(404, "Claim not found")
+
+    # 2. Проверка support-сессии
+    active_support = await SupportSession.find_one(
+        SupportSession.user_id == claim.user_id,
+        SupportSession.resolved == False
+    )
+    if active_support:
+        raise HTTPException(409, "У пользователя есть открытая сессия в техподдержке")
+
+    # 3. Чтение файла
+    contents = await file.read()
+    if len(contents) > 50 * 1024 * 1024:
+        raise HTTPException(400, "Файл слишком большой (макс. 50 МБ)")
+
+    filename = file.filename or "file"
+    mime_type = file.content_type or mimetypes.guess_type(filename)[0] or "application/octet-stream"
+    input_file = BufferedInputFile(contents, filename=filename)
+
+    # 4. Отправка в Telegram
+    file_id = ""
+    is_photo = False
+    msg = None
+    try:
+        if mime_type.startswith("image/"):
+            msg = await bot.send_photo(
+                chat_id=claim.user_id,
+                photo=input_file,
+                caption=caption[:1024] or None
+            )
+            file_id = msg.photo[-1].file_id if msg.photo else ""
+            is_photo = True
+        else:
+            msg = await bot.send_document(
+                chat_id=claim.user_id,
+                document=input_file,
+                caption=caption[:1024] or None
+            )
+            file_id = msg.document.file_id if msg.document else ""
+    except Exception as e:
+        logger.error(f"❌ Telegram send failed: {e}")
+        caption += " (не доставлено)"
+
+    # 5. 🔥 Сохраняем в СУЩЕСТВУЮЩУЮ модель ChatMessage:
+    #    - фото → has_photo=True, photo_file_id=file_id
+    #    - документ → has_photo=False, photo_file_id=file_id (да, так!)
+    chat_msg = ChatMessage(
+        session_id=claim_id,
+        claim_id=claim_id,
+        user_id=claim.user_id,
+        message=caption or filename,
+        is_bot=True,
+        has_photo=is_photo,          # ← true только для фото
+        photo_file_id=file_id,       # ← file_id документа тоже сюда!
+        photo_caption=caption if is_photo else None,
+        timestamp=datetime.now()
+    )
+    await chat_msg.insert()
+
+    # 6. Обновляем сессию
+    session = await ChatSession.find_one({"claim_id": claim_id})
+    if session:
+        session.last_interaction = datetime.now()
+        session.has_unanswered = False
+        await session.save()
+
+    return {
+        "ok": True,
+        "message_id": str(chat_msg.id),
+        "file_type": "photo" if is_photo else "document"
+    }
 
 @router.get("/chat/photo-url/{message_id}")
 async def get_chat_photo_url(message_id: str):
@@ -346,6 +440,95 @@ async def get_chat_photo_url(message_id: str):
         raise HTTPException(status_code=500, detail="Failed to get photo URL")
 
 
+@router.get("/chat/download/{message_id}")
+async def download_chat_file(message_id: str, admin=Depends(get_current_admin)):
+    """
+    Универсальный эндпоинт для скачивания файлов (фото и документов) из ChatMessage.
+    """
+    try:
+        # 1. Получаем сообщение
+        obj_id = PydanticObjectId(message_id)
+        msg = await ChatMessage.get(obj_id)
+        if not msg or not msg.photo_file_id:
+            raise HTTPException(404, "Файл не найден")
+
+        # 2. Получаем file_path из Telegram
+        file_info = await bot.get_file(msg.photo_file_id)
+        if not file_info.file_path:
+            raise HTTPException(500, "File path missing from Telegram")
+
+        file_url = f"https://api.telegram.org/file/bot{bot.token}/{file_info.file_path}"
+
+        # 3. Скачиваем через httpx
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.get(file_url)
+            if resp.status_code != 200:
+                raise HTTPException(502, "Не удалось получить файл из Telegram")
+
+            # 4. Определяем имя файла
+            filename = "file"
+
+            # Если есть сообщение, используем первую строку как имя файла
+            if msg.message and msg.message.strip():
+                first_line = msg.message.strip().split('\n')[0].strip()
+                if first_line and len(first_line) <= 60:
+                    filename = first_line
+
+            # Убираем недопустимые символы
+            filename = "".join(c if c.isalnum() or c in "._- " else "_" for c in filename)
+            if not filename.strip():
+                filename = "file"
+
+            # 5. Определяем Content-Type и расширение
+            content_type = resp.headers.get("content-type", "application/octet-stream").split(";")[0].strip()
+
+            # Расширения для разных типов файлов
+            ext_map = {
+                "image/jpeg": ".jpg",
+                "image/jpg": ".jpg",
+                "image/png": ".png",
+                "image/gif": ".gif",
+                "image/webp": ".webp",
+                "application/pdf": ".pdf",
+                "application/zip": ".zip",
+                "application/x-rar-compressed": ".rar",
+                "application/msword": ".doc",
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document": ".docx",
+                "application/vnd.ms-excel": ".xls",
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": ".xlsx",
+                "text/plain": ".txt",
+                "text/csv": ".csv",
+                "application/json": ".json",
+                "audio/mpeg": ".mp3",
+                "audio/wav": ".wav",
+                "video/mp4": ".mp4",
+                "video/avi": ".avi",
+                "video/quicktime": ".mov",
+            }
+
+            # Добавляем расширение, если его нет в имени файла
+            ext = ext_map.get(content_type, "")
+            if ext and not filename.lower().endswith(tuple(ext_map.values())):
+                filename += ext
+
+            # 6. Заголовки и поток
+            headers = {
+                "Content-Type": content_type,
+                "Content-Disposition": f'attachment; filename="{quote(filename)}"',
+                "Cache-Control": "private, max-age=300",
+            }
+
+            async def stream_file():
+                async for chunk in resp.aiter_bytes(65536):
+                    yield chunk
+
+            return StreamingResponse(stream_file(), headers=headers)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ download_chat_file({message_id}): {e}", exc_info=True)
+        raise HTTPException(500, "Внутренняя ошибка сервера")
 
 # --- 5. API: изменить статус заявки ---
 @router.post("/status/update")

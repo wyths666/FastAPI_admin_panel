@@ -1,15 +1,18 @@
+import datetime
 import re
 from asyncio import Lock
 from aiogram import Router, types, F
 from aiogram.filters import Command, StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message, CallbackQuery, ForceReply, InlineKeyboardMarkup, InlineKeyboardButton
+
+from bot.templates.user.reg import SupportState
 from utils.pending_storage import pending_actions
 from bot.templates.admin import menu as tadmin
 from bot.templates.user import reg as treg
 from bot.templates.user import menu as tmenu
 from core.bot import bot, bot_config
-from db.beanie.models import User, Claim, AdminMessage
+from db.beanie.models import User, Claim, AdminMessage, SupportSession, SupportMessage
 from db.mysql.crud import get_and_delete_code
 from utils.check_subscribe import check_user_subscription
 from config import cnf
@@ -51,39 +54,133 @@ async def start_new_user(msg: Message, state: FSMContext):
 
 
 @router.message(Command("help"))
-async def help_preserve_state(msg: Message, state: FSMContext):
-    """/help без сброса состояния"""
+async def help_save_state(msg: Message, state: FSMContext):
     user_id = msg.from_user.id
     user = await User.get(tg_id=user_id)
-    if user.banned:
+    if user and user.banned:
         return
 
-    # Сохраняем текущее состояние
+    # Ищем последнюю **активную** сессию
+    active_session = await SupportSession.find(
+    SupportSession.user_id == user_id,
+    SupportSession.resolved == False
+).sort(-SupportSession.created_at).first_or_none()
+
+    if active_session:
+        # ✅ Сессия уже открыта — не создаём новую
+        current_state = await state.get_state()
+        current_data = await state.get_data() if current_state else {}
+
+        # Обновляем данные FSM (на случай, если пользователь продвинулся дальше)
+        await state.update_data(
+            original_state=current_state,
+            original_data=current_data
+        )
+        await state.set_state(SupportState.waiting_for_message)
+
+        await msg.answer(
+            "🆘 <b>Техническая поддержка</b>\n\n"
+            "Ваше обращение уже в работе, Вы можете отправить новое сообщение.\n\n"
+            "Для того что-бы отменить обращение и вернуться к оформлению заявки — нажмите кнопку ниже.",
+            parse_mode="HTML",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
+                InlineKeyboardButton(text="↩️ Вернуться к заявке", callback_data="support:back_to_claim")
+            ]])
+        )
+        return
+
+    # ❌ Активной сессии нет — создаём новую
     current_state = await state.get_state()
     current_data = await state.get_data() if current_state else {}
 
-    # Отправляем помощь
-    support_url = cnf.bot.SUPPORT
-    if support_url.startswith("https://t.me/"):
-        username = support_url.replace("https://t.me/", "")
-        support_url = f"tg://resolve?domain={username}"
+    new_session = await SupportSession(
+        user_id=user_id,
+        state=current_state,
+        state_data=current_data
+    ).insert()
+
+    await state.update_data(
+        original_state=current_state,
+        original_data=current_data
+    )
+    await state.set_state(SupportState.waiting_for_message)
 
     await msg.answer(
-        text="💬 <b>Техническая поддержка</b>\n\n"
-             "Нажмите кнопку ниже для перехода в чат поддержки.\n"
-             "⚠️ <i>Вы можете продолжить оформление заявки после обращения.</i>",
+        "🆘 <b>Техническая поддержка</b>\n\n"
+        "Опишите вашу проблему — мы постараемся помочь.\n\n"
+        "Если хотите вернуться к оформлению заявки — нажмите кнопку ниже.",
         parse_mode="HTML",
-        reply_markup=InlineKeyboardMarkup(
-            inline_keyboard=[[
-                InlineKeyboardButton(text="💬 Написать в поддержку", url=support_url)
-            ]]
-        )
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
+            InlineKeyboardButton(text="↩️ Вернуться к заявке", callback_data="support:back_to_claim")
+        ]])
     )
 
-    # ВОССТАНАВЛИВАЕМ состояние, если оно было
-    if current_state:
-        await state.set_state(current_state)
-        await state.set_data(current_data)
+@router.callback_query(F.data == "send_help_text")
+async def help_save(callback: CallbackQuery, state: FSMContext):
+    user_id = callback.from_user.id
+    user = await User.get(tg_id=user_id)
+    if user and user.banned:
+        await callback.answer("Вы заблокированы", show_alert=True)
+        return
+
+    # Ответим на callback сразу, чтобы убрать "часики"
+    await callback.answer()
+
+    # Ищем последнюю **активную** сессию
+    active_session = await SupportSession.find(
+        SupportSession.user_id == user_id,
+        SupportSession.resolved == False
+    ).sort(-SupportSession.created_at).first_or_none()
+
+    if active_session:
+        # ✅ Сессия уже открыта — не создаём новую
+        current_state = await state.get_state()
+        current_data = await state.get_data() if current_state else {}
+
+        # Обновляем данные FSM
+        await state.update_data(
+            original_state=current_state,
+            original_data=current_data
+        )
+        await state.set_state(SupportState.waiting_for_message)
+
+        # Используем callback.message для отправки сообщения
+        await callback.message.edit_text(
+            "🆘 <b>Техническая поддержка</b>\n\n"
+            "Ваше обращение уже в работе, Вы можете отправить новое сообщение.\n\n"
+            "Для того чтобы отменить обращение и вернуться к оформлению заявки — нажмите кнопку ниже.",
+            parse_mode="HTML",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
+                InlineKeyboardButton(text="↩️ Вернуться к заявке", callback_data="support:back_to_claim")
+            ]])
+        )
+        return
+
+    # ❌ Активной сессии нет — создаём новую
+    current_state = await state.get_state()
+    current_data = await state.get_data() if current_state else {}
+
+    new_session = await SupportSession(
+        user_id=user_id,
+        state=current_state,
+        state_data=current_data
+    ).insert()
+
+    await state.update_data(
+        original_state=current_state,
+        original_data=current_data
+    )
+    await state.set_state(SupportState.waiting_for_message)
+
+    await callback.message.edit_text(
+        "🆘 <b>Техническая поддержка</b>\n\n"
+        "Опишите вашу проблему — мы постараемся помочь.\n\n"
+        "Если хотите вернуться к оформлению заявки — нажмите кнопку ниже.",
+        parse_mode="HTML",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
+            InlineKeyboardButton(text="↩️ Вернуться к заявке", callback_data="support:back_to_claim")
+        ]])
+    )
 
 @router.message(StateFilter(treg.RegState.waiting_for_code))
 async def process_code(msg: Message, state: FSMContext):
@@ -416,25 +513,212 @@ async def finalize_claim(user_tg_id: int, state: FSMContext):
     await bot.send_message(chat_id=user_tg_id, text=treg.success_text)
     await state.clear()
 
+@router.message(StateFilter(SupportState.waiting_for_message))
+async def handle_support_message(msg: Message, state: FSMContext):
+    user_id = msg.from_user.id
 
-# @router.callback_query(F.data.startswith("reply_"))
-# async def reply_to_admin(call: CallbackQuery):
-#     claim_id = call.data.replace("reply_", "")
-#     claim = await Claim.get(claim_id=claim_id)
-#     if not claim:
-#         await call.answer("Заявка не найдена", show_alert=True)
-#         return
-#
-#     # Сохраняем в ОБЩИЙ словарь
-#     pending_actions[call.from_user.id] = {
-#         "type": "user_reply",
-#         "claim_id": claim_id
-#     }
-#
-#
-#
-#     await call.message.answer(
-#         "💬 Введите ваш ответ администратору:",
-#         reply_markup=ForceReply(input_field_placeholder="Ваш ответ...")
-#     )
-#     await call.answer()
+    # Находим последнюю активную сессию пользователя
+    session = await SupportSession.find(
+        SupportSession.user_id == user_id,
+        SupportSession.resolved == False
+    ).sort(-SupportSession.created_at).first_or_none()
+
+    if not session:
+        # fallback: создаём новую сессию на лету
+        session = await SupportSession(
+            user_id=user_id,
+            state=await state.get_state(),
+            state_data=await state.get_data()
+        ).insert()
+
+    # Определяем тип содержимого
+    text = msg.text or msg.caption or ""
+    has_photo = bool(msg.photo)
+    has_document = bool(msg.document)
+
+    # ❌ Неподдерживаемые типы
+    if not (text or has_photo or has_document):
+        await msg.answer(
+            "📎 Отправить можно только:\n"
+            "• Текст\n"
+            "• Фото (в сжатом виде)\n"
+            "• Документ (PDF, DOCX и т.п.)\n\n"
+            "Пожалуйста, попробуйте ещё раз.",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
+                InlineKeyboardButton(text="↩️ Вернуться к заявке", callback_data="support:back_to_claim")
+            ]])
+        )
+        return
+
+    # ✅ Создаём запись
+    support_msg = SupportMessage(
+        session_id=session.id,
+        user_id=user_id,
+        message=text,
+        is_bot=False
+    )
+
+    # 📸 Фото
+    if has_photo:
+        largest = msg.photo[-1]
+        support_msg.has_photo = True
+        support_msg.photo_file_id = largest.file_id
+        support_msg.photo_caption = msg.caption or ""
+
+    # 📄 Документ
+    elif has_document:
+        doc = msg.document
+        # Ограничим размер (например, до 20 МБ)
+        if doc.file_size > 20 * 1024 * 1024:
+            await msg.answer(
+                "⚠️ Файл слишком большой (макс. 20 МБ). Пожалуйста, отправьте уменьшенную версию.",
+                reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
+                    InlineKeyboardButton(text="↩️ Вернуться к заявке", callback_data="support:back_to_claim")
+                ]])
+            )
+            return
+
+        support_msg.has_document = True
+        support_msg.document_file_id = doc.file_id
+        support_msg.document_name = doc.file_name or "безымянный"
+        support_msg.document_mime_type = doc.mime_type or "application/octet-stream"
+        support_msg.document_size = doc.file_size
+
+    # ✅ Сохраняем
+    await support_msg.insert()
+
+    # ✅ Подтверждение
+    confirmation = "📩 Сообщение отправлено в поддержку."
+
+    if has_photo:
+        confirmation += "\n📸 Фото получено."
+    elif has_document:
+        name = support_msg.document_name
+        size_mb = round(support_msg.document_size / (1024 * 1024), 1)
+        confirmation += f"\n📄 Документ «{name}» ({size_mb} МБ) получен."
+
+    await msg.answer(
+        f"{confirmation}\n\nМы ответим в ближайшее время.\n"
+        "Вы по-прежнему можете вернуться к оформлению заявки:",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
+            InlineKeyboardButton(text="↩️ Вернуться к заявке", callback_data="support:back_to_claim")
+        ]])
+    )
+
+@router.callback_query(F.data == "support:back_to_claim")
+async def back_to_claim_callback(call: CallbackQuery, state: FSMContext):
+    user_id = call.from_user.id
+    data = await state.get_data()
+
+    original_state = data.get("original_state")
+    original_data = data.get("original_data", {})
+
+    if not original_state:
+        await state.clear()
+        try:
+            await call.message.edit_text("❌ Незавершенная заявка не найдена. Начните заново: /start")
+        except Exception:
+            await call.message.answer("❌ Незавершенная не найдена. Начните заново: /start")
+        await call.answer()
+        return
+
+    # === 1. Находим и закрываем последнюю активную сессию ===
+    session = await SupportSession.find(
+        SupportSession.user_id == user_id,
+        SupportSession.resolved == False
+    ).sort(-SupportSession.created_at).first_or_none()
+
+    if session:
+        await session.set({"resolved": True, "resolved_by_admin_id": -1})
+
+    # === 2. Восстанавливаем FSM-контекст ===
+    await state.set_state(original_state)
+    await state.set_data(original_data)
+
+    # === 3. Определяем, какое сообщение показать пользователю ===
+    try:
+        # 🟢 Состояние: ожидание кода
+        if original_state == treg.RegState.waiting_for_code.state:
+            code = original_data.get("entered_code")
+            if code:
+                # → уже ввёл код → проверяем подписку
+                CHANNEL_USERNAME = cnf.bot.CHANNEL_USERNAME
+                is_subscribed = await check_user_subscription(bot, user_id, CHANNEL_USERNAME)
+
+                if is_subscribed:
+                    # Подписан → переходим к отзыву
+                    await proceed_to_review(user_tg_id=user_id, state=state, code=code)
+                    await call.message.delete()
+                    await call.answer()
+                    return
+                else:
+                    # Не подписан → просим подписаться
+                    await call.message.edit_text(
+                        text=treg.not_subscribed_text,
+                        reply_markup=tmenu.check_subscription_ikb()
+                    )
+                    await call.answer()
+                    return
+            else:
+                # Ещё не вводил код → приветствие
+                welcome_photo = FSInputFile("utils/IMG_1262.png")
+                await call.message.delete()
+                await call.message.answer_photo(
+                    photo=welcome_photo,
+                    caption="👋 Привет! Это бот компании Pure. Введите секретный код, указанный на голограмме."
+                )
+                await call.answer()
+                return
+
+        # 🟢 Состояние: ожидание скриншота
+        elif original_state == treg.RegState.waiting_for_screenshot.state:
+            await call.message.edit_text(
+                text=treg.screenshot_request_text,
+                reply_markup=None
+            )
+            await call.answer()
+            return
+
+        # 🟢 Состояние: выбор способа получения (телефон / карта)
+        elif original_state == treg.RegState.waiting_for_phone_or_card.state:
+            await call.message.edit_text(
+                text=treg.phone_or_card_text,
+                reply_markup=tmenu.phone_or_card_ikb()
+            )
+            await call.answer()
+            return
+
+        # 🟢 Состояние: ввод телефона
+        elif original_state == treg.RegState.waiting_for_phone_number.state:
+            await call.message.edit_text(text=treg.phone_format_text)
+            await call.answer()
+            return
+
+        # 🟢 Состояние: ввод карты
+        elif original_state == treg.RegState.waiting_for_card_number.state:
+            await call.message.edit_text(text=treg.card_format_text)
+            await call.answer()
+            return
+
+        # 🟢 Состояние: ввод банка
+        elif original_state == treg.RegState.waiting_for_bank.state:
+            await call.message.edit_text(text=treg.bank_request_text)
+            await call.answer()
+            return
+
+        # ❗ Неизвестное состояние — fallback
+        else:
+            await call.message.edit_text("🔄 Неизвестное состояние: `{}`\nОбратитесь в поддержку.".format(original_state))
+            await call.answer()
+            return
+
+    except Exception as e:
+        import traceback
+        print(f"[ERROR] back_to_claim_callback failed: {e}")
+        traceback.print_exc()
+        try:
+            await call.message.edit_text("⚠️ Ошибка при восстановлении сессии. Попробуйте /start")
+        except:
+            await call.message.answer("⚠️ Ошибка при восстановлении сессии. Попробуйте /start")
+        await state.clear()
+        await call.answer()

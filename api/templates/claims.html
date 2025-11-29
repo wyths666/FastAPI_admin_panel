@@ -656,6 +656,28 @@
     white-space: pre-wrap; /* Сохраняем переносы строк */
     word-wrap: break-word; /* Перенос длинных слов */
 }
+.chat-input:disabled,
+.chat-send:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+.chat-attach-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    background: #f1f3f9;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font-size: 1.1rem;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+.chat-attach-btn:hover {
+    background: #e9ecef;
+    transform: scale(1.05);
+}
     </style>
 </head>
 <body>
@@ -848,14 +870,68 @@
         {% endif %}
     </div>
     {% endif %}
+{% if claim.has_active_support_session %}
+<div style="
+    background: #fff3cd;
+    border: 1px solid #ffeaa7;
+    border-radius: 8px;
+    padding: 12px 16px;
+    margin-bottom: 15px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: #856404;
+    font-weight: 500;
+">
+    <span>🆘</span>
+    <span>
+        У пользователя открыта сессия в техподдержке.<br>
+        Отправка сообщений временно недоступна.
+    </span>
+</div>
+{% endif %}
                 <div class="chat-container" id="chat-{{ claim.claim_id }}">
                     <div class="chat-messages" id="messages-{{ claim.claim_id }}">
                         <!-- Сообщения загружаются JS -->
                     </div>
-                    <form class="chat-input-form" onsubmit="sendMessage(event, '{{ claim.claim_id }}', {{ claim.user_id }})">
-                        <textarea class="chat-input" id="message-input-{{ claim.claim_id }}" placeholder="Введите сообщение..." rows="1" required></textarea>
-                        <button type="submit" class="chat-send">Отправить</button>
-                    </form>
+                    <form class="chat-input-form"
+      onsubmit="sendMessage(event, '{{ claim.claim_id }}', {{ claim.user_id }})"
+      style="display: flex; flex-direction: column; gap: 6px;">
+    <div style="display: flex; gap: 8px; align-items: flex-end;">
+        <textarea
+            class="chat-input"
+            id="message-input-{{ claim.claim_id }}"
+            placeholder="Введите сообщение..."
+            rows="1"
+            {% if claim.has_active_support_session %}disabled{% endif %}
+            style="flex: 1; resize: none; padding: 10px 12px; border-radius: 4px; border: 1px solid #ddd;"
+            oninput="autoResizeTextarea(this)">{{ '' }}</textarea>
+
+        <label for="fileInput-{{ claim.claim_id }}" class="chat-attach-btn" title="📎 Прикрепить файл">
+    📎
+</label>
+
+        <input type="file"
+       id="fileInput-{{ claim.claim_id }}"
+       style="display: none;"
+       accept="*/*"
+       {% if claim.has_active_support_session %}disabled{% endif %}>
+
+        <button
+        type="submit"
+        class="chat-send"
+        style="align-self: flex-end; "
+        {% if claim.has_active_support_session %}disabled{% endif %}>
+        Отправить
+    </button>
+
+    </div>
+<div id="fileStatus-{{ claim.claim_id }}"
+     style="font-size: 0.9rem; color: var(--gray); flex: 1;"></div>
+
+
+
+</form>
                 </div>
             </div>
 
@@ -884,9 +960,31 @@
     // Глобальный объект для хранения данных банков
     const banksData = {{ banks|tojson }};
 
+function escapeHtml(unsafe) {
+    if (typeof unsafe !== 'string') return '';
+    return unsafe
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
+
+function linkify(text) {
+    if (!text) return '';
+    const escaped = escapeHtml(text);
+    const urlRegex = /(\b(?:https?:\/\/|www\.)[^\s<>"{}|\\^`[\]]*\b)/gi;
+    return escaped.replace(urlRegex, (url) => {
+        const fullUrl = url.startsWith('http') ? url : 'http://' + url;
+        return `<a href="${fullUrl}" target="_blank" rel="noopener noreferrer"
+                   style="color: var(--primary); text-decoration: underline;">${url}</a>`;
+    });
+}
     function toggleClaimDetails(element) {
         element.classList.toggle('expanded');
     }
+
+
 
     async function toggleUserBan(userId, claimId, ban) {
     const action = ban ? 'блокировку' : 'разблокировку';
@@ -1089,19 +1187,21 @@
     }
 
     async function toggleChat(button, claimId, userId) {
-        const chatContainer = document.getElementById(`chat-${claimId}`);
-        const isActive = chatContainer.classList.contains('active');
+    const chatContainer = document.getElementById(`chat-${claimId}`);
+    const isActive = chatContainer.classList.contains('active');
 
-        if (!isActive) {
-            await startChatSession(claimId);
-            await loadChatHistory(claimId);
-            startPolling(claimId);
-        } else {
-            stopPolling(claimId);
-        }
+    if (!isActive) {
+        await startChatSession(claimId);
+        await loadChatHistory(claimId);
+        startPolling(claimId);
 
-        chatContainer.classList.toggle('active');
+        setupFileUploadForClaim(claimId);
+    } else {
+        stopPolling(claimId);
     }
+
+    chatContainer.classList.toggle('active');
+}
 
     async function loadChatHistory(claimId) {
         console.log(`📥 Загрузка истории чата для claimId: ${claimId}`);
@@ -1125,73 +1225,109 @@
         }
     }
 
-    async function displayMessages(claimId, messages) {
+async function displayMessages(claimId, messages) {
     const container = document.getElementById(`messages-${claimId}`);
-    console.log('🔍 [CHAT] Сообщения:', messages);
+    if (!container) return;
 
-    container.innerHTML = '';
-
-    // Предварительно получим все URL фото
-    const photoUrls = {};
-    for (const msg of messages) {
-        if (msg.has_photo && msg.photo_file_id) {
+    // ——— 1. Получаем URL только для фото (AgAC…) ———
+    const photoUrlMap = {};
+    const photoPromises = messages
+        .filter(msg => msg.has_photo && msg.photo_file_id)
+        .map(async (msg) => {
             try {
                 const resp = await fetch(`/claims/chat/photo-url/${msg.id}`);
                 if (resp.ok) {
                     const data = await resp.json();
-                    photoUrls[msg.id] = data.url;
+                    photoUrlMap[msg.id] = data.url;
                 }
             } catch (e) {
-                console.error(`❌ Ошибка получения URL для ${msg.id}:`, e);
-                photoUrls[msg.id] = 'https://via.placeholder.com/200x200/333/fff?text=  🖼️';
+                console.warn(`⚠️ Не удалось получить URL фото ${msg.id}`);
             }
-        }
-    }
+        });
+    await Promise.all(photoPromises);
 
-    messages.forEach((msg, index) => {
-        console.log(`🔍 [CHAT] Сообщение ${index}:`, msg);
+    // ——— 2. Рендерим ———
+    const fragment = document.createDocumentFragment();
 
+    for (const msg of messages) {
         const div = document.createElement('div');
         div.className = `message ${msg.is_bot ? 'bot' : 'user'}`;
-        const time = new Date(msg.timestamp).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+
+        const ts = new Date(msg.timestamp);
+        const timeStr = ts.toLocaleTimeString('ru-RU', {
+            hour: '2-digit',
+            minute: '2-digit'
+        });
 
         let content = '';
 
-        // Стили для текстового блока — обеспечивает перенос строк и сохранение форматирования
-        const textStyles = 'word-wrap: break-word; word-break: break-word; white-space: pre-wrap; margin: 0;';
-
+        // 🔹 📸 Фото
         if (msg.has_photo && msg.photo_file_id) {
-            const photoUrl = photoUrls[msg.id] || 'https://via.placeholder.com/200x200/333/fff?text=  🖼️';
-
-            content = `
-                <div style="margin-bottom: 8px;">
-                    <img src="${photoUrl}"
-                         alt="Фото из чата"
-                         style="max-width: 200px; max-height: 200px; border-radius: 8px; border: 2px solid var(--primary); cursor: pointer;"
-                         onclick="openChatPhoto('${msg.id}')"
-                         onload="console.log('✅ Фото загружено: ${msg.id}')"
-                         onerror="this.src='https://via.placeholder.com/200x200/333/fff?text=  🖼️'; console.error('❌ Ошибка загрузки фото: ${msg.id}')">
-                </div>
-                ${msg.message
-                    ? `<div style="margin-top: 8px; ${textStyles}">${msg.message}</div>`
-                    : ''}
-                <div class="message-time">${time}</div>
-            `;
-        } else {
-            content = `
-                <div style="${textStyles}">${msg.message || '(пустое сообщение)'}</div>
-                <div class="message-time">${time}</div>
-            `;
+            const url = photoUrlMap[msg.id];
+            if (url) {
+                content += `
+                    <div style="margin-bottom: 6px;">
+                        <img src="${url}"
+                             alt="Фото"
+                             style="max-width: 200px; max-height: 200px; border-radius: 6px; border: 2px solid var(--primary); cursor: pointer;"
+                             onclick="openChatPhoto('${msg.id}')"
+                             onerror="this.parentElement.innerHTML='🖼️ Ошибка'">
+                    </div>
+                `;
+            } else {
+                content += `<div style="color:#e63946;">❌ Фото недоступно</div>`;
+            }
+            if (msg.message) {
+                content += `<div style="margin-top: 4px; white-space: pre-wrap; word-wrap: break-word;">${linkify(escapeHtml(msg.message))}</div>`;
+            }
+        }
+        // 🔹 📄 Документ (has_photo: false, но photo_file_id задан)
+else if (msg.photo_file_id) {
+    const fileName = msg.message?.split('\n')[0]?.trim() || 'Файл';
+    content += `
+        <div style="margin-bottom: 6px;">
+            <a href="/claims/chat/download/${msg.id}"
+               target="_blank"
+               title="Скачать ${escapeHtml(fileName)}"
+               style="color: #4361ee; font-weight: bold; text-decoration: none; display: inline-flex; align-items: center; gap: 6px; padding: 4px 8px; border-radius: 4px; background: rgba(67, 97, 238, 0.1);">
+                📎 ${escapeHtml(fileName)} ⬇️
+            </a>
+        </div>
+    `;
+    if (msg.message && msg.message.trim() !== fileName) {
+        content += `<div style="margin-top: 4px; font-size: 0.9em; white-space: pre-wrap; word-wrap: break-word;">${linkify(escapeHtml(msg.message))}</div>`;
+    }
+}
+        // 🔹 ✍️ Текст
+        else if (msg.message) {
+            content += `<div style="white-space: pre-wrap; word-wrap: break-word; overflow-wrap: break-word;">${linkify(escapeHtml(msg.message))}</div>`;
+        }
+        // 🔹 [пусто]
+        else {
+            content += `<em style="color: var(--gray);">[пустое сообщение]</em>`;
         }
 
-        div.innerHTML = content;
-        container.appendChild(div);
-    });
+        div.innerHTML = `
+            ${content}
+            <div class="message-time">${timeStr}</div>
+        `;
+        fragment.appendChild(div);
+    }
 
-    // Прокрутка вниз после рендеринга
-    container.scrollTop = container.scrollHeight;
+    container.innerHTML = '';
+    container.appendChild(fragment);
+
+    // 🔹 АВТОМАТИЧЕСКИЙ СКРОЛЛ ВНИЗ ПРИ ОТКРЫТИИ ЧАТА
+    setTimeout(() => {
+        container.scrollTop = container.scrollHeight;
+    }, 100);
+
+    // 🔹 СКРОЛЛ ЕСЛИ УЖЕ БЫЛИ ВНИЗУ
+    const atBottom = container.scrollHeight - container.clientHeight <= container.scrollTop + 5;
+    if (atBottom) {
+        container.scrollTop = container.scrollHeight;
+    }
 }
-
     async function sendMessage(event, claimId, userId) {
     event.preventDefault();
     const input = document.getElementById(`message-input-${claimId}`);
@@ -1216,6 +1352,67 @@
         console.error('Send message:', e);
         alert('Ошибка подключения');
     }
+}
+
+// === Отправка файла в чат заявки ===
+function setupFileUploadForClaim(claimId) {
+    const fileInput = document.getElementById(`fileInput-${claimId}`);
+    const statusDiv = document.getElementById(`fileStatus-${claimId}`);
+    const chatInput = document.getElementById(`message-input-${claimId}`);
+
+    if (!fileInput || !statusDiv) {
+        console.warn(`⚠️ Элементы чата не найдены для claimId=${claimId}`);
+        return;
+    }
+
+    fileInput.addEventListener('change', async function(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        statusDiv.textContent = `📤 Отправка ${file.name}...`;
+        statusDiv.style.color = '#6c757d';
+
+        const formData = new FormData();
+        formData.append('claim_id', claimId);
+        formData.append('file', file);
+        const caption = chatInput?.value.trim();
+        if (caption) formData.append('caption', caption);
+
+        try {
+            const response = await fetch('/claims/chat/send-file', {
+                method: 'POST',
+                body: formData
+            });
+
+            const result = await response.json();
+
+            if (response.ok && result.ok) {
+                statusDiv.textContent = `✅ ${file.name} отправлен`;
+                statusDiv.style.color = '#4CAF50';
+
+                // Очистка
+                if (chatInput) chatInput.value = '';
+                if (chatInput) autoResizeTextarea(chatInput); // сброс высоты
+                e.target.value = '';
+
+                // Обновляем чат
+                await loadChatHistory(claimId);
+
+            } else {
+                throw new Error(result.detail || 'Неизвестная ошибка');
+            }
+
+        } catch (error) {
+            console.error('❌ Ошибка отправки файла:', error);
+            statusDiv.textContent = `❌ ${error.message || 'Не удалось отправить файл'}`;
+            statusDiv.style.color = '#e63946';
+        }
+
+        // Убираем статус через 3 сек
+        setTimeout(() => {
+            statusDiv.textContent = '';
+        }, 3000);
+    });
 }
 
 // Функция для автоматического изменения высоты textarea
@@ -1310,6 +1507,8 @@ document.addEventListener('DOMContentLoaded', function() {
         showNotification('❌ Ошибка при завершении чата', 'error');
     }
 }
+
+
 // Функция показа уведомлений (можно заменить на toast-уведомления)
 function showNotification(message, type = 'info') {
     // Создаем элемент уведомления

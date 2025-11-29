@@ -3,7 +3,7 @@ import secrets
 from typing import List, Dict, Any, Union
 from datetime import datetime
 from decimal import Decimal
-from beanie import Document
+from beanie import Document, PydanticObjectId
 from typing import get_origin, get_args, Optional
 from pydantic import TypeAdapter, ValidationError, Field, ConfigDict
 from typing import get_type_hints
@@ -283,4 +283,48 @@ class ChatMessage(Document):
         return obj
 
 
+class SupportSession(Document):
+    user_id: int
+    state: Optional[str]  # например: 'reg.RegState:waiting_for_phone_number'
+    state_data: Dict[str, Any] = Field(default_factory=dict)
+    created_at: datetime = Field(default_factory=lambda: datetime.now())
+    resolved: bool = False
+    resolved_by_admin_id: Optional[int] = None
+    previous_state: Optional[str] = None
+    previous_state_data: Optional[dict] = None
+    rollback_count: Optional[int] = None
 
+    class Settings:
+        name = "support_sessions"
+        indexes = [
+            [("user_id", 1), ("resolved", 1)],
+            [("created_at", -1)]
+        ]
+
+
+class SupportMessage(Document):
+    session_id: PydanticObjectId
+    user_id: int
+    message: str
+    is_bot: bool
+
+    # Photo
+    has_photo: bool = False
+    photo_file_id: Optional[str] = None
+    photo_caption: Optional[str] = None
+
+    # Document
+    has_document: bool = False
+    document_file_id: Optional[str] = None
+    document_name: Optional[str] = None
+    document_mime_type: Optional[str] = None
+    document_size: Optional[int] = None  # bytes
+
+    timestamp: datetime = Field(default_factory=lambda: datetime.now())
+
+    class Settings:
+        name = "support_messages"
+        indexes = [
+            [("session_id", 1), ("timestamp", 1)],
+            [("user_id", 1), ("timestamp", 1)],
+        ]

@@ -4,6 +4,7 @@ import contextlib
 from aiogram import Dispatcher, Bot
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.fsm.storage.memory import MemoryStorage
+from aiogram.fsm.storage.mongo import MongoStorage
 from aiogram.types import BotCommandScopeDefault, BotCommandScopeChat
 
 from bot.handlers import routers
@@ -17,9 +18,15 @@ from motor.motor_asyncio import AsyncIOMotorClient
 from db.mysql.crud import init_mysql
 from utils.database import init_database
 
+fsm_storage = MongoStorage.from_url(
+    url=cnf.mongo.URL,
+    db_name=cnf.mongo.NAME,
+    collection_name='aiogram_fsm_states'
+)
+
 dp = Dispatcher(
     bot=bot,
-    storage=MemoryStorage()
+    storage=fsm_storage
 )
 dp.include_routers(*routers)
 
@@ -31,11 +38,6 @@ async def startup(bot: Bot) -> None:
     """
     # === Инициализация MongoDB (Beanie) ===
     await init_database()
-    # mongo_client = AsyncIOMotorClient(cnf.mongo.URL)
-    # await init_beanie(
-    #     database=mongo_client[cnf.mongo.NAME],
-    #     document_models=document_models
-    # )
     logger.info("✅ MongoDB (Beanie) подключена")
 
     # === Инициализация MySQL ===
@@ -53,13 +55,6 @@ async def startup(bot: Bot) -> None:
         commands=user_commands,
         scope=BotCommandScopeDefault()
     )
-    # for admin in cnf.bot.ADMINS or []:
-    #     with contextlib.suppress(TelegramBadRequest):
-    #         await bot.set_my_commands(
-    #             cnf.bot.COMMANDS + cnf.bot.ADMIN_COMMANDS,
-    #             scope=BotCommandScopeChat(chat_id=admin)
-    #         )
-
     logger.info('=== Bot started ===')
 
 

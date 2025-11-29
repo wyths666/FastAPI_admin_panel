@@ -23,7 +23,10 @@ def welcome_ikb():
 
 def support_ikb() -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
-    builder.add(InlineKeyboardButton(text="Тех. поддержка", url=cnf.bot.SUPPORT))
+    builder.add(InlineKeyboardButton(
+        text="Тех. поддержка",
+        callback_data="send_help_text"
+    ))
     return builder.as_markup()
 
 

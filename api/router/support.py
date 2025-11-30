@@ -43,9 +43,11 @@ STATE_MESSAGES = {
     "RegState:waiting_for_card_number": treg.card_format_text,
 }
 
+
 @router.get("/", response_class=HTMLResponse)
-async def support_dashboard(request: Request, resolved: bool = False, page: int = 1, per_page: int = 20, admin=Depends(get_current_admin)
-):
+async def support_dashboard(request: Request, resolved: bool = False, page: int = 1, per_page: int = 20,
+                            admin=Depends(get_current_admin)
+                            ):
     """Главная страница техподдержки со списком сессий"""
     if not admin:
         return RedirectResponse("/auth/login")
@@ -69,6 +71,22 @@ async def support_dashboard(request: Request, resolved: bool = False, page: int 
     users = await User.find({"tg_id": {"$in": user_ids}}).to_list()
     users_map = {user.tg_id: user for user in users}
 
+    # Словарь для перевода ключей state_data
+    STATE_DATA_TRANSLATIONS = {
+        "claim_id": "ID заявки",
+        "entered_code": "Введенный код",
+        "photo_file_ids": "ID фото",
+        "review_text": "Текст отзыва",
+        "screenshot_received": "Скриншот получен",
+        "phone_card_message_id": "ID сообщения выбора оплаты",
+        "payment_method": "Способ оплаты",
+        "phone_number": "Номер телефона",
+        "bank": "Банк",
+        "card_number": "Номер карты",
+        "original_state": "Исходное состояние",
+        "original_data": "Исходные данные"
+    }
+
     # Форматируем данные для шаблона
     sessions_with_users = []
     for session in sessions:
@@ -91,24 +109,39 @@ async def support_dashboard(request: Request, resolved: bool = False, page: int 
             session_dict["banned"] = False
             session_dict["user_created_at"] = None
 
-        # Форматируем state для отображения
+        # ФОРМАТИРУЕМ STATE ДЛЯ ОТОБРАЖЕНИЯ С ПЕРЕВОДОМ
         if session.state:
-            # Убираем префиксы для красивого отображения
-            state_display = session.state
-            if ':' in state_display:
-                state_display = state_display.split(':')[-1]
-            state_display = state_display.replace('_', ' ').title()
-            session_dict["state_display"] = state_display
+            # Используем словарь переводов
+            session_dict["state_display"] = STATE_TRANSLATIONS.get(
+                session.state,
+                session.state.replace('_', ' ').title()
+            )
         else:
             session_dict["state_display"] = "Не указано"
 
-        # Анализируем state_data для дополнительной информации
+        if session.previous_state:
+            session_dict["previous_state_display"] = STATE_TRANSLATIONS.get(
+                session.previous_state,
+                session.previous_state.replace('_', ' ').title()
+            )
+        # Анализируем state_data для дополнительной информации с переводами
         if session.state_data:
-            # Извлекаем полезные данные для превью
+            # Извлекаем полезные данные для превью с переведенными ключами
             preview_data = {}
             for key, value in session.state_data.items():
                 if isinstance(value, (str, int, float, bool)) and len(str(value)) < 50:
-                    preview_data[key] = value
+                    translated_key = STATE_DATA_TRANSLATIONS.get(key, key)
+                    # Форматируем значения для лучшего отображения
+                    if isinstance(value, bool):
+                        formatted_value = "✅ Да" if value else "❌ Нет"
+                    elif key == "screenshot_received":
+                        formatted_value = "✅ Получен" if value else "❌ Не получен"
+                    elif key == "photo_file_ids" and isinstance(value, list):
+                        formatted_value = f"📷 {len(value)} фото"
+                    else:
+                        formatted_value = str(value)
+
+                    preview_data[translated_key] = formatted_value
             session_dict["state_data_preview"] = preview_data
         else:
             session_dict["state_data_preview"] = {}
@@ -150,6 +183,7 @@ async def get_session_messages_api(session_id: str):
         for message in messages
     ]
 
+
 @router.get("/session/{session_id}", response_class=HTMLResponse)
 async def support_session_detail(request: Request, session_id: str):
     """Детальная страница сессии поддержки с чатом"""
@@ -162,9 +196,66 @@ async def support_session_detail(request: Request, session_id: str):
         {"session_id": session.id}
     ).sort("timestamp").to_list()
 
+    # Словарь для перевода ключей state_data
+    STATE_DATA_TRANSLATIONS = {
+        "claim_id": "ID заявки",
+        "entered_code": "Введенный код",
+        "photo_file_ids": "ID фото",
+        "review_text": "Текст отзыва",
+        "screenshot_received": "Скриншот получен",
+        "phone_card_message_id": "ID сообщения выбора оплаты",
+        "payment_method": "Способ оплаты",
+        "phone_number": "Номер телефона",
+        "bank": "Банк",
+        "card_number": "Номер карты",
+        "original_state": "Исходное состояние",
+        "original_data": "Исходные данные"
+    }
+
     # Форматируем данные для шаблона
     session_data = session.dict()
     session_data["id"] = str(session.id)
+
+    # Переводим состояние
+    if session_data["state"]:
+        session_data["state_display"] = STATE_TRANSLATIONS.get(
+            session_data["state"],
+            session_data["state"].replace('_', ' ').title()
+        )
+    else:
+        session_data["state_display"] = "Не указано"
+
+    # Переводим предыдущее состояние если есть
+
+    if session_data.get("previous_state"):
+        session_data["previous_state_display"] = STATE_TRANSLATIONS.get(
+            session_data["previous_state"],
+            session_data["previous_state"].replace('_', ' ').title()
+        )
+
+    # Форматируем state_data с переводами
+
+    if session_data.get("state_data"):
+        translated_state_data = {}
+        for key, value in session_data["state_data"].items():
+            translated_key = STATE_DATA_TRANSLATIONS.get(key, key)
+            # Форматируем значения
+            if isinstance(value, bool):
+                formatted_value = "✅ Да" if value else "❌ Нет"
+            elif key == "screenshot_received":
+                formatted_value = "✅ Получен" if value else "❌ Не получен"
+            elif key == "photo_file_ids" and isinstance(value, list):
+                formatted_value = f"📷 {len(value)} фото"
+            elif isinstance(value, dict):
+                formatted_value = str(value)  # Для сложных объектов просто строку
+            else:
+                formatted_value = str(value)
+
+            translated_state_data[translated_key] = formatted_value
+
+        session_data["state_data_preview"] = translated_state_data
+    else:
+        session_data["state_data_preview"] = {}
 
     messages_data = []
     for msg in messages:
@@ -180,7 +271,6 @@ async def support_session_detail(request: Request, session_id: str):
             "messages": messages_data
         }
     )
-
 
 @router.post("/session/{session_id}/send_message")
 async def send_text_message(

@@ -44,6 +44,35 @@ STATE_MESSAGES = {
 }
 
 
+def translate_state_value(key: str, value: any) -> str:
+    """
+    Переводит значения state_data на русский язык
+    """
+    if isinstance(value, bool):
+        return "✅ Да" if value else "❌ Нет"
+
+    elif key == "screenshot_received":
+        return "✅ Получен" if value else "❌ Не получен"
+
+    elif key == "photo_file_ids" and isinstance(value, list):
+        return f"📷 {len(value)} фото"
+
+    elif key in ["original_state", "state", "previous_state"] and isinstance(value, str):
+        return STATE_TRANSLATIONS.get(value, value)
+
+    elif key == "payment_method":
+        payment_translations = {
+            "card": "💳 Карта",
+            "sbp": "📱 СБП"
+        }
+        return payment_translations.get(value, str(value))
+
+    elif isinstance(value, str) and value.startswith(('RegState:', 'SupportState:')):
+        return STATE_TRANSLATIONS.get(value, value)
+
+    else:
+        return str(value)
+
 @router.get("/", response_class=HTMLResponse)
 async def support_dashboard(request: Request, resolved: bool = False, page: int = 1, per_page: int = 20,
                             admin=Depends(get_current_admin)
@@ -83,6 +112,7 @@ async def support_dashboard(request: Request, resolved: bool = False, page: int 
         "phone_number": "Номер телефона",
         "bank": "Банк",
         "card_number": "Номер карты",
+        "card": "Номер карты",
         "original_state": "Исходное состояние",
         "original_data": "Исходные данные"
     }
@@ -124,24 +154,22 @@ async def support_dashboard(request: Request, resolved: bool = False, page: int 
                 session.previous_state,
                 session.previous_state.replace('_', ' ').title()
             )
-        # Анализируем state_data для дополнительной информации с переводами
-        if session.state_data:
-            # Извлекаем полезные данные для превью с переведенными ключами
-            preview_data = {}
-            for key, value in session.state_data.items():
-                if isinstance(value, (str, int, float, bool)) and len(str(value)) < 50:
-                    translated_key = STATE_DATA_TRANSLATIONS.get(key, key)
-                    # Форматируем значения для лучшего отображения
-                    if isinstance(value, bool):
-                        formatted_value = "✅ Да" if value else "❌ Нет"
-                    elif key == "screenshot_received":
-                        formatted_value = "✅ Получен" if value else "❌ Не получен"
-                    elif key == "photo_file_ids" and isinstance(value, list):
-                        formatted_value = f"📷 {len(value)} фото"
-                    else:
-                        formatted_value = str(value)
 
+        if session.state_data:
+            preview_data = {}
+
+            for key, value in session.state_data.items():
+                # Пропускаем сложные объекты
+                if isinstance(value, (dict, list)) and not (key == "photo_file_ids" and isinstance(value, list)):
+                    continue
+
+                translated_key = STATE_DATA_TRANSLATIONS.get(key, key)
+                formatted_value = translate_state_value(key, value)
+
+                # Добавляем только если значение не пустое
+                if formatted_value and formatted_value not in ['', 'None', '[]', '{}'] and len(formatted_value) < 100:
                     preview_data[translated_key] = formatted_value
+
             session_dict["state_data_preview"] = preview_data
         else:
             session_dict["state_data_preview"] = {}
@@ -795,14 +823,33 @@ def get_available_rollback_states_from_session(current_state: str) -> dict:
 
 @router.post("/session/{session_id}/block_user")
 async def block_user(request: Request, session_id: str):
-    """Блокировка пользователя"""
-    session = await SupportSession.get(session_id)
-    if session:
-        # TODO: Реализовать логику блокировки пользователя
-        # await block_user_in_system(session.user_id)
-        pass
+    """Блокировка/разблокировка пользователя из сессии поддержки"""
+    try:
+        # Получаем сессию поддержки
+        session = await SupportSession.find_one(SupportSession.id == PydanticObjectId(session_id))
+        if not session:
+            raise HTTPException(status_code=404, detail="Сессия не найдена")
 
-    return RedirectResponse(f"/support/session/{session_id}", status_code=303)
+        # Получаем пользователя
+        user = await User.find_one(User.tg_id == session.user_id)
+        if not user:
+            raise HTTPException(status_code=404, detail="Пользователь не найден")
+
+        # Определяем новое состояние
+        new_banned_status = not user.banned
+
+        await user.update(banned=new_banned_status)
+
+        action = "разблокирован" if not new_banned_status else "заблокирован"
+        logger.warning(f"🔒 [Support] Пользователь {action} {session.user_id} (сессия: {session_id})")
+
+        return RedirectResponse(f"/support/", status_code=303)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ [SupportBlock] Ошибка блокировки пользователя: {str(e)}")
+        raise HTTPException(status_code=500, detail="Внутренняя ошибка сервера")
 
 
 # API эндпоинты для AJAX

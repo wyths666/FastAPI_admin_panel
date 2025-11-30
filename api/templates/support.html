@@ -846,7 +846,7 @@
 
                 <div class="info-item">
                     <span class="info-label">Текущее состояние</span>
-                    <div class="state-data">{{ session.state or "Не указано" }}</div>
+                    <div class="state-data">{{ session.state_display }}</div>
                 </div>
 
                 <div class="info-item">
@@ -865,12 +865,7 @@
                 </div>
                 {% endif %}
 
-                {% if session.previous_state %}
-                <div class="info-item">
-                    <span class="info-label">Предыдущее состояние</span>
-                    <div class="state-data">{{ session.previous_state }}</div>
-                </div>
-                {% endif %}
+
 
                 <!-- Форма отката состояния -->
 <div class="info-item">
@@ -904,11 +899,11 @@
                     {% endif %}
 
                     <form method="post" action="/support/session/{{ session.id }}/block_user">
-                        <button type="submit" class="action-btn btn-red"
-                                onclick="return confirm('Заблокировать пользователя {{ session.username }}?')">
-                            🚫 {% if session.banned %}Разблокировать{% else %}Заблокировать{% endif %} пользователя
-                        </button>
-                    </form>
+    <button type="submit" class="action-btn btn-red"
+            onclick="return confirm('{% if session.banned %}Разблокировать{% else %}Заблокировать{% endif %} пользователя {{ session.username }}?')">
+        🚫 {% if session.banned %}Разблокировать{% else %}Заблокировать{% endif %} пользователя
+    </button>
+</form>
                 </div>
             </div>
 <!-- Чат -->

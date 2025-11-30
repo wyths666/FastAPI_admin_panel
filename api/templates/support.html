@@ -1,0 +1,1501 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Техподдержка</title>
+    <style>
+        /* Базовые стили */
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background-color: #f8fafc;
+            color: #374151;
+            line-height: 1.5;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 1rem;
+        }
+
+        /* Хедер */
+        .header-actions {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.5rem;
+        }
+
+        .btn-back, .btn-logout {
+            padding: 0.5rem 1rem;
+            border-radius: 0.375rem;
+            text-decoration: none;
+            font-weight: 500;
+            transition: background-color 0.2s;
+            border: none;
+            cursor: pointer;
+        }
+
+        .btn-back {
+            background-color: #6b7280;
+            color: white;
+        }
+
+        .btn-back:hover {
+            background-color: #4b5563;
+        }
+
+        .btn-logout {
+            background-color: #ef4444;
+            color: white;
+        }
+
+        .btn-logout:hover {
+            background-color: #dc2626;
+        }
+
+        /* Заголовок страницы */
+        .page-header {
+            background: white;
+            border-radius: 0.5rem;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .page-title {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: #1f2937;
+            margin-bottom: 0.5rem;
+        }
+
+        .page-summary {
+            color: #6b7280;
+        }
+.bubble-user, .bubble-admin {
+    max-width: 300px;
+    min-width: 120px;
+    min-height: 36px;
+    padding: 0.5rem 0.75rem;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+    word-break: break-word; /* ← критично для длинных слов */
+}
+
+/* Усиливаем перенос */
+.break-words {
+    overflow-wrap: break-word;
+    word-wrap: break-word;
+}
+
+/* Гарантируем, что длинные слова (такие как URL) не ломают layout */
+.break-all {
+    word-break: break-all;
+}
+        /* Фильтры */
+        .filters {
+            background: white;
+            border-radius: 0.5rem;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            padding: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .filter-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 1rem;
+            align-items: center;
+        }
+
+        .tabs {
+            display: flex;
+            border-bottom: 1px solid #e5e7eb;
+        }
+
+        .tab {
+            padding: 0.5rem 1rem;
+            font-weight: 500;
+            text-decoration: none;
+            color: #6b7280;
+            border-bottom: 2px solid transparent;
+        }
+
+        .tab.active {
+            color: #3b82f6;
+            border-bottom-color: #3b82f6;
+        }
+
+        .tab:hover {
+            color: #374151;
+        }
+
+        .badge {
+            background-color: #dbeafe;
+            color: #1e40af;
+            font-size: 0.75rem;
+            padding: 0.125rem 0.5rem;
+            border-radius: 9999px;
+            margin-left: 0.5rem;
+        }
+
+        .pagination {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-left: auto;
+        }
+
+        .pagination-btn {
+            background-color: #e5e7eb;
+            color: #374151;
+            padding: 0.25rem 0.75rem;
+            border-radius: 0.375rem;
+            text-decoration: none;
+            transition: background-color 0.2s;
+        }
+
+        .pagination-btn:hover {
+            background-color: #d1d5db;
+        }
+
+        .pagination-info {
+            font-size: 0.875rem;
+            color: #6b7280;
+        }
+
+        /* Сессии */
+        .sessions-list {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .session {
+            background: white;
+            border-radius: 0.5rem;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+        }
+
+        .session-header {
+            padding: 1rem;
+            border-bottom: 1px solid #e5e7eb;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+
+        .session-header:hover {
+            background-color: #f9fafb;
+        }
+
+        .session-header-content {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .session-info {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .toggle-icon {
+            transition: transform 0.3s ease;
+        }
+
+        .toggle-icon.open {
+            transform: rotate(180deg);
+        }
+
+        .user-main-info {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .username {
+            font-weight: 600;
+            font-size: 1.125rem;
+        }
+
+        .user-id {
+            font-size: 0.875rem;
+            color: #6b7280;
+        }
+
+        .banned-badge {
+            background-color: #fef2f2;
+            color: #dc2626;
+            font-size: 0.75rem;
+            padding: 0.25rem 0.5rem;
+            border-radius: 0.375rem;
+        }
+
+        .session-meta {
+            text-align: right;
+        }
+
+        .session-date {
+            font-size: 0.875rem;
+            color: #6b7280;
+        }
+
+        .session-state {
+            font-size: 0.875rem;
+            font-weight: 500;
+        }
+
+        .state-active {
+            color: #3b82f6;
+        }
+
+        .state-resolved {
+            color: #10b981;
+        }
+
+        /* Детали сессии */
+        .session-details {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.3s ease-out;
+        }
+
+        .session-details.open {
+            max-height: 2000px;
+        }
+
+        .details-content {
+            padding: 1.5rem;
+        }
+
+        .grid-layout {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 1.5rem;
+        }
+
+        @media (min-width: 1024px) {
+            .grid-layout {
+                grid-template-columns: 1fr 2fr;
+            }
+        }
+.rollback-form {
+    margin-top: 10px;
+}
+
+.rollback-form select {
+    font-size: 14px;
+    background: white;
+}
+
+.rollback-form select:focus {
+    outline: none;
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.actions .action-btn {
+    margin-bottom: 0.5rem;
+}
+        /* Информационная панель */
+        .info-panel {
+            background-color: #f9fafb;
+            border-radius: 0.5rem;
+            padding: 1.5rem;
+        }
+
+        .panel-title {
+            font-weight: 600;
+            font-size: 1.125rem;
+            margin-bottom: 1rem;
+        }
+
+        .info-item {
+            margin-bottom: 0.75rem;
+        }
+
+        .info-label {
+            font-size: 0.875rem;
+            color: #6b7280;
+            display: block;
+            margin-bottom: 0.25rem;
+        }
+
+        .info-value {
+            font-weight: 500;
+        }
+
+        .state-data {
+            background: white;
+            padding: 0.5rem;
+            border-radius: 0.375rem;
+            border: 1px solid #e5e7eb;
+            font-family: monospace;
+            font-size: 0.75rem;
+        }
+
+        /* Кнопки действий */
+        .actions {
+            margin-top: 1.5rem;
+        }
+
+        .action-btn {
+            display: block;
+            width: 100%;
+            padding: 0.5rem 1rem;
+            margin-bottom: 0.5rem;
+            border: none;
+            border-radius: 0.375rem;
+            color: white;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            text-align: center;
+        }
+
+        .btn-yellow {
+            background-color: #eab308;
+        }
+
+        .btn-yellow:hover {
+            background-color: #ca8a04;
+        }
+
+        .btn-green {
+            background-color: #10b981;
+        }
+
+        .btn-green:hover {
+            background-color: #059669;
+        }
+
+        .btn-red {
+            background-color: #ef4444;
+        }
+
+        .btn-red:hover {
+            background-color: #dc2626;
+        }
+
+        /* Чат */
+        .chat-container {
+            background: white;
+            border: 1px solid #e5e7eb;
+            border-radius: 0.5rem;
+            overflow: hidden;
+        }
+
+        .chat-header {
+            padding: 1rem;
+            border-bottom: 1px solid #e5e7eb;
+            font-weight: 600;
+            font-size: 1.125rem;
+        }
+
+        .chat-messages {
+            padding: 1rem;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .message {
+            display: flex;
+            margin-bottom: 0.5rem;
+        }
+
+        .message-user {
+            justify-content: flex-start;
+        }
+
+        .message-admin {
+            justify-content: flex-end;
+        }
+
+        .message-bubble {
+            max-width: 300px;
+            padding: 0.5rem 0.75rem;
+            border-radius: 0.75rem;
+            word-wrap: break-word;
+            overflow-wrap: break-word;
+        }
+
+        .bubble-user {
+            background-color: #f3f4f6;
+            color: #374151;
+            border-radius: 0.75rem 0.75rem 0.75rem 0.25rem;
+        }
+
+        .bubble-admin {
+            background-color: #e3f2fd;
+            color: black;
+            border-radius: 0.75rem 0.75rem 0.25rem 0.75rem;
+        }
+
+        .message-time {
+            font-size: 0.625rem;
+            opacity: 0.7;
+            margin-top: 0.25rem;
+            text-align: right;
+        }
+
+        /* Формы чата */
+        .chat-forms {
+            padding: 1rem;
+            border-top: 1px solid #e5e7eb;
+        }
+
+        .chat-input-form {
+            display: flex;
+            flex-direction: column;
+            gap: 0.375rem;
+        }
+
+        .input-row {
+            display: flex;
+            gap: 0.5rem;
+            align-items: flex-end;
+        }
+
+        .chat-input {
+            flex: 1;
+            resize: none;
+            padding: 0.625rem 0.75rem;
+            border-radius: 0.25rem;
+            border: 1px solid #d1d5db;
+            font-family: inherit;
+            font-size: 0.875rem;
+        }
+
+        .chat-attach-btn {
+            background: #6b7280;
+            color: white;
+            padding: 0.625rem 0.75rem;
+            border-radius: 0.25rem;
+            cursor: pointer;
+            align-self: flex-end;
+            border: none;
+        }
+
+        .chat-send {
+            background: #3b82f6;
+            color: white;
+            border: none;
+            padding: 0.625rem 1.25rem;
+            border-radius: 0.25rem;
+            cursor: pointer;
+            align-self: flex-end;
+            font-weight: 500;
+        }
+
+        .chat-send:hover {
+            background: #2563eb;
+        }
+
+        .file-status {
+            font-size: 0.875rem;
+            color: #6b7280;
+            flex: 1;
+        }
+
+        /* Empty state */
+        .empty-state {
+            background: white;
+            border-radius: 0.5rem;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            padding: 3rem 2rem;
+            text-align: center;
+        }
+
+        .empty-icon {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+        }
+
+        .empty-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: #374151;
+            margin-bottom: 0.5rem;
+        }
+
+        .empty-description {
+            color: #6b7280;
+        }
+
+        /* Стили для модального окна фото */
+        .photo-modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.95);
+        }
+
+        .photo-modal-overlay {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            height: 100%;
+            padding: 0;
+        }
+
+        .photo-modal-container {
+            background: transparent;
+            border-radius: 0;
+            max-width: none;
+            max-height: none;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            box-shadow: none;
+        }
+
+        .photo-modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 16px 20px;
+            background: rgba(0, 0, 0, 0.7);
+            border-bottom: none;
+            border-radius: 0;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 1001;
+        }
+
+        .photo-modal-controls {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .photo-modal-btn {
+            background: rgba(59, 130, 246, 0.8);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            width: 36px;
+            height: 36px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: bold;
+            transition: background-color 0.2s;
+        }
+
+        .photo-modal-btn:hover {
+            background: rgba(37, 99, 235, 0.9);
+        }
+
+        .photo-modal-scale {
+            font-size: 14px;
+            font-weight: 600;
+            color: white;
+            min-width: 50px;
+            text-align: center;
+        }
+
+        .photo-modal-close {
+            background: rgba(239, 68, 68, 0.8);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            width: 36px;
+            height: 36px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            font-size: 20px;
+            transition: background-color 0.2s;
+        }
+
+        .photo-modal-close:hover {
+            background: rgba(220, 38, 38, 0.9);
+        }
+
+        .photo-modal-content-area {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0;
+            background: transparent;
+            border-radius: 0;
+            overflow: visible;
+            position: relative;
+        }
+
+        .photo-image-wrapper {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            max-width: none;
+            max-height: none;
+            overflow: visible;
+            position: relative;
+        }
+
+        .photo-modal-content {
+            max-width: 90vw;
+            max-height: 90vh;
+            object-fit: contain;
+            border-radius: 8px;
+            cursor: grab;
+            transition: transform 0.2s ease;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+        }
+
+        .photo-modal-content:active {
+            cursor: grabbing;
+        }
+
+        .photo-modal-hint {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 14px;
+            z-index: 1001;
+        }
+
+        /* Утилиты */
+        .flex { display: flex; }
+        .justify-start { justify-content: flex-start; }
+        .justify-end { justify-content: flex-end; }
+        .justify-between { justify-content: space-between; }
+        .items-center { align-items: center; }
+        .flex-wrap { flex-wrap: wrap; }
+        .gap-4 { gap: 1rem; }
+        .space-y-4 > * + * { margin-top: 1rem; }
+        .space-y-3 > * + * { margin-top: 0.75rem; }
+        .space-y-2 > * + * { margin-top: 0.5rem; }
+        .mb-6 { margin-bottom: 1.5rem; }
+        .mb-4 { margin-bottom: 1rem; }
+        .mb-2 { margin-bottom: 0.5rem; }
+        .ml-2 { margin-left: 0.5rem; }
+        .ml-auto { margin-left: auto; }
+        .p-6 { padding: 1.5rem; }
+        .p-4 { padding: 1rem; }
+        .p-2 { padding: 0.5rem; }
+        .border-b { border-bottom: 1px solid #e5e7eb; }
+        .border { border: 1px solid #e5e7eb; }
+        .rounded-lg { border-radius: 0.5rem; }
+        .rounded { border-radius: 0.375rem; }
+        .shadow-md { box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06); }
+        .text-center { text-align: center; }
+        .text-right { text-align: right; }
+        .text-sm { font-size: 0.875rem; }
+        .text-xs { font-size: 0.75rem; }
+        .text-lg { font-size: 1.125rem; }
+        .text-xl { font-size: 1.25rem; }
+        .text-2xl { font-size: 1.5rem; }
+        .font-semibold { font-weight: 600; }
+        .font-bold { font-weight: 700; }
+        .font-medium { font-weight: 500; }
+        .font-mono { font-family: monospace; }
+        .text-gray-500 { color: #6b7280; }
+        .text-gray-600 { color: #4b5563; }
+        .text-gray-800 { color: #1f2937; }
+        .text-blue-600 { color: #2563eb; }
+        .text-green-600 { color: #059669; }
+        .text-red-500 { color: #ef4444; }
+        .text-white { color: white; }
+        .bg-white { background-color: white; }
+        .bg-gray-50 { background-color: #f9fafb; }
+        .bg-gray-100 { background-color: #f3f4f6; }
+        .bg-gray-200 { background-color: #e5e7eb; }
+        .bg-blue-100 { background-color: #dbeafe; }
+        .bg-blue-500 { background-color: #3b82f6; }
+        .bg-red-100 { background-color: #fee2e2; }
+        .bg-green-500 { background-color: #10b981; }
+        .bg-yellow-500 { background-color: #eab308; }
+        .bg-red-500 { background-color: #ef4444; }
+        .max-w-xs { max-width: 20rem; }
+        .break-words { word-wrap: break-word; overflow-wrap: break-word; }
+        .whitespace-pre-line { white-space: pre-line; }
+        .opacity-80 { opacity: 0.8; }
+        .cursor-pointer { cursor: pointer; }
+        .hidden { display: none; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Хедер -->
+        <div class="header-actions">
+            <a href="/" class="btn-back">← Назад</a>
+            <a href="/auth/logout" class="btn-logout">🚪 Выйти</a>
+        </div>
+
+        <!-- Заголовок страницы -->
+        <div class="page-header">
+            <h1 class="page-title">
+                {% if active_tab == 'active' %}
+                    Активные обращения в поддержку
+                {% else %}
+                    Завершенные обращения
+                {% endif %}
+            </h1>
+            <p class="page-summary">Всего обращений: {{ total_sessions }}</p>
+        </div>
+
+        <!-- Фильтры и пагинация -->
+        <div class="filters">
+            <div class="filter-row">
+                <!-- Табы -->
+                <div class="tabs">
+                    <a href="/support/" class="tab {% if active_tab == 'active' %}active{% endif %}">
+                        Активные
+                        {% if active_tab == 'active' %}
+                        <span class="badge">{{ total_sessions }}</span>
+                        {% endif %}
+                    </a>
+                    <a href="/support/?resolved=true" class="tab {% if active_tab == 'resolved' %}active{% endif %}">
+                        Завершенные
+                    </a>
+                </div>
+
+                <!-- Пагинация -->
+                {% if total_pages > 1 %}
+                <div class="pagination">
+                    {% if has_prev %}
+                    <a href="?resolved={{ resolved }}&page={{ current_page - 1 }}&per_page={{ per_page }}" class="pagination-btn">
+                        ←
+                    </a>
+                    {% endif %}
+
+                    <span class="pagination-info">
+                        Страница {{ current_page }} из {{ total_pages }}
+                    </span>
+
+                    {% if has_next %}
+                    <a href="?resolved={{ resolved }}&page={{ current_page + 1 }}&per_page={{ per_page }}" class="pagination-btn">
+                        →
+                    </a>
+                    {% endif %}
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Список сессий -->
+        <div class="sessions-list">
+            {% for session in sessions %}
+            <div class="session" data-session-id="{{ session.id }}">
+                <!-- Заголовок сессии -->
+                <div class="session-header" onclick="toggleSessionDetails('{{ session.id }}')">
+                    <div class="session-header-content">
+                        <div class="session-info">
+                            <div class="toggle-icon" id="toggle-{{ session.id }}">▼</div>
+                            <div class="user-main-info">
+                                <span class="username">{{ session.username }}</span>
+                                <span class="user-id">ID: {{ session.user_id }}</span>
+                                {% if session.banned %}
+                                <span class="banned-badge">🚫 Заблокирован</span>
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="session-meta">
+                            <div class="session-date">
+                                {{ session.created_at.strftime('%d.%m.%Y %H:%M') }}
+                            </div>
+                            <div class="session-state {% if session.resolved %}state-resolved{% else %}state-active{% endif %}">
+                                {{ session.state_display }}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Детали сессии -->
+                <div class="session-details" id="details-{{ session.id }}">
+    <div class="details-content">
+        <div class="grid-layout">
+            <!-- Информационная панель -->
+            <div class="info-panel">
+                <h3 class="panel-title">Информация о сессии</h3>
+
+                <div class="info-item">
+                    <span class="info-label">Пользователь</span>
+                    <div class="info-value">{{ session.username }} (ID: {{ session.user_id }})</div>
+                </div>
+
+                <div class="info-item">
+                    <span class="info-label">Текущее состояние</span>
+                    <div class="state-data">{{ session.state or "Не указано" }}</div>
+                </div>
+
+                <div class="info-item">
+                    <span class="info-label">Дата создания</span>
+                    <div class="info-value">{{ session.created_at.strftime('%d.%m.%Y %H:%M') }}</div>
+                </div>
+
+                {% if session.state_data_preview %}
+                <div class="info-item">
+                    <span class="info-label">Данные состояния</span>
+                    <div class="state-data">
+                        {% for key, value in session.state_data_preview.items() %}
+                        <div><strong>{{ key }}:</strong> {{ value }}</div>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+
+                {% if session.previous_state %}
+                <div class="info-item">
+                    <span class="info-label">Предыдущее состояние</span>
+                    <div class="state-data">{{ session.previous_state }}</div>
+                </div>
+                {% endif %}
+
+                <!-- Форма отката состояния -->
+<div class="info-item">
+    <span class="info-label">Откат состояния</span>
+    <form method="post" action="/support/session/{{ session.id }}/rollback"
+          class="rollback-form"
+          onsubmit="return confirm('Вы уверены, что хотите выполнить откат? Пользователь получит соответствующее сообщение.')">
+        <div style="display: flex; gap: 8px; align-items: flex-end;">
+            <select name="target_state" required
+                    style="flex: 1; padding: 8px; border: 1px solid #d1d5db; border-radius: 4px;"
+                    id="rollback-select-{{ session.id }}">
+                <option value="">-- Загрузка доступных состояний --</option>
+            </select>
+            <button type="submit" class="action-btn btn-yellow" style="margin: 0; white-space: nowrap;">
+                ↩️ Откатить
+            </button>
+        </div>
+    </form>
+</div>
+
+                <!-- Действия -->
+                <div class="actions">
+                    {% if not session.resolved %}
+                    <form method="post" action="/support/session/{{ session.id }}/resolve"
+                          class="inline-block w-full"
+                          onsubmit="return confirm('Вы уверены, что хотите закрыть обращение? Пользователь получит уведомление.')">
+                        <button type="submit" class="action-btn btn-green">
+                            ✅ Закрыть обращение
+                        </button>
+                    </form>
+                    {% endif %}
+
+                    <form method="post" action="/support/session/{{ session.id }}/block_user">
+                        <button type="submit" class="action-btn btn-red"
+                                onclick="return confirm('Заблокировать пользователя {{ session.username }}?')">
+                            🚫 {% if session.banned %}Разблокировать{% else %}Заблокировать{% endif %} пользователя
+                        </button>
+                    </form>
+                </div>
+            </div>
+<!-- Чат -->
+                            <div class="chat-container">
+                                <div class="chat-header">Чат с пользователем</div>
+
+                                <div class="chat-messages" id="messages-{{ session.id }}">
+                                    <div class="text-center text-gray-500">
+                                        Загрузка сообщений...
+                                    </div>
+                                </div>
+
+                                <div class="chat-forms">
+                                <div class="chat-forms">
+                                    <!-- Форма отправки текста -->
+                                    <form class="chat-input-form"
+                                          onsubmit="return handleSendText('{{ session.id }}', event)">
+
+                                        <div class="input-row">
+                                            <textarea
+                                                class="chat-input"
+                                                id="message-input-{{ session.id }}"
+                                                placeholder="Введите сообщение..."
+                                                rows="1"
+                                                oninput="autoResizeTextarea(this)"></textarea>
+
+                                            <label for="fileInput-{{ session.id }}" class="chat-attach-btn" title="📎 Прикрепить файл">
+                                                📎
+                                            </label>
+
+                                            <input type="file"
+                                                   id="fileInput-{{ session.id }}"
+                                                   class="hidden"
+                                                   accept="*/*"
+                                                   onchange="handleFileSelect('{{ session.id }}', this)">
+
+                                            <button
+                                                type="submit"
+                                                class="chat-send">
+                                                Отправить
+                                            </button>
+                                        </div>
+
+                                        <div id="fileStatus-{{ session.id }}" class="file-status"></div>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% else %}
+            <div class="empty-state">
+                <div class="empty-icon">
+                    {% if active_tab == 'active' %}📭{% else %}📋{% endif %}
+                </div>
+                <h3 class="empty-title">
+                    {% if active_tab == 'active' %}
+                        Нет активных обращений
+                    {% else %}
+                        Нет завершенных обращений
+                    {% endif %}
+                </h3>
+                <p class="empty-description">
+                    {% if active_tab == 'active' %}
+                        Все обращения обработаны 👍
+                    {% else %}
+                        Завершенные обращения появятся здесь
+                    {% endif %}
+                </p>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- JavaScript остается таким же как в предыдущем ответе -->
+    <script>
+    let currentOpenSession = null;
+    let lastKnownMessageCount = {};
+
+    // Константы для масштабирования фото
+        const MIN_ZOOM = 0.1;
+        const MAX_ZOOM = 10;
+        const ZOOM_STEP = 0.2;
+        let currentPhotoScale = 1;
+        let isDragging = false;
+        let startX, startY, translateX = 0, translateY = 0;
+
+    // ————————————————————————————————————————
+    // Вспомогательные функции
+    // ————————————————————————————————————————
+    function autoResizeTextarea(textarea) {
+        if (!textarea) return;
+        textarea.style.height = 'auto';
+        textarea.style.height = Math.min(120, textarea.scrollHeight) + 'px'; // ограничение высоты
+    }
+
+    function escapeHtml(unsafe) {
+        if (!unsafe) return '';
+        return String(unsafe)
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#039;")
+            .replace(/\n/g, '<br>');
+
+    }
+
+    function linkify(htmlString) {
+    // Ищем URL в тексте, игнорируя уже существующие теги <a>
+    const urlRegex = /(\bhttps?:\/\/[^\s<>"{}|\\^`\[\]]+|\bwww\.[^\s<>"{}|\\^`\[\]]+)/gi;
+    return htmlString.replace(urlRegex, match => {
+        if (/<\/?a\b/i.test(match)) return match; // защита от рекурсии
+        const url = match.startsWith('http') ? match : 'https://' + match;
+        return `<a href="${url}" target="_blank" rel="noopener noreferrer" class="underline text-blue-600 hover:text-blue-800 break-all">${match}</a>`;
+    });
+}
+
+function isScrolledToBottom(el) {
+    return el.scrollHeight - el.scrollTop <= el.clientHeight + 5;
+}
+
+// Функция загрузки доступных состояний для отката
+async function loadAvailableRollbackStates(sessionId) {
+    try {
+        console.log(`Загрузка доступных состояний для сессии ${sessionId}`);
+
+        const response = await fetch(`/support/session/${sessionId}/available_rollback_states`);
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const data = await response.json();
+        console.log('Получены доступные состояния:', data);
+
+        const select = document.getElementById(`rollback-select-${sessionId}`);
+        if (!select) {
+            console.error(`Select элемент не найден для сессии ${sessionId}`);
+            return;
+        }
+
+        // Очищаем options
+        select.innerHTML = '<option value="">-- Вернуть к шагу --</option>';
+
+        // Проверяем, есть ли доступные состояния
+        if (!data.available_states || Object.keys(data.available_states).length === 0) {
+            const option = document.createElement('option');
+            option.value = "";
+            option.textContent = "Нет доступных состояний для отката";
+            option.disabled = true;
+            select.appendChild(option);
+            select.disabled = true;
+            console.log('Нет доступных состояний для отката');
+            return;
+        }
+
+        // Добавляем доступные состояния
+        for (const [state, displayName] of Object.entries(data.available_states)) {
+            const option = document.createElement('option');
+            option.value = state;
+            option.textContent = displayName;
+            select.appendChild(option);
+        }
+
+        select.disabled = false;
+        console.log(`Загружено ${Object.keys(data.available_states).length} доступных состояний`);
+
+    } catch (error) {
+        console.error('Ошибка загрузки доступных состояний:', error);
+
+        const select = document.getElementById(`rollback-select-${sessionId}`);
+        if (select) {
+            select.innerHTML = '<option value="">-- Ошибка загрузки --</option>';
+            select.disabled = true;
+        }
+    }
+}
+
+    function formatMessageTime(ts) {
+        const d = new Date(ts);
+        const now = new Date();
+        const diff = (now - d) / 60000; // минуты
+        if (diff < 1) return 'только что';
+        if (diff < 60) return `${Math.floor(diff)} мин назад`;
+        if (diff < 60 * 24) return `${Math.floor(diff / 60)} ч назад`;
+        return d.toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+    }
+
+    function formatFileSize(bytes) {
+        if (!bytes) return '–';
+        const k = 1024;
+        const units = ['B', 'KB', 'MB'];
+        let i = Math.floor(Math.log(bytes) / Math.log(k));
+        i = Math.min(i, 2);
+        return (bytes / Math.pow(k, i)).toFixed(i ? 1 : 0) + ' ' + units[i];
+    }
+
+    // ————————————————————————————————————————
+    // Отправка текста
+    // ————————————————————————————————————————
+    async function handleSendText(sessionId, event) {
+        event.preventDefault();
+        const textarea = document.getElementById(`message-input-${sessionId}`);
+        const msg = textarea?.value?.trim();
+        if (!msg) return alert('Введите сообщение');
+
+        try {
+            const fd = new FormData();
+            fd.append('message', msg);
+            const res = await fetch(`/support/session/${sessionId}/send_message`, {
+                method: 'POST', body: fd
+            });
+            if (!res.ok) throw await res.json();
+            textarea.value = '';
+            textarea.style.height = 'auto';
+            await loadSessionMessages(sessionId, true); // force scroll to bottom
+        } catch (err) {
+            console.error(err);
+            alert('❌ ' + (err.detail || 'Ошибка отправки'));
+        }
+    }
+
+    // ————————————————————————————————————————
+    // Отправка файла
+    // ————————————————————————————————————————
+    async function handleFileSelect(sessionId, input) {
+        const file = input?.files?.[0];
+        if (!file) return;
+
+        const status = document.getElementById(`fileStatus-${sessionId}`);
+        status.textContent = `📤 ${file.name}…`;
+        status.style.color = '#6b7280';
+
+        try {
+            const fd = new FormData();
+            fd.append('file', file);
+            const caption = document.getElementById(`message-input-${sessionId}`)?.value.trim();
+            if (caption) fd.append('caption', caption);
+
+            const res = await fetch(`/support/session/${sessionId}/send_file`, {
+                method: 'POST', body: fd
+            });
+            if (!res.ok) throw await res.json();
+
+            status.textContent = `✅ ${file.name}`;
+            status.style.color = '#10b981';
+            input.value = '';
+            document.getElementById(`message-input-${sessionId}`).value = '';
+            await loadSessionMessages(sessionId, true);
+            setTimeout(() => status.textContent = '', 2500);
+
+        } catch (err) {
+            console.error(err);
+            status.textContent = `❌ ${file.name}: ${err.detail || 'ошибка'}`;
+            status.style.color = '#ef4444';
+        }
+    }
+
+    // ————————————————————————————————————————
+    // Загрузка и отображение сообщений
+    // ————————————————————————————————————————
+    async function loadSessionMessages(sessionId, forceScrollToBottom = false) {
+    const container = document.getElementById(`messages-${sessionId}`);
+    if (!container) return;
+
+    try {
+        const res = await fetch(`/support/api/session/${sessionId}/messages`);
+        const messages = await res.json();
+        const newCount = messages.length;
+        const oldCount = lastKnownMessageCount[sessionId] || 0;
+
+        if (newCount === oldCount && !forceScrollToBottom) return;
+
+        container.innerHTML = '';
+
+        messages.forEach(m => {
+            const isFromAdmin = m.is_bot;
+            const alignClass = isFromAdmin ? 'message-admin' : 'message-user';
+            const bubbleClass = isFromAdmin ? 'bubble-admin' : 'bubble-user';
+
+            let contentHtml = '';
+
+            // ✅ Общие стили пузырьков: фиксированная ширина, перенос, минимальная высота
+            const bubbleStyle = 'max-width: 300px; min-width: 120px; min-height: 36px; padding: 0.5rem 0.75rem; display: flex; flex-direction: column; justify-content: flex-start;';
+
+            if (m.has_photo && m.photo_file_id) {
+                const captionHtml = m.photo_caption
+                    ? `<div class="text-xs mt-0.5">${escapeHtml(m.photo_caption)}</div>`
+                    : '';
+                contentHtml = `
+                    <div class="${bubbleClass}" style="${bubbleStyle}">
+                        <img src="/support/session/${sessionId}/photo/${m.photo_file_id}"
+                             alt="Фото"
+                             class="max-w-full rounded mb-1 cursor-pointer"
+                             onclick="openPhotoModal('${sessionId}', '${m.photo_file_id}')"
+                             style="max-height: 200px; object-fit: cover;">
+                        ${captionHtml}
+                        <div class="message-time">${formatMessageTime(m.timestamp)}</div>
+                    </div>
+                `;
+
+            } else if (m.has_document && m.document_file_id) {
+                const captionToShow = (m.message && m.message !== m.document_name) ? m.message : '';
+                const captionHtml = captionToShow
+                    ? `<div class="text-xs mt-0.5">${escapeHtml(captionToShow)}</div>`
+                    : '';
+                contentHtml = `
+                    <div class="${bubbleClass}" style="${bubbleStyle}">
+                        <a href="/support/session/${sessionId}/document/${m.document_file_id}"
+                           class="flex items-center text-xs font-medium text-current hover:underline"
+                           download="${escapeHtml(m.document_name)}">
+                            <span class="mr-1">📎</span>
+                            <span class="break-all">${escapeHtml(m.document_name)}</span>
+                        </a>
+                        ${captionHtml}
+                        <div class="text-[10px] text-gray-500 mt-0.5 flex justify-between">
+                            <span>${formatFileSize(m.document_size)}</span>
+                            <span>${formatMessageTime(m.timestamp)}</span>
+                        </div>
+                    </div>
+                `;
+
+            } else {
+                // ✅ Автоперенос: break-words + word-break: break-word для длинных слов (URL, base64 и т.п.)
+                const textContent = m.message || '';
+                const escaped = escapeHtml(textContent); // содержит <br>
+                const withLinks = linkify(escaped);
+                contentHtml = `
+                    <div class="${bubbleClass}" style="${bubbleStyle}">
+                        <div class="text-sm break-words" style="word-break: break-word;">${withLinks}</div>
+                        <div class="message-time">${formatMessageTime(m.timestamp)}</div>
+                    </div>
+                `;
+            }
+
+            const el = document.createElement('div');
+            el.className = `message ${alignClass}`;
+            el.innerHTML = contentHtml;
+            container.appendChild(el);
+        });
+
+        lastKnownMessageCount[sessionId] = newCount;
+
+        if (forceScrollToBottom || oldCount === 0 || isScrolledToBottom(container)) {
+            // ⏱ Небольшая задержка — чтобы браузер успел обновить layout
+            setTimeout(() => {
+                container.scrollTop = container.scrollHeight;
+            }, 10);
+        }
+
+    } catch (e) {
+        console.error('Load messages error:', e);
+        container.innerHTML = '<div class="text-center text-red-500 py-2 text-sm">❌ Ошибка загрузки</div>';
+    }
+}
+
+    // ————————————————————————————————————————
+    // Умное обновление (без мигания и сброса скролла)
+    // ————————————————————————————————————————
+    function startSmartRefresh(sessionId) {
+        if (window.refreshIntervals?.[sessionId]) return;
+
+        if (!window.refreshIntervals) window.refreshIntervals = {};
+        window.refreshIntervals[sessionId] = setInterval(() => {
+            if (currentOpenSession === sessionId) {
+                loadSessionMessages(sessionId);
+            }
+        }, 4000);
+    }
+
+    function stopSmartRefresh(sessionId) {
+        if (window.refreshIntervals?.[sessionId]) {
+            clearInterval(window.refreshIntervals[sessionId]);
+            delete window.refreshIntervals[sessionId];
+        }
+    }
+
+    // ————————————————————————————————————————
+    // Открытие/закрытие сессии
+    // ————————————————————————————————————————
+    function toggleSessionDetails(sessionId) {
+    const details = document.getElementById(`details-${sessionId}`);
+    const icon = document.getElementById(`toggle-${sessionId}`);
+
+    if (currentOpenSession && currentOpenSession !== sessionId) {
+        const prev = document.getElementById(`details-${currentOpenSession}`);
+        const prevIcon = document.getElementById(`toggle-${currentOpenSession}`);
+        prev?.classList.remove('open');
+        prevIcon?.classList.remove('open');
+        stopSmartRefresh(currentOpenSession);
+    }
+
+    details.classList.toggle('open');
+    icon.classList.toggle('open');
+
+    if (details.classList.contains('open')) {
+        currentOpenSession = sessionId;
+        loadSessionMessages(sessionId);
+        loadAvailableRollbackStates(sessionId); // ← ДОБАВИТЬ ЭТУ СТРОЧКУ
+        startSmartRefresh(sessionId);
+    } else {
+        currentOpenSession = null;
+        stopSmartRefresh(sessionId);
+    }
+}
+
+    // ————————————————————————————————————————
+    // Модальное окно фото (стиль из прошлого проекта)
+    // ————————————————————————————————————————
+    function openPhotoModal(sessionId, photoFileId) {
+            currentPhotoScale = 1;
+            translateX = 0;
+            translateY = 0;
+
+            const oldModal = document.getElementById('supportPhotoModal');
+            if (oldModal) oldModal.remove();
+
+            const modal = document.createElement('div');
+            modal.id = 'supportPhotoModal';
+            modal.className = 'photo-modal';
+            modal.innerHTML = `
+                <div class="photo-modal-overlay">
+                    <div class="photo-modal-container">
+                        <div class="photo-modal-header">
+                            <div class="photo-modal-controls">
+                                <button class="photo-modal-btn" onclick="supportZoomOut()" title="Уменьшить">−</button>
+                                <span class="photo-modal-scale" id="supportPhotoScale">100%</span>
+                                <button class="photo-modal-btn" onclick="supportZoomIn()" title="Увеличить">+</button>
+                                <button class="photo-modal-btn" onclick="supportResetZoom()" title="Сбросить масштаб">⟲</button>
+                                <button class="photo-modal-btn" onclick="supportDownloadPhoto('${sessionId}', '${photoFileId}')" title="Скачать фото">⤓</button>
+                            </div>
+                            <button class="photo-modal-close" onclick="closeSupportPhotoModal()" title="Закрыть">&times;</button>
+                        </div>
+                        <div class="photo-modal-content-area">
+                            <div class="photo-image-wrapper">
+                                <img class="photo-modal-content" id="supportModalPhoto"
+                                     src="/support/session/${sessionId}/photo/${photoFileId}"
+                                     alt="Фото из поддержки"
+                                     onmousedown="startDrag(event)"
+                                     onmousemove="drag(event)"
+                                     onmouseup="endDrag()"
+                                     onmouseleave="endDrag()">
+                            </div>
+                        </div>
+                        <div class="photo-modal-hint" id="photoHint">
+                            Колесо мыши — масштаб | Перетаскивание — панорамирование
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            document.body.appendChild(modal);
+
+            // Закрытие по клику на оверлей
+            modal.querySelector('.photo-modal-overlay').onclick = function(event) {
+                if (event.target === this) closeSupportPhotoModal();
+            };
+
+            document.addEventListener('keydown', handleSupportPhotoModalKeydown);
+            modal.addEventListener('wheel', handleSupportPhotoZoom, { passive: false });
+
+            // Скрываем подсказку через 3 секунды
+            setTimeout(() => {
+                const hint = document.getElementById('photoHint');
+                if (hint) hint.style.opacity = '0';
+            }, 3000);
+
+            supportResetZoom();
+            modal.style.display = 'block';
+            document.body.style.overflow = 'hidden';
+        }
+
+    // Функции масштабирования для поддержки
+    function handleSupportPhotoZoom(event) {
+            event.preventDefault();
+            if (event.deltaY < 0) {
+                supportZoomIn();
+            } else {
+                supportZoomOut();
+            }
+        }
+
+        function supportZoomIn() {
+            if (currentPhotoScale < MAX_ZOOM) {
+                currentPhotoScale += ZOOM_STEP;
+                applySupportZoom();
+            }
+        }
+
+        function supportZoomOut() {
+            if (currentPhotoScale > MIN_ZOOM) {
+                currentPhotoScale -= ZOOM_STEP;
+                applySupportZoom();
+            }
+        }
+
+        function supportResetZoom() {
+            currentPhotoScale = 1;
+            translateX = 0;
+            translateY = 0;
+            applySupportZoom();
+        }
+
+        function applySupportZoom() {
+            const modalPhoto = document.getElementById('supportModalPhoto');
+            const scaleIndicator = document.getElementById('supportPhotoScale');
+            if (modalPhoto) {
+                modalPhoto.style.transform = `scale(${currentPhotoScale}) translate(${translateX}px, ${translateY}px)`;
+                modalPhoto.style.transition = 'transform 0.2s ease';
+            }
+            if (scaleIndicator) {
+                scaleIndicator.textContent = `${Math.round(currentPhotoScale * 100)}%`;
+            }
+        }
+
+        function startDrag(event) {
+            if (event.button !== 0) return; // Только левая кнопка мыши
+            isDragging = true;
+            startX = event.clientX - translateX;
+            startY = event.clientY - translateY;
+            const modalPhoto = document.getElementById('supportModalPhoto');
+            if (modalPhoto) modalPhoto.style.cursor = 'grabbing';
+            event.preventDefault();
+        }
+
+        function drag(event) {
+            if (!isDragging) return;
+            translateX = event.clientX - startX;
+            translateY = event.clientY - startY;
+            applySupportZoom();
+        }
+
+        function endDrag() {
+            isDragging = false;
+            const modalPhoto = document.getElementById('supportModalPhoto');
+            if (modalPhoto) modalPhoto.style.cursor = 'grab';
+        }
+
+    function supportDownloadPhoto(sessionId, photoFileId) {
+            const link = document.createElement('a');
+            link.href = `/support/session/${sessionId}/photo/${photoFileId}`;
+            link.download = `support_photo_${sessionId}_${photoFileId}.jpg`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
+        function closeSupportPhotoModal() {
+            const modal = document.getElementById('supportPhotoModal');
+            if (modal) {
+                modal.remove();
+            }
+            document.removeEventListener('keydown', handleSupportPhotoModalKeydown);
+            document.body.style.overflow = 'auto';
+        }
+    function handleSupportPhotoModalKeydown(event) {
+            const modal = document.getElementById('supportPhotoModal');
+            if (!modal || modal.style.display !== 'block') return;
+
+            if (event.key === 'Escape') {
+                closeSupportPhotoModal();
+            } else if (event.key === '+' || event.key === '=') {
+                event.preventDefault();
+                supportZoomIn();
+            } else if (event.key === '-' || event.key === '_') {
+                event.preventDefault();
+                supportZoomOut();
+            } else if (event.key === '0') {
+                event.preventDefault();
+                supportResetZoom();
+            } else if (event.key === 'ArrowLeft') {
+                translateX -= 50;
+                applySupportZoom();
+            } else if (event.key === 'ArrowRight') {
+                translateX += 50;
+                applySupportZoom();
+            } else if (event.key === 'ArrowUp') {
+                translateY -= 50;
+                applySupportZoom();
+            } else if (event.key === 'ArrowDown') {
+                translateY += 50;
+                applySupportZoom();
+            }
+        }
+
+</script>
+</body>
+</html>

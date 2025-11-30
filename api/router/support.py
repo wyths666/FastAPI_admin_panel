@@ -852,7 +852,6 @@ async def block_user(request: Request, session_id: str):
         raise HTTPException(status_code=500, detail="Внутренняя ошибка сервера")
 
 
-# API эндпоинты для AJAX
 @router.get("/api/sessions")
 async def get_sessions_api(resolved: bool = False):
     """API для получения списка сессий"""

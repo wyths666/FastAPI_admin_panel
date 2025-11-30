@@ -402,10 +402,13 @@ async def handle_all_user_messages(message: Message):
             return
 
         claim_id = chat_session.claim_id
-        if not message.text and not message.photo:
-            await message.answer("❌ Поддерживаются только текстовые сообщения и фото.")
+
+        # Проверяем поддерживаемые типы сообщений
+        if not message.text and not message.photo and not message.document:
+            await message.answer("❌ Поддерживаются только текстовые сообщения, фото и документы.")
             return
-        # Получаем текст сообщения или подпись к фото
+
+        # Получаем текст сообщения или подпись
         if message.text:
             text = message.text
         elif message.caption:
@@ -413,12 +416,24 @@ async def handle_all_user_messages(message: Message):
         else:
             text = ""
 
-        # Получаем file_id фото если есть
+        # Обрабатываем фото
         photo_file_id = None
         has_photo = False
         if message.photo:
             photo_file_id = message.photo[-1].file_id
             has_photo = True
+
+        # Обрабатываем документы (has_photo=False, но photo_file_id заполнен)
+        document_file_id = None
+        document_name = None
+        document_size = None
+        if message.document:
+            document_file_id = message.document.file_id
+            document_name = message.document.file_name
+            document_size = message.document.file_size
+            # Для документов используем photo_file_id поле, но has_photo=False
+            photo_file_id = document_file_id
+            has_photo = False
 
         # Сохраняем сообщение в chat_messages
         chat_message = ChatMessage(
@@ -429,18 +444,30 @@ async def handle_all_user_messages(message: Message):
             is_bot=False,  # сообщение от пользователя
             has_photo=has_photo,
             photo_file_id=photo_file_id,
-            photo_caption=text if has_photo else None,
+            photo_caption=text if (has_photo or message.document) else None,
             timestamp=datetime.now()
         )
 
         await chat_message.insert()
+
+        # Дополнительно сохраняем информацию о документе если это документ
+        if message.document:
+            # Можно сохранить в отдельное поле или добавить логику для отличия документов от фото
+            # Пока используем существующую структуру, но добавляем информацию в message
+            if text:
+                # Если есть текст, добавляем информацию о документе
+                chat_message.message = f"📎 {document_name}\n{text}"
+            else:
+                chat_message.message = f"📎 {document_name}"
+            await chat_message.save()
 
         # ОБНОВЛЯЕМ время последнего взаимодействия и флаг неотвеченных
         chat_session.last_interaction = datetime.now()
         chat_session.has_unanswered = True
         await chat_session.save()
 
-        print(f"✅ Сообщение пользователя {user_id} сохранено в сессию {claim_id}")
+        print(f"✅ Сообщение пользователя {user_id} сохранено в сессию {claim_id} "
+              f"({'текст' if message.text else 'фото' if message.photo else 'документ'})")
 
         # Уведомляем админов о новом сообщении (если нужно)
         await notify_admins_about_new_message(chat_session, chat_message)

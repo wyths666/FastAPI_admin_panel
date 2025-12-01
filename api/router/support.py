@@ -73,25 +73,21 @@ def translate_state_value(key: str, value: any) -> str:
     else:
         return str(value)
 
+
 @router.get("/", response_class=HTMLResponse)
-async def support_dashboard(request: Request, resolved: bool = False, page: int = 1, per_page: int = 20,
-                            admin=Depends(get_current_admin)
-                            ):
+async def support_dashboard(request: Request, resolved: bool = False, admin=Depends(get_current_admin)):
     """Главная страница техподдержки со списком сессий"""
     if not admin:
         return RedirectResponse("/auth/login")
+
     # Базовый запрос
     query = {"resolved": resolved}
 
-    # Получаем сессии с пагинацией
-    skip = (page - 1) * per_page
-    sessions = await SupportSession.find(
-        query
-    ).sort("-created_at").skip(skip).limit(per_page).to_list()
+    # Получаем ВСЕ сессии без пагинации
+    sessions = await SupportSession.find(query).sort("-created_at").to_list()
 
-    # Получаем общее количество для пагинации
-    total_sessions = await SupportSession.find(query).count()
-    total_pages = (total_sessions + per_page - 1) // per_page
+    # Получаем общее количество
+    total_sessions = len(sessions)
 
     # Собираем ID пользователей для запроса
     user_ids = [session.user_id for session in sessions]
@@ -99,23 +95,6 @@ async def support_dashboard(request: Request, resolved: bool = False, page: int 
     # Получаем информацию о пользователях
     users = await User.find({"tg_id": {"$in": user_ids}}).to_list()
     users_map = {user.tg_id: user for user in users}
-
-    # Словарь для перевода ключей state_data
-    STATE_DATA_TRANSLATIONS = {
-        "claim_id": "ID заявки",
-        "entered_code": "Введенный код",
-        "photo_file_ids": "ID фото",
-        "review_text": "Текст отзыва",
-        "screenshot_received": "Скриншот получен",
-        "phone_card_message_id": "ID сообщения выбора оплаты",
-        "payment_method": "Способ оплаты",
-        "phone_number": "Номер телефона",
-        "bank": "Банк",
-        "card_number": "Номер карты",
-        "card": "Номер карты",
-        "original_state": "Исходное состояние",
-        "original_data": "Исходные данные"
-    }
 
     # Форматируем данные для шаблона
     sessions_with_users = []
@@ -139,9 +118,8 @@ async def support_dashboard(request: Request, resolved: bool = False, page: int 
             session_dict["banned"] = False
             session_dict["user_created_at"] = None
 
-        # ФОРМАТИРУЕМ STATE ДЛЯ ОТОБРАЖЕНИЯ С ПЕРЕВОДОМ
+        # Форматируем state для отображения
         if session.state:
-            # Используем словарь переводов
             session_dict["state_display"] = STATE_TRANSLATIONS.get(
                 session.state,
                 session.state.replace('_', ' ').title()
@@ -149,27 +127,25 @@ async def support_dashboard(request: Request, resolved: bool = False, page: int 
         else:
             session_dict["state_display"] = "Не указано"
 
-        if session.previous_state:
-            session_dict["previous_state_display"] = STATE_TRANSLATIONS.get(
-                session.previous_state,
-                session.previous_state.replace('_', ' ').title()
-            )
-
+        # Анализируем state_data для дополнительной информации
         if session.state_data:
             preview_data = {}
-
             for key, value in session.state_data.items():
-                # Пропускаем сложные объекты
-                if isinstance(value, (dict, list)) and not (key == "photo_file_ids" and isinstance(value, list)):
-                    continue
+                if isinstance(value, (str, int, float, bool)) and len(str(value)) < 50:
+                    translated_key = STATE_TRANSLATIONS.get(key, key)
+                    # Форматируем значения
+                    if isinstance(value, bool):
+                        formatted_value = "✅ Да" if value else "❌ Нет"
+                    elif key == "screenshot_received":
+                        formatted_value = "✅ Получен" if value else "❌ Не получен"
+                    elif key == "photo_file_ids" and isinstance(value, list):
+                        formatted_value = f"📷 {len(value)} фото"
+                    elif key in ["original_state", "state", "previous_state"] and isinstance(value, str):
+                        formatted_value = STATE_TRANSLATIONS.get(value, value)
+                    else:
+                        formatted_value = str(value)
 
-                translated_key = STATE_DATA_TRANSLATIONS.get(key, key)
-                formatted_value = translate_state_value(key, value)
-
-                # Добавляем только если значение не пустое
-                if formatted_value and formatted_value not in ['', 'None', '[]', '{}'] and len(formatted_value) < 100:
                     preview_data[translated_key] = formatted_value
-
             session_dict["state_data_preview"] = preview_data
         else:
             session_dict["state_data_preview"] = {}
@@ -182,15 +158,10 @@ async def support_dashboard(request: Request, resolved: bool = False, page: int 
             "request": request,
             "sessions": sessions_with_users,
             "active_tab": "resolved" if resolved else "active",
-            "current_page": page,
-            "total_pages": total_pages,
-            "per_page": per_page,
-            "total_sessions": total_sessions,
-            "has_prev": page > 1,
-            "has_next": page < total_pages
+            "total_sessions": total_sessions
+
         }
     )
-
 
 @router.get("/api/session/{session_id}/messages")
 async def get_session_messages_api(session_id: str):

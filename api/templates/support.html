@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Техподдержка</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>💬</text></svg>">
     <style>
         /* Базовые стили */
 
@@ -25,7 +26,122 @@
             margin: 0 auto;
             padding: 1rem;
         }
+        /* Навбар */
+.navbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    padding: 0 1.5rem;
+    border-radius: 12px;
+    margin-bottom: 2rem;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    min-height: 64px;
+}
 
+.nav-brand {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.nav-logo {
+    font-size: 1.5rem;
+}
+
+.nav-title {
+    color: white;
+    font-weight: 600;
+    font-size: 1.25rem;
+}
+
+.nav-links {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.nav-link {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: rgba(255, 255, 255, 0.9);
+    text-decoration: none;
+    padding: 0.75rem 1rem;
+    border-radius: 8px;
+    transition: all 0.2s;
+    font-weight: 500;
+}
+
+.nav-link:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: white;
+    transform: translateY(-1px);
+}
+
+.nav-link.active {
+    background: rgba(255, 255, 255, 0.2);
+    color: white;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.nav-icon {
+    font-size: 1.125rem;
+}
+
+.nav-text {
+    font-size: 0.875rem;
+}
+
+.nav-actions {
+    display: flex;
+    align-items: center;
+}
+
+.nav-logout {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: #fecaca;
+    text-decoration: none;
+    padding: 0.5rem 1rem;
+    border-radius: 8px;
+    transition: all 0.2s;
+    font-weight: 500;
+    background: rgba(239, 68, 68, 0.2);
+}
+
+.nav-logout:hover {
+    background: rgba(239, 68, 68, 0.3);
+    transform: translateY(-1px);
+}
+
+/* Адаптивность */
+@media (max-width: 1024px) {
+    .nav-text {
+        display: none;
+    }
+
+    .nav-link {
+        padding: 0.75rem;
+    }
+
+    .nav-brand .nav-title {
+        display: none;
+    }
+}
+
+@media (max-width: 768px) {
+    .navbar {
+        flex-direction: column;
+        padding: 1rem;
+        gap: 1rem;
+    }
+
+    .nav-links {
+        flex-wrap: wrap;
+        justify-content: center;
+    }
+}
         /* Хедер */
         .header-actions {
             display: flex;
@@ -43,7 +159,20 @@
             border: none;
             cursor: pointer;
         }
-
+        .btn-chats {
+            padding: 0.5rem 1rem;
+            border-radius: 0.375rem;
+            text-decoration: none;
+            ackground-color: #34ebba;
+            color: white;
+            font-weight: 500;
+            transition: background-color 0.2s;
+            border: none;
+            cursor: pointer;
+        }
+        .btn-chats:hover {
+            background-color: #34ebba;
+        }
         .btn-back {
             background-color: #6b7280;
             color: white;
@@ -391,11 +520,16 @@
 
         /* Чат */
         .chat-container {
-            background: white;
-            border: 1px solid #e5e7eb;
-            border-radius: 0.5rem;
-            overflow: hidden;
-        }
+    background: white;
+    border-radius: 8px;
+    padding: 1rem;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    display: flex;
+    flex-direction: column;
+    height: 70vh; /* 70% от высоты окна браузера */
+    min-height: 500px; /* Минимальная высота */
+    max-height: 700px; /* Максимальная высота */
+}
 
         .chat-header {
             padding: 1rem;
@@ -405,10 +539,21 @@
         }
 
         .chat-messages {
-            padding: 1rem;
-            max-height: 400px;
-            overflow-y: auto;
-        }
+    flex: 1;
+    overflow-y: auto;
+    border: 1px solid #e5e7eb;
+    border-radius: 6px;
+    padding: 1rem;
+    margin-bottom: 1rem;
+    background: #f9fafb;
+    min-height: 0;
+
+    /* Предотвращает скролл всей страницы при достижении границ чата */
+    overscroll-behavior: contain;
+
+    /* Для старых браузеров */
+   -webkit-overflow-scrolling: touch;
+}
 
         .message {
             display: flex;
@@ -683,7 +828,70 @@
             font-size: 14px;
             z-index: 1001;
         }
+        /* Стили для завершенных сессий */
+.resolved-session {
+    opacity: 0.9;
+    filter: grayscale(20%);
+}
 
+.resolved-badge {
+    display: inline-block;
+    background-color: #10b981;
+    color: white;
+    font-size: 0.75rem;
+    padding: 2px 8px;
+    border-radius: 12px;
+    margin-left: 8px;
+    vertical-align: middle;
+}
+
+.disabled-btn {
+    opacity: 0.6;
+    cursor: not-allowed;
+    pointer-events: none;
+}
+
+.disabled-chat {
+    opacity: 0.8;
+}
+
+.chat-disabled-label {
+    font-size: 0.875rem;
+    color: #6b7280;
+    font-weight: normal;
+    margin-left: 8px;
+}
+
+.chat-disabled-message {
+    background: #f3f4f6;
+    border-radius: 8px;
+    padding: 1.5rem;
+    text-align: center;
+    margin-top: 1rem;
+    border: 1px dashed #d1d5db;
+}
+
+.chat-disabled-icon {
+    font-size: 2rem;
+    margin-bottom: 0.5rem;
+    opacity: 0.5;
+}
+
+.chat-disabled-text {
+    color: #6b7280;
+    font-size: 0.875rem;
+}
+
+.chat-disabled-text strong {
+    display: block;
+    margin-bottom: 0.25rem;
+    color: #374151;
+}
+
+.resolved-info {
+    color: #10b981;
+    font-weight: 500;
+}
         /* Утилиты */
         .flex { display: flex; }
         .justify-start { justify-content: flex-start; }
@@ -746,238 +954,298 @@
 </head>
 <body>
     <div class="container">
-        <!-- Хедер -->
-        <div class="header-actions">
-            <a href="/" class="btn-back">← Назад</a>
-            <a href="/auth/logout" class="btn-logout">🚪 Выйти</a>
-        </div>
+    <!-- Хедер -->
+    <div class="navbar">
 
-        <!-- Заголовок страницы -->
-        <div class="page-header">
-            <h1 class="page-title">
-                {% if active_tab == 'active' %}
-                    Активные обращения в поддержку
-                {% else %}
-                    Завершенные обращения
-                {% endif %}
-            </h1>
-            <p class="page-summary">Всего обращений: {{ total_sessions }}</p>
-        </div>
-
-        <!-- Фильтры и пагинация -->
-        <div class="filters">
-            <div class="filter-row">
-                <!-- Табы -->
-                <div class="tabs">
-                    <a href="/support/" class="tab {% if active_tab == 'active' %}active{% endif %}">
-                        Активные
-                        {% if active_tab == 'active' %}
-                        <span class="badge">{{ total_sessions }}</span>
-                        {% endif %}
-                    </a>
-                    <a href="/support/?resolved=true" class="tab {% if active_tab == 'resolved' %}active{% endif %}">
-                        Завершенные
-                    </a>
-                </div>
-
-                <!-- Пагинация -->
-                {% if total_pages > 1 %}
-                <div class="pagination">
-                    {% if has_prev %}
-                    <a href="?resolved={{ resolved }}&page={{ current_page - 1 }}&per_page={{ per_page }}" class="pagination-btn">
-                        ←
-                    </a>
-                    {% endif %}
-
-                    <span class="pagination-info">
-                        Страница {{ current_page }} из {{ total_pages }}
-                    </span>
-
-                    {% if has_next %}
-                    <a href="?resolved={{ resolved }}&page={{ current_page + 1 }}&per_page={{ per_page }}" class="pagination-btn">
-                        →
-                    </a>
-                    {% endif %}
-                </div>
-                {% endif %}
-            </div>
-        </div>
-
-        <!-- Список сессий -->
-        <div class="sessions-list">
-            {% for session in sessions %}
-            <div class="session" data-session-id="{{ session.id }}">
-                <!-- Заголовок сессии -->
-                <div class="session-header" onclick="toggleSessionDetails('{{ session.id }}')">
-                    <div class="session-header-content">
-                        <div class="session-info">
-                            <div class="toggle-icon" id="toggle-{{ session.id }}">▼</div>
-                            <div class="user-main-info">
-                                <span class="username">{{ session.username }}</span>
-                                <span class="user-id">ID: {{ session.user_id }}</span>
-                                {% if session.banned %}
-                                <span class="banned-badge">🚫 Заблокирован</span>
-                                {% endif %}
-                            </div>
-                        </div>
-                        <div class="session-meta">
-                            <div class="session-date">
-                                {{ session.created_at.strftime('%d.%m.%Y %H:%M') }}
-                            </div>
-                            <div class="session-state {% if session.resolved %}state-resolved{% else %}state-active{% endif %}">
-                                {{ session.state_display }}
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Детали сессии -->
-                <div class="session-details" id="details-{{ session.id }}">
-    <div class="details-content">
-        <div class="grid-layout">
-            <!-- Информационная панель -->
-            <div class="info-panel">
-                <h3 class="panel-title">Информация о сессии</h3>
-
-                <div class="info-item">
-                    <span class="info-label">Пользователь</span>
-                    <div class="info-value">{{ session.username }} (ID: {{ session.user_id }})</div>
-                </div>
-
-                <div class="info-item">
-                    <span class="info-label">Текущее состояние</span>
-                    <div class="state-data">{{ session.state_display }}</div>
-                </div>
-
-                <div class="info-item">
-                    <span class="info-label">Дата создания</span>
-                    <div class="info-value">{{ session.created_at.strftime('%d.%m.%Y %H:%M') }}</div>
-                </div>
-
-                {% if session.state_data_preview %}
-                <div class="info-item">
-                    <span class="info-label">Данные состояния</span>
-                    <div class="state-data">
-                        {% for key, value in session.state_data_preview.items() %}
-                        <div><strong>{{ key }}:</strong> {{ value }}</div>
-                        {% endfor %}
-                    </div>
-                </div>
-                {% endif %}
+    <div class="nav-links">
+        <a href="/" class="nav-link">
+            <span class="nav-icon">🏠</span>
+            <span class="nav-text">Главная</span>
+        </a>
 
 
 
-                <!-- Форма отката состояния -->
-<div class="info-item">
-    <span class="info-label">Откат состояния</span>
-    <form method="post" action="/support/session/{{ session.id }}/rollback"
-          class="rollback-form"
-          onsubmit="return confirm('Вы уверены, что хотите выполнить откат? Пользователь получит соответствующее сообщение.')">
-        <div style="display: flex; gap: 8px; align-items: flex-end;">
-            <select name="target_state" required
-                    style="flex: 1; padding: 8px; border: 1px solid #d1d5db; border-radius: 4px;"
-                    id="rollback-select-{{ session.id }}">
-                <option value="">-- Загрузка доступных состояний --</option>
-            </select>
-            <button type="submit" class="action-btn btn-yellow" style="margin: 0; white-space: nowrap;">
-                ↩️ Откатить
-            </button>
-        </div>
-    </form>
+        <a href="/chats/" class="nav-link">
+            <span class="nav-icon">🤖</span>
+            <span class="nav-text">Чаты (Выкупы)</span>
+        </a>
+
+        <a href="/payments/create/" class="nav-link">
+            <span class="nav-icon">💰</span>
+            <span class="nav-text">Выплаты</span>
+        </a>
+
+        <a href="/claims/" class="nav-link">
+            <span class="nav-icon">🎫</span>
+            <span class="nav-text">Заявки (Лотерея)</span>
+        </a>
+        <a href="/support/" class="nav-link active">
+            <span class="nav-icon">💬</span>
+            <span class="nav-text">Поддержка</span>
+        </a>
+    </div>
+
+    <div class="nav-actions">
+        <a href="/auth/logout" class="nav-logout">
+            <span class="nav-icon">🚪</span>
+            <span class="nav-text">Выйти</span>
+        </a>
+    </div>
 </div>
 
-                <!-- Действия -->
-                <div class="actions">
-                    {% if not session.resolved %}
-                    <form method="post" action="/support/session/{{ session.id }}/resolve"
-                          class="inline-block w-full"
-                          onsubmit="return confirm('Вы уверены, что хотите закрыть обращение? Пользователь получит уведомление.')">
-                        <button type="submit" class="action-btn btn-green">
-                            ✅ Закрыть обращение
-                        </button>
-                    </form>
+    <!-- Заголовок страницы -->
+    <div class="page-header">
+        <h1 class="page-title">
+            {% if active_tab == 'active' %}
+                Активные обращения в поддержку
+            {% else %}
+                Завершенные обращения
+            {% endif %}
+        </h1>
+        <p class="page-summary">Всего обращений: {{ total_sessions }}</p>
+    </div>
+
+    <!-- Фильтры -->
+    <div class="filters">
+        <div class="filter-row">
+            <!-- Табы -->
+            <div class="tabs">
+                <a href="/support/" class="tab {% if active_tab == 'active' %}active{% endif %}">
+                    Активные
+                    {% if active_tab == 'active' %}
+                    <span class="badge">{{ total_sessions }}</span>
                     {% endif %}
-
-                    <form method="post" action="/support/session/{{ session.id }}/block_user">
-    <button type="submit" class="action-btn btn-red"
-            onclick="return confirm('{% if session.banned %}Разблокировать{% else %}Заблокировать{% endif %} пользователя {{ session.username }}?')">
-        🚫 {% if session.banned %}Разблокировать{% else %}Заблокировать{% endif %} пользователя
-    </button>
-</form>
-                </div>
+                </a>
+                <a href="/support/?resolved=true" class="tab {% if active_tab == 'resolved' %}active{% endif %}">
+                    Завершенные
+                </a>
             </div>
-<!-- Чат -->
-                            <div class="chat-container">
-                                <div class="chat-header">Чат с пользователем</div>
+        </div>
+    </div>
 
-                                <div class="chat-messages" id="messages-{{ session.id }}">
-                                    <div class="text-center text-gray-500">
-                                        Загрузка сообщений...
-                                    </div>
-                                </div>
-
-                                <div class="chat-forms">
-                                <div class="chat-forms">
-                                    <!-- Форма отправки текста -->
-                                    <form class="chat-input-form"
-                                          onsubmit="return handleSendText('{{ session.id }}', event)">
-
-                                        <div class="input-row">
-                                            <textarea
-                                                class="chat-input"
-                                                id="message-input-{{ session.id }}"
-                                                placeholder="Введите сообщение..."
-                                                rows="1"
-                                                oninput="autoResizeTextarea(this)"></textarea>
-
-                                            <label for="fileInput-{{ session.id }}" class="chat-attach-btn" title="📎 Прикрепить файл">
-                                                📎
-                                            </label>
-
-                                            <input type="file"
-                                                   id="fileInput-{{ session.id }}"
-                                                   class="hidden"
-                                                   accept="*/*"
-                                                   onchange="handleFileSelect('{{ session.id }}', this)">
-
-                                            <button
-                                                type="submit"
-                                                class="chat-send">
-                                                Отправить
-                                            </button>
-                                        </div>
-
-                                        <div id="fileStatus-{{ session.id }}" class="file-status"></div>
-                                    </form>
-                                </div>
-                            </div>
+    <!-- Список сессий -->
+    {% if sessions %}
+    <div class="sessions-list">
+        {% for session in sessions %}
+        <div class="session" data-session-id="{{ session.id }}">
+            <!-- Заголовок сессии -->
+            <div class="session-header" onclick="toggleSessionDetails('{{ session.id }}')">
+                <div class="session-header-content">
+                    <div class="session-info">
+                        <div class="toggle-icon" id="toggle-{{ session.id }}">▼</div>
+                        <div class="user-main-info">
+                            <span class="username">{{ session.username }}</span>
+                            <span class="user-id">ID: {{ session.user_id }}</span>
+                            {% if session.banned %}
+                            <span class="banned-badge">🚫 Заблокирован</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="session-meta">
+                        <div class="session-date">
+                            {{ session.created_at.strftime('%d.%m.%Y %H:%M') }}
+                        </div>
+                        <div class="session-state {% if session.resolved %}state-resolved{% else %}state-active{% endif %}">
+                            {{ session.state_display }}
                         </div>
                     </div>
                 </div>
             </div>
-            {% else %}
-            <div class="empty-state">
-                <div class="empty-icon">
-                    {% if active_tab == 'active' %}📭{% else %}📋{% endif %}
+
+            <!-- Детали сессии -->
+            <div class="session-details" id="details-{{ session.id }}">
+                <div class="details-content">
+                    <div class="grid-layout">
+                        <!-- Информационная панель -->
+                        <div class="info-panel {% if session.resolved %}resolved-session{% endif %}">
+                            <h3 class="panel-title">
+                                Информация о сессии
+                                {% if session.resolved %}
+                                <span class="resolved-badge">✅ Завершено</span>
+                                {% endif %}
+                            </h3>
+
+                            <div class="info-item">
+                                <span class="info-label">Пользователь</span>
+                                <div class="info-value">{{ session.username }} (ID: {{ session.user_id }})</div>
+                            </div>
+
+                            <div class="info-item">
+                                <span class="info-label">Текущее состояние</span>
+                                <div class="state-data">{{ session.state_display }}</div>
+                            </div>
+
+                            <div class="info-item">
+                                <span class="info-label">Дата создания</span>
+                                <div class="info-value">{{ session.created_at.strftime('%d.%m.%Y %H:%M') }}</div>
+                            </div>
+
+                            {% if session.resolved and session.resolved_at %}
+                            <div class="info-item">
+                                <span class="info-label">Дата завершения</span>
+                                <div class="info-value">{{ session.resolved_at.strftime('%d.%m.%Y %H:%M') }}</div>
+                            </div>
+                            {% endif %}
+
+                            {% if session.state_data_preview %}
+                            <div class="info-item">
+                                <span class="info-label">Данные состояния</span>
+                                <div class="state-data">
+                                    {% for key, value in session.state_data_preview.items() %}
+                                    <div><strong>{{ key }}:</strong> {{ value }}</div>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                            {% endif %}
+
+                            {% if not session.resolved %}
+                            <!-- Форма отката состояния (только для активных сессий) -->
+                            <div class="info-item">
+                                <span class="info-label">Откат состояния</span>
+                                <form method="post" action="/support/session/{{ session.id }}/rollback"
+                                      class="rollback-form"
+                                      onsubmit="return confirm('Вы уверены, что хотите выполнить откат? Пользователь получит соответствующее сообщение.')">
+                                    <div style="display: flex; gap: 8px; align-items: flex-end;">
+                                        <select name="target_state" required
+                                                style="flex: 1; padding: 8px; border: 1px solid #d1d5db; border-radius: 4px;"
+                                                id="rollback-select-{{ session.id }}">
+                                            <option value="">-- Загрузка доступных состояний --</option>
+                                        </select>
+                                        <button type="submit" class="action-btn btn-yellow" style="margin: 0; white-space: nowrap;">
+                                            ↩️ Откатить
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+                            {% else %}
+                            <!-- Для завершенных сессий показываем информацию о завершении -->
+                            <div class="info-item">
+                                <span class="info-label">Статус</span>
+                                <div class="state-data resolved-info">
+                                    ✅ Сессия завершена
+                                    {% if session.rollback_count %}
+                                    <div style="font-size: 0.875rem; color: #6b7280; margin-top: 4px;">
+                                        Откатов выполнено: {{ session.rollback_count }}
+                                    </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            {% endif %}
+
+                            <!-- Действия -->
+                            <div class="actions">
+                                {% if not session.resolved %}
+                                <form method="post" action="/support/session/{{ session.id }}/resolve"
+                                      class="inline-block w-full"
+                                      onsubmit="return confirm('Вы уверены, что хотите закрыть обращение? Пользователь получит уведомление.')">
+                                    <button type="submit" class="action-btn btn-green">
+                                        ✅ Закрыть обращение
+                                    </button>
+                                </form>
+                                {% endif %}
+
+                                <form method="post" action="/support/session/{{ session.id }}/block_user">
+                                    <button type="submit" class="action-btn btn-red {% if session.resolved %}disabled-btn{% endif %}"
+                                            onclick="{% if not session.resolved %}return confirm('{% if session.banned %}Разблокировать{% else %}Заблокировать{% endif %} пользователя {{ session.username }}?'){% endif %}"
+                                            {% if session.resolved %}disabled{% endif %}>
+                                        🚫 {% if session.banned %}Разблокировать{% else %}Заблокировать{% endif %} пользователя
+                                        {% if session.resolved %}(недоступно){% endif %}
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+
+                        <!-- Чат -->
+                        <div class="chat-container {% if session.resolved %}disabled-chat{% endif %}">
+                            <div class="chat-header">
+                                Чат с пользователем
+                                {% if session.resolved %}
+                                <span class="chat-disabled-label">(только просмотр)</span>
+                                {% endif %}
+                            </div>
+
+                            <div class="chat-messages" id="messages-{{ session.id }}">
+                                <div class="text-center text-gray-500">
+                                    Загрузка сообщений...
+                                </div>
+                            </div>
+
+                            {% if not session.resolved %}
+                            <div class="chat-forms">
+                                <!-- Форма отправки текста (только для активных сессий) -->
+                                <form class="chat-input-form"
+                                      onsubmit="return handleSendText('{{ session.id }}', event)">
+
+                                    <div class="input-row">
+                                        <textarea
+                                            class="chat-input"
+                                            id="message-input-{{ session.id }}"
+                                            placeholder="Введите сообщение..."
+                                            rows="1"
+                                            oninput="autoResizeTextarea(this)"></textarea>
+
+                                        <label for="fileInput-{{ session.id }}" class="chat-attach-btn" title="📎 Прикрепить файл">
+                                            📎
+                                        </label>
+
+                                        <input type="file"
+                                               id="fileInput-{{ session.id }}"
+                                               class="hidden"
+                                               accept="*/*"
+                                               onchange="handleFileSelect('{{ session.id }}', this)">
+
+                                        <button
+                                            type="submit"
+                                            class="chat-send">
+                                            Отправить
+                                        </button>
+                                    </div>
+
+                                    <div id="fileStatus-{{ session.id }}" class="file-status"></div>
+                                </form>
+                            </div>
+                            {% else %}
+                            <!-- Для завершенных сессий показываем заглушку -->
+                            <div class="chat-disabled-message">
+                                <div class="chat-disabled-icon">📭</div>
+                                <div class="chat-disabled-text">
+                                    <strong>Чат закрыт</strong>
+                                    <p>Обращение завершено. Отправка новых сообщений недоступна.</p>
+                                </div>
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
                 </div>
-                <h3 class="empty-title">
-                    {% if active_tab == 'active' %}
-                        Нет активных обращений
-                    {% else %}
-                        Нет завершенных обращений
-                    {% endif %}
-                </h3>
-                <p class="empty-description">
-                    {% if active_tab == 'active' %}
-                        Все обращения обработаны 👍
-                    {% else %}
-                        Завершенные обращения появятся здесь
-                    {% endif %}
-                </p>
             </div>
-            {% endfor %}
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <!-- Пустое состояние (показывается только если нет сессий) -->
+    <div class="empty-state-container">
+        <div class="empty-state">
+            <div class="empty-icon">
+                {% if active_tab == 'active' %}📭{% else %}📋{% endif %}
+            </div>
+            <h3 class="empty-title">
+                {% if active_tab == 'active' %}
+                    Нет активных обращений
+                {% else %}
+                    Нет завершенных обращений
+                {% endif %}
+            </h3>
+            <p class="empty-description">
+                {% if active_tab == 'active' %}
+                    Все обращения обработаны 👍
+                {% else %}
+                    Завершенные обращения появятся здесь
+                {% endif %}
+            </p>
         </div>
     </div>
+    {% endif %}
+</div>
 
     <!-- JavaScript остается таким же как в предыдущем ответе -->
     <script>
@@ -1177,9 +1445,14 @@ async function loadAvailableRollbackStates(sessionId) {
         const newCount = messages.length;
         const oldCount = lastKnownMessageCount[sessionId] || 0;
 
-        if (newCount === oldCount && !forceScrollToBottom) return;
+        if (newCount === oldCount && !forceScrollToBottom) {
+            return;
+        }
 
         container.innerHTML = '';
+
+        // Создаем промисы для загрузки всех изображений
+        const imagePromises = [];
 
         messages.forEach(m => {
             const isFromAdmin = m.is_bot;
@@ -1188,7 +1461,6 @@ async function loadAvailableRollbackStates(sessionId) {
 
             let contentHtml = '';
 
-            // ✅ Общие стили пузырьков: фиксированная ширина, перенос, минимальная высота
             const bubbleStyle = 'max-width: 300px; min-width: 120px; min-height: 36px; padding: 0.5rem 0.75rem; display: flex; flex-direction: column; justify-content: flex-start;';
 
             if (m.has_photo && m.photo_file_id) {
@@ -1199,26 +1471,28 @@ async function loadAvailableRollbackStates(sessionId) {
                     <div class="${bubbleClass}" style="${bubbleStyle}">
                         <img src="/support/session/${sessionId}/photo/${m.photo_file_id}"
                              alt="Фото"
-                             class="max-w-full rounded mb-1 cursor-pointer"
+                             class="max-w-full rounded mb-1 cursor-pointer message-image"
+                             onload="handleImageLoad()"
                              onclick="openPhotoModal('${sessionId}', '${m.photo_file_id}')"
-                             style="max-height: 200px; object-fit: cover;">
+                             style="max-height: 200px; object-fit: contain;">
                         ${captionHtml}
                         <div class="message-time">${formatMessageTime(m.timestamp)}</div>
                     </div>
                 `;
 
-            } else if (m.has_document && m.document_file_id) {
+            } else if (!m.has_photo && m.photo_file_id) {
+                // Это документ
                 const captionToShow = (m.message && m.message !== m.document_name) ? m.message : '';
                 const captionHtml = captionToShow
                     ? `<div class="text-xs mt-0.5">${escapeHtml(captionToShow)}</div>`
                     : '';
                 contentHtml = `
                     <div class="${bubbleClass}" style="${bubbleStyle}">
-                        <a href="/support/session/${sessionId}/document/${m.document_file_id}"
+                        <a href="/support/session/${sessionId}/document/${m.photo_file_id}"
                            class="flex items-center text-xs font-medium text-current hover:underline"
-                           download="${escapeHtml(m.document_name)}">
+                           download="${escapeHtml(m.document_name || 'file')}">
                             <span class="mr-1">📎</span>
-                            <span class="break-all">${escapeHtml(m.document_name)}</span>
+                            <span class="break-all">${escapeHtml(m.document_name || 'Документ')}</span>
                         </a>
                         ${captionHtml}
                         <div class="text-[10px] text-gray-500 mt-0.5 flex justify-between">
@@ -1229,9 +1503,8 @@ async function loadAvailableRollbackStates(sessionId) {
                 `;
 
             } else {
-                // ✅ Автоперенос: break-words + word-break: break-word для длинных слов (URL, base64 и т.п.)
                 const textContent = m.message || '';
-                const escaped = escapeHtml(textContent); // содержит <br>
+                const escaped = escapeHtml(textContent);
                 const withLinks = linkify(escaped);
                 contentHtml = `
                     <div class="${bubbleClass}" style="${bubbleStyle}">
@@ -1249,17 +1522,65 @@ async function loadAvailableRollbackStates(sessionId) {
 
         lastKnownMessageCount[sessionId] = newCount;
 
-        if (forceScrollToBottom || oldCount === 0 || isScrolledToBottom(container)) {
-            // ⏱ Небольшая задержка — чтобы браузер успел обновить layout
+        // Функция для скролла вниз после загрузки изображений
+        function scrollToBottom() {
+            // Небольшая задержка для гарантии, что DOM обновился
             setTimeout(() => {
                 container.scrollTop = container.scrollHeight;
-            }, 10);
+                // Дополнительная проверка через небольшой интервал
+                setTimeout(() => {
+                    if (container.scrollHeight - container.scrollTop > container.clientHeight + 10) {
+                        container.scrollTop = container.scrollHeight;
+                    }
+                }, 50);
+            }, 100);
+        }
+
+        // Ждем загрузки всех изображений
+        if (forceScrollToBottom || oldCount === 0) {
+            // Если есть изображения, ждем их загрузки
+            const images = container.querySelectorAll('img.message-image');
+            if (images.length > 0) {
+                let loadedCount = 0;
+                images.forEach(img => {
+                    if (img.complete) {
+                        loadedCount++;
+                    } else {
+                        img.addEventListener('load', () => {
+                            loadedCount++;
+                            if (loadedCount === images.length) {
+                                scrollToBottom();
+                            }
+                        });
+                        img.addEventListener('error', () => {
+                            loadedCount++; // Все равно считаем загруженным
+                            if (loadedCount === images.length) {
+                                scrollToBottom();
+                            }
+                        });
+                    }
+                });
+
+                // Если все изображения уже загружены
+                if (loadedCount === images.length) {
+                    scrollToBottom();
+                }
+            } else {
+                // Нет изображений - скроллим сразу
+                scrollToBottom();
+            }
         }
 
     } catch (e) {
         console.error('Load messages error:', e);
         container.innerHTML = '<div class="text-center text-red-500 py-2 text-sm">❌ Ошибка загрузки</div>';
     }
+}
+
+// Глобальная функция для обработки загрузки изображений
+let imageLoadCount = 0;
+function handleImageLoad() {
+    imageLoadCount++;
 }
 
     // ————————————————————————————————————————

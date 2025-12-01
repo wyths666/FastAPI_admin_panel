@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Управление чатами</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🤖</text></svg>">
     <style>
         :root {
             --primary: #4361ee;
@@ -32,7 +33,122 @@
             max-width: 1200px;
             margin: 0 auto;
         }
+        /* Навбар */
+.navbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    padding: 0 1.5rem;
+    border-radius: 12px;
+    margin-bottom: 2rem;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    min-height: 64px;
+}
 
+.nav-brand {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.nav-logo {
+    font-size: 1.5rem;
+}
+
+.nav-title {
+    color: white;
+    font-weight: 600;
+    font-size: 1.25rem;
+}
+
+.nav-links {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.nav-link {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: rgba(255, 255, 255, 0.9);
+    text-decoration: none;
+    padding: 0.75rem 1rem;
+    border-radius: 8px;
+    transition: all 0.2s;
+    font-weight: 500;
+}
+
+.nav-link:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: white;
+    transform: translateY(-1px);
+}
+
+.nav-link.active {
+    background: rgba(255, 255, 255, 0.2);
+    color: white;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.nav-icon {
+    font-size: 1.125rem;
+}
+
+.nav-text {
+    font-size: 0.875rem;
+}
+
+.nav-actions {
+    display: flex;
+    align-items: center;
+}
+
+.nav-logout {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: #fecaca;
+    text-decoration: none;
+    padding: 0.5rem 1rem;
+    border-radius: 8px;
+    transition: all 0.2s;
+    font-weight: 500;
+    background: rgba(239, 68, 68, 0.2);
+}
+
+.nav-logout:hover {
+    background: rgba(239, 68, 68, 0.3);
+    transform: translateY(-1px);
+}
+
+/* Адаптивность */
+@media (max-width: 1024px) {
+    .nav-text {
+        display: none;
+    }
+
+    .nav-link {
+        padding: 0.75rem;
+    }
+
+    .nav-brand .nav-title {
+        display: none;
+    }
+}
+
+@media (max-width: 768px) {
+    .navbar {
+        flex-direction: column;
+        padding: 1rem;
+        gap: 1rem;
+    }
+
+    .nav-links {
+        flex-wrap: wrap;
+        justify-content: center;
+    }
+}
         .header-actions {
             display: flex;
             justify-content: space-between;
@@ -613,10 +729,44 @@
 </head>
 <body>
 <div class="container">
-    <div class="header-actions">
-        <a href="/" class="btn-back">← Назад</a>
-        <a href="/auth/logout" class="btn-logout">🚪 Выйти</a>
+    <div class="navbar">
+
+
+    <div class="nav-links">
+        <a href="/" class="nav-link">
+            <span class="nav-icon">🏠</span>
+            <span class="nav-text">Главная</span>
+        </a>
+
+
+
+        <a href="/chats/" class="nav-link active">
+            <span class="nav-icon">🤖</span>
+            <span class="nav-text">Чаты (Выкупы)</span>
+        </a>
+
+        <a href="/payments/create/" class="nav-link">
+            <span class="nav-icon">💰</span>
+            <span class="nav-text">Выплаты</span>
+        </a>
+
+        <a href="/claims/" class="nav-link">
+            <span class="nav-icon">🎫</span>
+            <span class="nav-text">Заявки (Лотерея)</span>
+        </a>
+        <a href="/support/" class="nav-link">
+            <span class="nav-icon">💬</span>
+            <span class="nav-text">Поддержка</span>
+        </a>
     </div>
+
+    <div class="nav-actions">
+        <a href="/auth/logout" class="nav-logout">
+            <span class="nav-icon">🚪</span>
+            <span class="nav-text">Выйти</span>
+        </a>
+    </div>
+</div>
 
     <header>
         <h1>Управление чатами</h1>

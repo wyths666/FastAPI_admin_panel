@@ -96,6 +96,21 @@ async def support_dashboard(request: Request, resolved: bool = False, admin=Depe
     users = await User.find({"tg_id": {"$in": user_ids}}).to_list()
     users_map = {user.tg_id: user for user in users}
 
+    STATE_DATA_TRANSLATIONS = {
+        "claim_id": "ID заявки",
+        "entered_code": "Введенный код",
+        "photo_file_ids": "ID фото",
+        "review_text": "Текст отзыва",
+        "screenshot_received": "Скриншот получен",
+        "phone_card_message_id": "ID сообщения выбора оплаты",
+        "payment_method": "Способ оплаты",
+        "phone_number": "Номер телефона",
+        "bank": "Банк",
+        "card_number": "Номер карты",
+        "card": "Номер карты",
+        "original_state": "Исходное состояние",
+        "original_data": "Исходные данные"
+    }
     # Форматируем данные для шаблона
     sessions_with_users = []
     for session in sessions:
@@ -127,25 +142,24 @@ async def support_dashboard(request: Request, resolved: bool = False, admin=Depe
         else:
             session_dict["state_display"] = "Не указано"
 
-        # Анализируем state_data для дополнительной информации
+        if session.previous_state:
+            session_dict["previous_state_display"] = STATE_TRANSLATIONS.get(
+                session.previous_state,
+                session.previous_state.replace('_', ' ').title()
+            )
         if session.state_data:
             preview_data = {}
-            for key, value in session.state_data.items():
-                if isinstance(value, (str, int, float, bool)) and len(str(value)) < 50:
-                    translated_key = STATE_TRANSLATIONS.get(key, key)
-                    # Форматируем значения
-                    if isinstance(value, bool):
-                        formatted_value = "✅ Да" if value else "❌ Нет"
-                    elif key == "screenshot_received":
-                        formatted_value = "✅ Получен" if value else "❌ Не получен"
-                    elif key == "photo_file_ids" and isinstance(value, list):
-                        formatted_value = f"📷 {len(value)} фото"
-                    elif key in ["original_state", "state", "previous_state"] and isinstance(value, str):
-                        formatted_value = STATE_TRANSLATIONS.get(value, value)
-                    else:
-                        formatted_value = str(value)
 
+            for key, value in session.state_data.items():
+                if isinstance(value, (dict, list)) and not (key == "photo_file_ids" and isinstance(value, list)):
+                    continue
+
+                translated_key = STATE_DATA_TRANSLATIONS.get(key, key)
+                formatted_value = translate_state_value(key, value)
+
+                if formatted_value and formatted_value not in ['', 'None', '[]', '{}'] and len(formatted_value) < 100:
                     preview_data[translated_key] = formatted_value
+
             session_dict["state_data_preview"] = preview_data
         else:
             session_dict["state_data_preview"] = {}

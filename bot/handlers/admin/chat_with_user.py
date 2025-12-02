@@ -3,7 +3,7 @@ from aiogram import Router, types, F
 from aiogram.filters import StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message, ForceReply, InlineKeyboardMarkup, InlineKeyboardButton
-from bot.templates.admin import menu as tadmin
+from bot.handlers.user.commands import ban_check_middleware
 from bot.templates.admin.menu import AdminState, quick_messages_ikb, admin_reply_ikb
 from bot.templates.user.menu import user_reply_ikb
 from config import cnf
@@ -12,8 +12,11 @@ from core.bot import bot, bot_config
 from db.beanie.models.models import ChatSession, UserMessage, ChatMessage, User
 from utils.konsol_client import konsol_client
 from utils.pending_storage import pending_actions
-router = Router()
 
+
+router = Router()
+router.callback_query.middleware(ban_check_middleware)
+router.message.middleware(ban_check_middleware)
 
 async def send_message_to_user(user_id: int, claim_id: str, text: str):
     """Отправляет ТЕКСТОВОЕ сообщение пользователю и сохраняет в историю"""
@@ -384,10 +387,10 @@ async def send_payment_request(call: CallbackQuery):
 
 @router.message(F.chat.type == "private")
 async def handle_all_user_messages(message: Message):
-    user_id = message.from_user.id
-    user = await User.get(tg_id=user_id)
-    if user.banned:
-        return
+    # user_id = message.from_user.id
+    # user = await User.get(tg_id=user_id)
+    # if user.banned:
+    #     return
     try:
         user_id = message.from_user.id
 
@@ -470,7 +473,7 @@ async def handle_all_user_messages(message: Message):
               f"({'текст' if message.text else 'фото' if message.photo else 'документ'})")
 
         # Уведомляем админов о новом сообщении (если нужно)
-        await notify_admins_about_new_message(chat_session, chat_message)
+        # await notify_admins_about_new_message(chat_session, chat_message)
 
     except Exception as e:
         print(f"❌ Ошибка сохранения сообщения пользователя: {e}")

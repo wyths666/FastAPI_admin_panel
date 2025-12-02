@@ -21,6 +21,17 @@ from aiogram.types import FSInputFile
 router = Router()
 user_locks = {}
 
+async def ban_check_middleware(handler, event, data):
+    if hasattr(event, 'from_user') and event.from_user:
+        user = await User.get(tg_id=event.from_user.id)
+        if user and user.banned:
+            # Просто отвечаем на колбэк без уведомления
+            if isinstance(event, CallbackQuery):
+                await event.answer()
+            return
+    return await handler(event, data)
+router.callback_query.middleware(ban_check_middleware)
+router.message.middleware(ban_check_middleware)
 
 @router.message(Command("start"))
 async def start_new_user(msg: Message, state: FSMContext):
@@ -56,9 +67,9 @@ async def start_new_user(msg: Message, state: FSMContext):
 @router.message(Command("help"))
 async def help_save_state(msg: Message, state: FSMContext):
     user_id = msg.from_user.id
-    user = await User.get(tg_id=user_id)
-    if user and user.banned:
-        return
+    # user = await User.get(tg_id=user_id)
+    # if user and user.banned:
+    #     return
 
     # Ищем последнюю **активную** сессию
     active_session = await SupportSession.find(
@@ -118,33 +129,27 @@ async def help_save_state(msg: Message, state: FSMContext):
 @router.callback_query(F.data == "send_help_text")
 async def help_save(callback: CallbackQuery, state: FSMContext):
     user_id = callback.from_user.id
-    user = await User.get(tg_id=user_id)
-    if user and user.banned:
-        await callback.answer("Вы заблокированы", show_alert=True)
-        return
+    # user = await User.get(tg_id=user_id)
+    # if user and user.banned:
+    #     return
 
-    # Ответим на callback сразу, чтобы убрать "часики"
     await callback.answer()
 
-    # Ищем последнюю **активную** сессию
     active_session = await SupportSession.find(
         SupportSession.user_id == user_id,
         SupportSession.resolved == False
     ).sort(-SupportSession.created_at).first_or_none()
 
     if active_session:
-        # ✅ Сессия уже открыта — не создаём новую
         current_state = await state.get_state()
         current_data = await state.get_data() if current_state else {}
 
-        # Обновляем данные FSM
         await state.update_data(
             original_state=current_state,
             original_data=current_data
         )
         await state.set_state(SupportState.waiting_for_message)
 
-        # Используем callback.message для отправки сообщения
         await callback.message.edit_text(
             "🆘 <b>Техническая поддержка</b>\n\n"
             "Ваше обращение уже в работе, Вы можете отправить новое сообщение.\n\n"
@@ -156,7 +161,6 @@ async def help_save(callback: CallbackQuery, state: FSMContext):
         )
         return
 
-    # ❌ Активной сессии нет — создаём новую
     current_state = await state.get_state()
     current_data = await state.get_data() if current_state else {}
 
@@ -184,11 +188,16 @@ async def help_save(callback: CallbackQuery, state: FSMContext):
 
 @router.message(StateFilter(treg.RegState.waiting_for_code))
 async def process_code(msg: Message, state: FSMContext):
+    # user_id = msg.from_user.id
+    # user = await User.get(tg_id=user_id)
+    # if user and user.banned:
+    #     return
     if not msg.text:
         await msg.answer(
             "❌ Пожалуйста, отправьте корректный код."
         )
         return
+
     code = msg.text.strip()
 
     code_valid = await get_and_delete_code(code)
@@ -196,7 +205,6 @@ async def process_code(msg: Message, state: FSMContext):
         await msg.answer(text=treg.code_not_found_text, reply_markup=tmenu.support_ikb())
         return
 
-    # Отправляем сообщение о выигрыше
     await msg.answer(text=treg.code_found_text)
 
     CHANNEL_USERNAME = cnf.bot.CHANNEL_USERNAME
@@ -210,12 +218,12 @@ async def process_code(msg: Message, state: FSMContext):
         await state.update_data(entered_code=code)
         return
 
-    # Успешно — идём к отзыву
     await proceed_to_review(user_tg_id=msg.from_user.id, state=state, code=code)
 
 
 @router.callback_query(treg.RegCallback.filter(F.step == "check_sub"))
 async def check_subscription_callback(call: CallbackQuery, state: FSMContext):
+
     data = await state.get_data()
     code = data.get("entered_code")
 
@@ -536,7 +544,7 @@ async def handle_support_message(msg: Message, state: FSMContext):
     has_photo = bool(msg.photo)
     has_document = bool(msg.document)
 
-    # ❌ Неподдерживаемые типы
+    # Неподдерживаемые типы
     if not (text or has_photo or has_document):
         await msg.answer(
             "📎 Отправить можно только:\n"
@@ -550,7 +558,7 @@ async def handle_support_message(msg: Message, state: FSMContext):
         )
         return
 
-    # ✅ Создаём запись
+    # Создаём запись
     support_msg = SupportMessage(
         session_id=session.id,
         user_id=user_id,
@@ -558,14 +566,14 @@ async def handle_support_message(msg: Message, state: FSMContext):
         is_bot=False
     )
 
-    # 📸 Фото
+    # Фото
     if has_photo:
         largest = msg.photo[-1]
         support_msg.has_photo = True
         support_msg.photo_file_id = largest.file_id
         support_msg.photo_caption = msg.caption or ""
 
-    # 📄 Документ
+    # Документ
     elif has_document:
         doc = msg.document
         # Ограничим размер (например, до 20 МБ)
@@ -584,10 +592,8 @@ async def handle_support_message(msg: Message, state: FSMContext):
         support_msg.document_mime_type = doc.mime_type or "application/octet-stream"
         support_msg.document_size = doc.file_size
 
-    # ✅ Сохраняем
     await support_msg.insert()
 
-    # ✅ Подтверждение
     confirmation = "📩 Сообщение отправлено в поддержку."
 
     if has_photo:
@@ -708,7 +714,7 @@ async def back_to_claim_callback(call: CallbackQuery, state: FSMContext):
 
         # ❗ Неизвестное состояние — fallback
         else:
-            await call.message.edit_text("🔄 Неизвестное состояние: `{}`\nОбратитесь в поддержку.".format(original_state))
+            await call.message.edit_text("🔄 Неизвестная ошибка.\nОбратитесь в поддержку.")
             await call.answer()
             return
 

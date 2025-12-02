@@ -1284,6 +1284,22 @@
 
     }
 
+    function isSessionResolved(sessionId) {
+    const sessionEl = document.querySelector(`.session[data-session-id="${sessionId}"]`);
+    return sessionEl && sessionEl.classList.contains('resolved-session');
+    }
+
+    // Показ flash-сообщения из куки
+(function() {
+    const match = document.cookie.match(/(^|;\s*)flash_message=([^;]*)/);
+    if (match) {
+        const message = decodeURIComponent(match[2]);
+        alert(message);
+        // Удаляем куку
+        document.cookie = "flash_message=; Max-Age=0; path=/; samesite=lax";
+    }
+})();
+
     function linkify(htmlString) {
     // Ищем URL в тексте, игнорируя уже существующие теги <a>
     const urlRegex = /(\bhttps?:\/\/[^\s<>"{}|\\^`\[\]]+|\bwww\.[^\s<>"{}|\\^`\[\]]+)/gi;
@@ -1441,6 +1457,11 @@ async function loadAvailableRollbackStates(sessionId) {
     // ————————————————————————————————————————
     async function handleSendText(sessionId, event) {
         event.preventDefault();
+    if (isSessionResolved(sessionId)) {
+        alert('Сессия уже завершена.');
+        return false;
+    }
+
         const textarea = document.getElementById(`message-input-${sessionId}`);
         const msg = textarea?.value?.trim();
         if (!msg) return alert('Введите сообщение');
@@ -1465,6 +1486,11 @@ async function loadAvailableRollbackStates(sessionId) {
     // Отправка файла
     // ————————————————————————————————————————
     async function handleFileSelect(sessionId, input) {
+        if (isSessionResolved(sessionId)) {
+        alert('Сессия уже завершена.');
+        input.value = ''; // очищаем инпут
+        return;
+    }
         const file = input?.files?.[0];
         if (!file) return;
 
@@ -1545,7 +1571,7 @@ async function loadAvailableRollbackStates(sessionId) {
                     </div>
                 `;
 
-            } else if (!m.has_photo && m.photo_file_id) {
+            } else if (m.has_document && m.document_file_id) {
                 // Это документ
                 const captionToShow = (m.message && m.message !== m.document_name) ? m.message : '';
                 const captionHtml = captionToShow
@@ -1553,7 +1579,7 @@ async function loadAvailableRollbackStates(sessionId) {
                     : '';
                 contentHtml = `
                     <div class="${bubbleClass}" style="${bubbleStyle}">
-                        <a href="/support/session/${sessionId}/document/${m.photo_file_id}"
+                        <a href="/support/session/${sessionId}/document/${m.document_file_id}"
                            class="flex items-center text-xs font-medium text-current hover:underline"
                            download="${escapeHtml(m.document_name || 'file')}">
                             <span class="mr-1">📎</span>
@@ -1699,7 +1725,7 @@ function handleImageLoad() {
 }
 
     // ————————————————————————————————————————
-    // Модальное окно фото (стиль из прошлого проекта)
+    // Модальное окно фото
     // ————————————————————————————————————————
     function openPhotoModal(sessionId, photoFileId) {
             currentPhotoScale = 1;

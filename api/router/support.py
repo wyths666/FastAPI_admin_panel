@@ -1,9 +1,13 @@
-# routes/support.py
 from aiogram.types import BufferedInputFile, InputFile
 from beanie import PydanticObjectId
 from fastapi import APIRouter, Request, Depends, Form, UploadFile, File
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from typing import Optional
+from urllib.parse import quote
+import httpx
+from fastapi.responses import StreamingResponse
+from bson import ObjectId
+from bson.errors import InvalidId
 import tempfile
 import os
 import mimetypes
@@ -43,6 +47,19 @@ STATE_MESSAGES = {
     "RegState:waiting_for_card_number": treg.card_format_text,
 }
 
+html_content = """
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <script>
+        alert("⚠️ Сессия уже закрыта. Действие недоступно.");
+        window.location.href = "/support/";
+    </script>
+</head>
+<body></body>
+</html>
+"""
 
 def translate_state_value(key: str, value: any) -> str:
     """
@@ -494,50 +511,107 @@ async def get_support_photo(session_id: str, photo_file_id: str):
         raise HTTPException(status_code=500, detail="Внутренняя ошибка сервера")
 
 
+
+
 @router.get("/session/{session_id}/document/{document_file_id}")
-async def download_support_document(session_id: str, document_file_id: str):
-    """Скачивание документа из чата поддержки"""
+async def download_support_document(
+    session_id: str,
+    document_file_id: str,
+
+):
+    """Скачивание документа из чата поддержки (Streaming, безопасно, как в download_chat_file)"""
     try:
-        # Проверяем существование сессии
-        session = await SupportSession.get(session_id)
+        # 1. Валидация и получение сессии
+        try:
+            session_oid = ObjectId(session_id)
+        except (InvalidId, TypeError):
+            raise HTTPException(status_code=400, detail="Некорректный ID сессии")
+
+        session = await SupportSession.get(session_oid)
         if not session:
             raise HTTPException(status_code=404, detail="Сессия не найдена")
 
-        # Проверяем существование сообщения с документом
+        # 2. Получаем сообщение с документом
         message = await SupportMessage.find_one({
-            "session_id": session.id,
+            "session_id": session_oid,
             "document_file_id": document_file_id,
             "has_document": True
         })
-
         if not message:
             raise HTTPException(status_code=404, detail="Документ не найден")
 
-        # Получаем файл от Telegram
+        # 3. Получаем file_info от Telegram
         try:
-            file = await bot.get_file(document_file_id)
-
-            # Скачиваем файл
-            file_content = await file.download_as_bytearray()
-
-            # Возвращаем файл как ответ
-            from fastapi.responses import Response
-            return Response(
-                content=bytes(file_content),
-                media_type=message.document_mime_type or "application/octet-stream",
-                headers={
-                    "Content-Disposition": f"attachment; filename=\"{message.document_name}\""
-                }
-            )
-
+            file_info = await bot.get_file(document_file_id)
         except Exception as e:
-            logger.error(f"❌ Ошибка получения документа: {str(e)}")
-            raise HTTPException(status_code=404, detail="Документ не доступен")
+            logger.error(f"Telegram get_file failed for {document_file_id}: {e}")
+            raise HTTPException(status_code=404, detail="Не удалось получить метаданные файла")
+
+        if not file_info.file_path:
+            raise HTTPException(status_code=500, detail="File path отсутствует в ответе Telegram")
+
+        file_url = f"https://api.telegram.org/file/bot{bot.token}/{file_info.file_path}"
+
+        # 4. Скачиваем через httpx (асинхронно + streaming)
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.get(file_url)
+            if resp.status_code != 200:
+                logger.error(f"HTTP {resp.status_code} при скачивании {file_url}")
+                raise HTTPException(status_code=502, detail="Не удалось загрузить файл с сервера Telegram")
+
+            # 5. Определяем имя файла
+            filename = message.document_name or "document"
+
+            # Если имя "без расширения", но известен MIME — добавим
+            content_type = resp.headers.get("content-type", "application/octet-stream").split(";")[0].strip()
+
+            ext_map = {
+                "application/pdf": ".pdf",
+                "application/zip": ".zip",
+                "application/x-rar-compressed": ".rar",
+                "application/msword": ".doc",
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document": ".docx",
+                "application/vnd.ms-excel": ".xls",
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": ".xlsx",
+                "text/plain": ".txt",
+                "text/csv": ".csv",
+                "application/json": ".json",
+                "image/jpeg": ".jpg",
+                "image/png": ".png",
+                "image/gif": ".gif",
+                "image/webp": ".webp",
+                "audio/mpeg": ".mp3",
+                "audio/wav": ".wav",
+                "video/mp4": ".mp4",
+            }
+
+            # Добавляем расширение, если его нет и мы можем определить по MIME
+            ext = ext_map.get(content_type, "")
+            clean_name = "".join(c if c.isalnum() or c in "._- " else "_" for c in filename).strip()
+            if not clean_name:
+                clean_name = "document"
+
+            if ext and not clean_name.lower().endswith(tuple(ext_map.values())):
+                clean_name += ext
+
+            # 6. Формируем заголовки
+            headers = {
+                "Content-Type": content_type,
+                "Content-Disposition": f'attachment; filename="{quote(clean_name)}"',
+                "Cache-Control": "private, max-age=300",
+            }
+
+            # 7. StreamingResponse (потоковая отдача — память не растёт)
+            async def file_stream():
+                async for chunk in resp.aiter_bytes(65536):
+                    yield chunk
+
+            return StreamingResponse(file_stream(), headers=headers)
 
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"❌ Ошибка получения документа: {str(e)}")
+        logger.error(f"❌ download_support_document({session_id}, {document_file_id}): {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Внутренняя ошибка сервера")
 
 
@@ -555,7 +629,7 @@ async def resolve_session(
             raise HTTPException(status_code=404, detail="Сессия не найдена")
 
         if session.resolved:
-            raise HTTPException(status_code=400, detail="Сессия уже закрыта")
+            return HTMLResponse(content=html_content, status_code=200)
 
         # Получаем информацию о пользователе
         user = await User.find_one(User.tg_id == session.user_id)
@@ -659,7 +733,7 @@ async def rollback_session_state(
             raise HTTPException(status_code=404, detail="Сессия не найдена")
 
         if session.resolved:
-            raise HTTPException(status_code=400, detail="Сессия уже завершена")
+            return HTMLResponse(content=html_content, status_code=200)
 
         # Получаем пользователя
         user = await User.find_one({"tg_id": session.user_id})
@@ -893,6 +967,9 @@ async def block_user(request: Request, session_id: str):
         session = await SupportSession.find_one(SupportSession.id == PydanticObjectId(session_id))
         if not session:
             raise HTTPException(status_code=404, detail="Сессия не найдена")
+
+        if session.resolved:
+            return HTMLResponse(content=html_content, status_code=200)
 
         # Получаем пользователя
         user = await User.find_one(User.tg_id == session.user_id)

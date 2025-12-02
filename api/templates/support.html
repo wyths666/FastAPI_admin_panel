@@ -1098,6 +1098,9 @@
                             </div>
                             {% endif %}
 
+
+
+
                             {% if not session.resolved %}
                             <!-- Форма отката состояния (только для активных сессий) -->
                             <div class="info-item">
@@ -1310,6 +1313,9 @@ async function loadAvailableRollbackStates(sessionId) {
         console.log('Получены доступные состояния:', data);
 
         const select = document.getElementById(`rollback-select-${sessionId}`);
+        const form = select?.closest('form');
+        const submitButton = form?.querySelector('button[type="submit"]');
+
         if (!select) {
             console.error(`Select элемент не найден для сессии ${sessionId}`);
             return;
@@ -1326,6 +1332,24 @@ async function loadAvailableRollbackStates(sessionId) {
             option.disabled = true;
             select.appendChild(option);
             select.disabled = true;
+
+            // БЛОКИРУЕМ КНОПКУ если нет состояний
+            if (submitButton) {
+                submitButton.disabled = true;
+                submitButton.style.opacity = '0.5';
+                submitButton.style.cursor = 'not-allowed';
+                submitButton.title = 'Нет доступных состояний для отката';
+            }
+
+            // БЛОКИРУЕМ ОТПРАВКУ ФОРМЫ
+            if (form) {
+                form.onsubmit = function(event) {
+                    event.preventDefault();
+                    alert('Нет доступных состояний для отката');
+                    return false;
+                };
+            }
+
             console.log('Нет доступных состояний для отката');
             return;
         }
@@ -1339,15 +1363,56 @@ async function loadAvailableRollbackStates(sessionId) {
         }
 
         select.disabled = false;
+
+        // АКТИВИРУЕМ КНОПКУ если есть состояния
+        if (submitButton) {
+            submitButton.disabled = false;
+            submitButton.style.opacity = '1';
+            submitButton.style.cursor = 'pointer';
+            submitButton.title = '';
+        }
+
+        // ВОССТАНАВЛИВАЕМ стандартный обработчик формы
+        if (form) {
+            form.onsubmit = function(event) {
+                if (!select.value) {
+                    event.preventDefault();
+                    alert('Выберите состояние для отката');
+                    return false;
+                }
+                return confirm('Вы уверены, что хотите выполнить откат? Пользователь получит соответствующее сообщение.');
+            };
+        }
+
         console.log(`Загружено ${Object.keys(data.available_states).length} доступных состояний`);
 
     } catch (error) {
         console.error('Ошибка загрузки доступных состояний:', error);
 
         const select = document.getElementById(`rollback-select-${sessionId}`);
+        const form = select?.closest('form');
+        const submitButton = form?.querySelector('button[type="submit"]');
+
         if (select) {
             select.innerHTML = '<option value="">-- Ошибка загрузки --</option>';
             select.disabled = true;
+        }
+
+        // БЛОКИРУЕМ КНОПКУ при ошибке
+        if (submitButton) {
+            submitButton.disabled = true;
+            submitButton.style.opacity = '0.5';
+            submitButton.style.cursor = 'not-allowed';
+            submitButton.title = 'Ошибка загрузки состояний';
+        }
+
+        // БЛОКИРУЕМ ОТПРАВКУ ФОРМЫ при ошибке
+        if (form) {
+            form.onsubmit = function(event) {
+                event.preventDefault();
+                alert('Ошибка загрузки доступных состояний');
+                return false;
+            };
         }
     }
 }
@@ -1625,7 +1690,7 @@ function handleImageLoad() {
     if (details.classList.contains('open')) {
         currentOpenSession = sessionId;
         loadSessionMessages(sessionId);
-        loadAvailableRollbackStates(sessionId); // ← ДОБАВИТЬ ЭТУ СТРОЧКУ
+        loadAvailableRollbackStates(sessionId);  // ← Загружаем состояния при открытии
         startSmartRefresh(sessionId);
     } else {
         currentOpenSession = null;

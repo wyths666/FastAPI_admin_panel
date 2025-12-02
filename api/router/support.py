@@ -607,26 +607,62 @@ async def resolve_session(
         raise HTTPException(status_code=500, detail="Внутренняя ошибка сервера")
 
 
+async def clean_and_set_state(user_id: int, target_state: str, session_data: dict = None):
+    """
+    Очищает текущее состояние и устанавливает новое чистое состояние
+    """
+    mongo_db = get_database()
+    fsm_key = f"fsm:{user_id}:{user_id}"
+
+    # Базовые данные для нового состояния
+    base_data = {
+        "clean_start": True,
+        "session_timestamp": datetime.now().isoformat()
+    }
+
+    # Добавляем данные сессии если есть
+    if session_data:
+        base_data.update(session_data)
+
+    # Устанавливаем новое состояние с очищенными данными
+    await mongo_db.aiogram_fsm_states.update_one(
+        {"_id": fsm_key},
+        {
+            "$set": {
+                "state": target_state,
+                "data": base_data
+            }
+        },
+        upsert=True
+    )
+
+    logger.info(f"✅ [CleanState] Пользователь {user_id} переведен в состояние {target_state}")
+    return base_data
 
 
 @router.post("/session/{session_id}/rollback")
 async def rollback_session_state(
-        request: Request,
         session_id: str,
-        target_state: str = Form(...)
+        target_state: str = Form(...),
+        admin=Depends(get_current_admin)
 ):
-    """Откат состояния сессии на выбранный шаг с автоматическим закрытием сессии"""
+    """Откат состояния сессии на выбранный шаг"""
+    if not admin:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
     try:
+        logger.info(f"🔍 [Rollback] Начало отката сессии {session_id} для target_state={target_state}")
+
         # Получаем сессию
-        session = await SupportSession.find_one(SupportSession.id == PydanticObjectId(session_id))
+        session = await SupportSession.find_one({"_id": PydanticObjectId(session_id)})
         if not session:
             raise HTTPException(status_code=404, detail="Сессия не найдена")
 
         if session.resolved:
-            raise HTTPException(status_code=400, detail="Сессия уже закрыта")
+            raise HTTPException(status_code=400, detail="Сессия уже завершена")
 
         # Получаем пользователя
-        user = await User.find_one(User.tg_id == session.user_id)
+        user = await User.find_one({"tg_id": session.user_id})
         if not user:
             raise HTTPException(status_code=404, detail="Пользователь не найден")
 
@@ -635,71 +671,113 @@ async def rollback_session_state(
 
         # Получаем текущее FSM состояние пользователя из MongoDB
         fsm_key = f"fsm:{session.user_id}:{session.user_id}"
+        logger.info(f"🔍 [Rollback] Поиск FSM данных по ключу: {fsm_key}")
         fsm_data = await mongo_db.aiogram_fsm_states.find_one({"_id": fsm_key})
 
-        if not fsm_data:
-            raise HTTPException(status_code=404, detail="Не найдено состояние пользователя")
+        # Данные из сессии поддержки (это snapshot на момент входа в поддержку)
+        session_state = session.state
+        session_data = session.state_data or {}
 
-        # ВАЛИДАЦИЯ: Получаем доступные для отката состояния
-        available_states = get_available_rollback_states_from_session(fsm_data)
+        logger.info(f"🔍 [Rollback] State из сессии: {session_state}")
+        logger.info(f"🔍 [Rollback] Data из сессии: {session_data}")
 
-        if target_state not in available_states:
+        # Получаем доступные для отката состояния
+        available_states_dict = get_available_rollback_states_from_session(session_state)
+
+        logger.info(f"🔍 [Rollback] Доступные состояния: {available_states_dict}")
+
+        # Проверяем, что целевое состояние доступно
+        if target_state not in available_states_dict:
             raise HTTPException(
                 status_code=400,
-                detail=f"Невозможно вернуться к состоянию {target_state}. Доступны только предыдущие шаги: {', '.join(available_states.values())}"
+                detail=f"Невозможно вернуться к состоянию '{target_state}'. Доступные варианты: {', '.join([f'{k} ({v})' for k, v in available_states_dict.items()])}"
             )
 
-        # Сохраняем текущее состояние как предыдущее
-        current_state = fsm_data.get("state")
-        current_data = fsm_data.get("data", {})
+        logger.info(f"🔍 [Rollback] Целевое состояние подтверждено: {target_state}")
 
-        # Обновляем состояние в FSM хранилище
-        new_fsm_data = current_data.copy()
+        # Подготавливаем новые данные для целевого состояния
+        # Основные данные берем из session_data (это original_data из хендлера)
+        new_fsm_data = {}
 
-        # Очищаем данные в зависимости от целевого состояния
         if target_state == "RegState:waiting_for_code":
-            new_fsm_data = {"original_state": current_state, "original_data": current_data}
+            new_fsm_data = {
+                "claim_id": session_data.get("claim_id"),
+                "entered_code": session_data.get("entered_code"),
+                "support_session_id": str(session.id),
+                "support_session_closed": True
+            }
         elif target_state == "RegState:waiting_for_screenshot":
             new_fsm_data = {
-                "claim_id": current_data.get("claim_id"),
-                "entered_code": current_data.get("entered_code"),
-                "original_state": current_state,
-                "original_data": current_data
+                "claim_id": session_data.get("claim_id"),
+                "entered_code": session_data.get("entered_code"),
+                "support_session_id": str(session.id),
+                "support_session_closed": True
             }
         elif target_state == "RegState:waiting_for_phone_or_card":
             new_fsm_data = {
-                "claim_id": current_data.get("claim_id"),
-                "entered_code": current_data.get("entered_code"),
-                "photo_file_ids": current_data.get("photo_file_ids", []),
-                "review_text": current_data.get("review_text", ""),
+                "claim_id": session_data.get("claim_id"),
+                "entered_code": session_data.get("entered_code"),
+                "photo_file_ids": session_data.get("photo_file_ids", []),
+                "review_text": session_data.get("review_text", ""),
                 "screenshot_received": True,
-                "original_state": current_state,
-                "original_data": current_data
+                "support_session_id": str(session.id),
+                "support_session_closed": True
+            }
+        elif target_state == "RegState:waiting_for_phone_number":
+            new_fsm_data = {
+                "claim_id": session_data.get("claim_id"),
+                "entered_code": session_data.get("entered_code"),
+                "photo_file_ids": session_data.get("photo_file_ids", []),
+                "review_text": session_data.get("review_text", ""),
+                "screenshot_received": True,
+                "support_session_id": str(session.id),
+                "support_session_closed": True
+            }
+        elif target_state == "RegState:waiting_for_card_number":
+            new_fsm_data = {
+                "claim_id": session_data.get("claim_id"),
+                "entered_code": session_data.get("entered_code"),
+                "photo_file_ids": session_data.get("photo_file_ids", []),
+                "review_text": session_data.get("review_text", ""),
+                "screenshot_received": True,
+                "phone_card_message_id": session_data.get("phone_card_message_id"),
+                "support_session_id": str(session.id),
+                "support_session_closed": True
+            }
+        elif target_state == "RegState:waiting_for_bank":
+            new_fsm_data = {
+                "claim_id": session_data.get("claim_id"),
+                "entered_code": session_data.get("entered_code"),
+                "photo_file_ids": session_data.get("photo_file_ids", []),
+                "review_text": session_data.get("review_text", ""),
+                "screenshot_received": True,
+                "phone_card_message_id": session_data.get("phone_card_message_id"),
+                "support_session_id": str(session.id),
+                "support_session_closed": True
             }
         else:
             new_fsm_data = {
-                "claim_id": current_data.get("claim_id"),
-                "entered_code": current_data.get("entered_code"),
-                "photo_file_ids": current_data.get("photo_file_ids", []),
-                "review_text": current_data.get("review_text", ""),
-                "screenshot_received": True,
-                "phone_card_message_id": current_data.get("phone_card_message_id"),
-                "original_state": current_state,
-                "original_data": current_data
+                "support_session_id": str(session.id),
+                "support_session_closed": True
             }
 
-        # Обновляем FSM в MongoDB
-        await mongo_db.aiogram_fsm_states.update_one(
+        logger.info(f"🔍 [Rollback] Новые данные FSM: {new_fsm_data}")
+
+        # Обновляем FSM в MongoDB (СБРАСЫВАЕМ состояние и устанавливаем новое)
+        update_result = await mongo_db.aiogram_fsm_states.update_one(
             {"_id": fsm_key},
             {
                 "$set": {
                     "state": target_state,
                     "data": new_fsm_data
                 }
-            }
+            },
+            upsert=True  # Создаем если не существует
         )
 
-        # Отправляем сообщение пользователю о возврате в процесс заявки
+        logger.info(f"✅ [Rollback] FSM обновлен. Изменено документов: {update_result.modified_count}")
+
+        # Отправляем сообщение пользователю
         message_text = STATE_MESSAGES.get(target_state, "🔄 Состояние обновлено. Продолжайте оформление заявки.")
 
         try:
@@ -714,27 +792,28 @@ async def rollback_session_state(
                     chat_id=session.user_id,
                     text=f"🔄 Ваше обращение в поддержку завершено.\n {message_text}"
                 )
-            logger.info(f"✅ [SupportRollback] Пользователь {session.user_id} возвращен в состояние {target_state}")
+            logger.info(f"✅ [Rollback] Сообщение отправлено пользователю {session.user_id}")
         except Exception as e:
-            logger.error(f"❌ Ошибка отправки сообщения пользователю: {str(e)}")
+            logger.error(f"⚠️ [Rollback] Ошибка отправки сообщения: {str(e)}")
 
-        # ЗАКРЫВАЕМ СЕССИЮ поддержки
+        # Закрываем сессию поддержки
         session.resolved = True
         session.resolved_by_admin_id = 1
-        session.previous_state = current_state
-        session.previous_state_data = current_data
+        session.previous_state = session.state
+        session.previous_state_data = session.state_data
         session.rollback_count = (session.rollback_count or 0) + 1
-        await session.save()
 
-        logger.info(f"✅ [SupportRollback] Сессия {session_id} закрыта после отката в состояние {target_state}")
+        await session.save()
+        logger.info(f"✅ [Rollback] Сессия {session_id} закрыта")
 
         return RedirectResponse("/support/", status_code=303)
 
-    except HTTPException:
-        raise
+    except HTTPException as he:
+        logger.error(f"❌ [Rollback] HTTP ошибка: {he.detail}")
+        raise he
     except Exception as e:
-        logger.error(f"❌ [SupportRollback] Ошибка отката сессии: {str(e)}")
-        raise HTTPException(status_code=500, detail="Внутренняя ошибка сервера")
+        logger.error(f"❌ [Rollback] Неожиданная ошибка: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Внутренняя ошибка сервера: {str(e)}")
 
 
 @router.get("/session/{session_id}/available_rollback_states")

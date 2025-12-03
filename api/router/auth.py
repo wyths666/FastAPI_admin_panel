@@ -43,9 +43,6 @@ async def login(
         password: str = Form(...)
 ):
     try:
-        logger.warning(f"🔐 Попытка входа: логин='{username}', пароль='{password}'")
-
-        # Ищем администратора
         admin = await Administrators.get(login=username, is_active=True)
 
         if not admin:
@@ -60,7 +57,6 @@ async def login(
                 }
             )
 
-        logger.info(f"✅ Найден администратор: {admin.login}")
 
         # Проверяем пароль
         if admin.password != password:
@@ -75,7 +71,6 @@ async def login(
                 }
             )
 
-        logger.info("✅ Пароль верный!")
 
         # Генерируем токен сессии
         session_token = secrets.token_urlsafe(32)

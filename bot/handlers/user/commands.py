@@ -129,10 +129,6 @@ async def help_save_state(msg: Message, state: FSMContext):
 @router.callback_query(F.data == "send_help_text")
 async def help_save(callback: CallbackQuery, state: FSMContext):
     user_id = callback.from_user.id
-    # user = await User.get(tg_id=user_id)
-    # if user and user.banned:
-    #     return
-
     await callback.answer()
 
     active_session = await SupportSession.find(
@@ -150,15 +146,40 @@ async def help_save(callback: CallbackQuery, state: FSMContext):
         )
         await state.set_state(SupportState.waiting_for_message)
 
-        await callback.message.edit_text(
-            "🆘 <b>Техническая поддержка</b>\n\n"
-            "Ваше обращение уже в работе, Вы можете отправить новое сообщение.\n\n"
-            "Для того чтобы отменить обращение и вернуться к оформлению заявки — нажмите кнопку ниже.",
-            parse_mode="HTML",
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
-                InlineKeyboardButton(text="↩️ Вернуться к заявке", callback_data="support:back_to_claim")
-            ]])
-        )
+        # ИСПРАВЛЕНО: Проверка на наличие текста в сообщении
+        if callback.message and callback.message.text:
+            try:
+                await callback.message.edit_text(
+                    "🆘 <b>Техническая поддержка</b>\n\n"
+                    "Ваше обращение уже в работе, Вы можете отправить новое сообщение.\n\n"
+                    "Для того чтобы отменить обращение и вернуться к оформлению заявки — нажмите кнопку ниже.",
+                    parse_mode="HTML",
+                    reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
+                        InlineKeyboardButton(text="↩️ Вернуться к заявке", callback_data="support:back_to_claim")
+                    ]])
+                )
+            except Exception as e:
+                # Если не удалось отредактировать, отправляем новое сообщение
+                await callback.message.answer(
+                    "🆘 <b>Техническая поддержка</b>\n\n"
+                    "Ваше обращение уже в работе, Вы можете отправить новое сообщение.\n\n"
+                    "Для того чтобы отменить обращение и вернуться к оформлению заявки — нажмите кнопку ниже.",
+                    parse_mode="HTML",
+                    reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
+                        InlineKeyboardButton(text="↩️ Вернуться к заявке", callback_data="support:back_to_claim")
+                    ]])
+                )
+        else:
+            # Если сообщение без текста, отправляем новое
+            await callback.message.answer(
+                "🆘 <b>Техническая поддержка</b>\n\n"
+                "Ваше обращение уже в работе, Вы можете отправить новое сообщение.\n\n"
+                "Для того чтобы отменить обращение и вернуться к оформлению заявки — нажмите кнопку ниже.",
+                parse_mode="HTML",
+                reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
+                    InlineKeyboardButton(text="↩️ Вернуться к заявке", callback_data="support:back_to_claim")
+                ]])
+            )
         return
 
     current_state = await state.get_state()
@@ -176,15 +197,38 @@ async def help_save(callback: CallbackQuery, state: FSMContext):
     )
     await state.set_state(SupportState.waiting_for_message)
 
-    await callback.message.edit_text(
-        "🆘 <b>Техническая поддержка</b>\n\n"
-        "Опишите вашу проблему — мы постараемся помочь.\n\n"
-        "Если хотите вернуться к оформлению заявки — нажмите кнопку ниже.",
-        parse_mode="HTML",
-        reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
-            InlineKeyboardButton(text="↩️ Вернуться к заявке", callback_data="support:back_to_claim")
-        ]])
-    )
+    # ИСПРАВЛЕНО
+    if callback.message and callback.message.text:
+        try:
+            await callback.message.edit_text(
+                "🆘 <b>Техническая поддержка</b>\n\n"
+                "Опишите вашу проблему — мы постараемся помочь.\n\n"
+                "Если хотите вернуться к оформлению заявки — нажмите кнопку ниже.",
+                parse_mode="HTML",
+                reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
+                    InlineKeyboardButton(text="↩️ Вернуться к заявке", callback_data="support:back_to_claim")
+                ]])
+            )
+        except Exception as e:
+            await callback.message.answer(
+                "🆘 <b>Техническая поддержка</b>\n\n"
+                "Опишите вашу проблему — мы постараемся помочь.\n\n"
+                "Если хотите вернуться к оформлению заявки — нажмите кнопку ниже.",
+                parse_mode="HTML",
+                reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
+                    InlineKeyboardButton(text="↩️ Вернуться к заявке", callback_data="support:back_to_claim")
+                ]])
+            )
+    else:
+        await callback.message.answer(
+            "🆘 <b>Техническая поддержка</b>\n\n"
+            "Опишите вашу проблему — мы постараемся помочь.\n\n"
+            "Если хотите вернуться к оформлению заявки — нажмите кнопку ниже.",
+            parse_mode="HTML",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
+                InlineKeyboardButton(text="↩️ Вернуться к заявке", callback_data="support:back_to_claim")
+            ]])
+        )
 
 @router.message(StateFilter(treg.RegState.waiting_for_code))
 async def process_code(msg: Message, state: FSMContext):
@@ -622,9 +666,12 @@ async def back_to_claim_callback(call: CallbackQuery, state: FSMContext):
     if not original_state:
         await state.clear()
         try:
-            await call.message.edit_text("❌ Незавершенная заявка не найдена. Начните заново: /start")
+            if call.message.text:
+                await call.message.edit_text("❌ Незавершенная заявка не найдена. Начните заново: /start")
+            else:
+                await call.message.answer("❌ Незавершенная заявка не найдена. Начните заново: /start")
         except Exception:
-            await call.message.answer("❌ Незавершенная не найдена. Начните заново: /start")
+            await call.message.answer("❌ Незавершенная заявка не найдена. Начните заново: /start")
         await call.answer()
         return
 
@@ -654,21 +701,39 @@ async def back_to_claim_callback(call: CallbackQuery, state: FSMContext):
                 if is_subscribed:
                     # Подписан → переходим к отзыву
                     await proceed_to_review(user_tg_id=user_id, state=state, code=code)
-                    await call.message.delete()
+                    try:
+                        await call.message.delete()
+                    except:
+                        pass
                     await call.answer()
                     return
                 else:
                     # Не подписан → просим подписаться
-                    await call.message.edit_text(
-                        text=treg.not_subscribed_text,
-                        reply_markup=tmenu.check_subscription_ikb()
-                    )
+                    if call.message.text:
+                        try:
+                            await call.message.edit_text(
+                                text=treg.not_subscribed_text,
+                                reply_markup=tmenu.check_subscription_ikb()
+                            )
+                        except Exception:
+                            await call.message.answer(
+                                text=treg.not_subscribed_text,
+                                reply_markup=tmenu.check_subscription_ikb()
+                            )
+                    else:
+                        await call.message.answer(
+                            text=treg.not_subscribed_text,
+                            reply_markup=tmenu.check_subscription_ikb()
+                        )
                     await call.answer()
                     return
             else:
                 # Ещё не вводил код → приветствие
                 welcome_photo = FSInputFile("utils/IMG_1262.png")
-                await call.message.delete()
+                try:
+                    await call.message.delete()
+                except:
+                    pass
                 await call.message.answer_photo(
                     photo=welcome_photo,
                     caption="👋 Привет! Это бот компании Pure. Введите секретный код, указанный на голограмме."
@@ -678,43 +743,91 @@ async def back_to_claim_callback(call: CallbackQuery, state: FSMContext):
 
         # 🟢 Состояние: ожидание скриншота
         elif original_state == treg.RegState.waiting_for_screenshot.state:
-            await call.message.edit_text(
-                text=treg.screenshot_request_text,
-                reply_markup=None
-            )
+            if call.message.text:
+                try:
+                    await call.message.edit_text(
+                        text=treg.screenshot_request_text,
+                        reply_markup=None
+                    )
+                except Exception:
+                    await call.message.answer(
+                        text=treg.screenshot_request_text,
+                        reply_markup=None
+                    )
+            else:
+                await call.message.answer(
+                    text=treg.screenshot_request_text,
+                    reply_markup=None
+                )
             await call.answer()
             return
 
         # 🟢 Состояние: выбор способа получения (телефон / карта)
         elif original_state == treg.RegState.waiting_for_phone_or_card.state:
-            await call.message.edit_text(
-                text=treg.phone_or_card_text,
-                reply_markup=tmenu.phone_or_card_ikb()
-            )
+            if call.message.text:
+                try:
+                    await call.message.edit_text(
+                        text=treg.phone_or_card_text,
+                        reply_markup=tmenu.phone_or_card_ikb()
+                    )
+                except Exception:
+                    await call.message.answer(
+                        text=treg.phone_or_card_text,
+                        reply_markup=tmenu.phone_or_card_ikb()
+                    )
+            else:
+                await call.message.answer(
+                    text=treg.phone_or_card_text,
+                    reply_markup=tmenu.phone_or_card_ikb()
+                )
             await call.answer()
             return
 
         # 🟢 Состояние: ввод телефона
         elif original_state == treg.RegState.waiting_for_phone_number.state:
-            await call.message.edit_text(text=treg.phone_format_text)
+            if call.message.text:
+                try:
+                    await call.message.edit_text(text=treg.phone_format_text)
+                except Exception:
+                    await call.message.answer(text=treg.phone_format_text)
+            else:
+                await call.message.answer(text=treg.phone_format_text)
             await call.answer()
             return
 
         # 🟢 Состояние: ввод карты
         elif original_state == treg.RegState.waiting_for_card_number.state:
-            await call.message.edit_text(text=treg.card_format_text)
+            if call.message.text:
+                try:
+                    await call.message.edit_text(text=treg.card_format_text)
+                except Exception:
+                    await call.message.answer(text=treg.card_format_text)
+            else:
+                await call.message.answer(text=treg.card_format_text)
             await call.answer()
             return
 
         # 🟢 Состояние: ввод банка
         elif original_state == treg.RegState.waiting_for_bank.state:
-            await call.message.edit_text(text=treg.bank_request_text)
+            if call.message.text:
+                try:
+                    await call.message.edit_text(text=treg.bank_request_text)
+                except Exception:
+                    await call.message.answer(text=treg.bank_request_text)
+            else:
+                await call.message.answer(text=treg.bank_request_text)
             await call.answer()
             return
 
         # ❗ Неизвестное состояние — fallback
         else:
-            await call.message.edit_text("🔄 Неизвестная ошибка.\nОбратитесь в поддержку.")
+            if call.message.text:
+                try:
+                    await call.message.edit_text("🔄 Неизвестная ошибка.\nОбратитесь в поддержку.")
+                except Exception:
+                    await call.message.answer("🔄 Неизвестная ошибка.\nОбратитесь в поддержку.")
+            else:
+                await call.message.answer("🔄 Неизвестная ошибка.\nОбратитесь в поддержку.")
             await call.answer()
             return
 
@@ -722,9 +835,12 @@ async def back_to_claim_callback(call: CallbackQuery, state: FSMContext):
         import traceback
         print(f"[ERROR] back_to_claim_callback failed: {e}")
         traceback.print_exc()
-        try:
-            await call.message.edit_text("⚠️ Ошибка при восстановлении сессии. Попробуйте /start")
-        except:
+        if call.message.text:
+            try:
+                await call.message.edit_text("⚠️ Ошибка при восстановлении сессии. Попробуйте /start")
+            except:
+                await call.message.answer("⚠️ Ошибка при восстановлении сессии. Попробуйте /start")
+        else:
             await call.message.answer("⚠️ Ошибка при восстановлении сессии. Попробуйте /start")
         await state.clear()
         await call.answer()

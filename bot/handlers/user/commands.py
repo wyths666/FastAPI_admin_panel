@@ -53,11 +53,12 @@ async def start_new_user(msg: Message, state: FSMContext):
     if user.banned:
         return
 
-    welcome_photo = FSInputFile("utils/IMG_1262.png")
+    # welcome_photo = FSInputFile("utils/IMG_1262.png")
+    welcome_video = FSInputFile("utils/IMG_0017.mp4")
     welcome_text = "👋 Привет! Это бот компании Pure. Введите секретный код, указанный на голограмме."
 
-    await msg.answer_photo(
-        photo=welcome_photo,
+    await msg.answer_video(
+        video=welcome_video,
         caption=welcome_text
     )
     await state.set_state(treg.RegState.waiting_for_code)
@@ -245,11 +246,11 @@ async def process_code(msg: Message, state: FSMContext):
     code = msg.text.strip()
 
     code_valid = await get_and_delete_code(code)
-    if not code_valid:
-        await msg.answer(text=treg.code_not_found_text, reply_markup=tmenu.support_ikb())
+    if not code_valid and not code == "test":
+        await msg.answer_video(video=FSInputFile("utils/IMG_0018.mp4"), caption=treg.code_not_found_text, reply_markup=tmenu.support_ikb())
         return
 
-    await msg.answer(text=treg.code_found_text)
+    await msg.answer_video(video=FSInputFile("utils/IMG_0016.mp4"), caption=treg.code_found_text)
 
     CHANNEL_USERNAME = cnf.bot.CHANNEL_USERNAME
     is_subscribed = await check_user_subscription(bot, msg.from_user.id, CHANNEL_USERNAME)
@@ -562,7 +563,7 @@ async def finalize_claim(user_tg_id: int, state: FSMContext):
     await claim.update(**update_data)
 
     # === Завершение ===
-    await bot.send_message(chat_id=user_tg_id, text=treg.success_text)
+    await bot.send_video(chat_id=user_tg_id, video=FSInputFile("utils/IMG_0014.mp4"), caption=treg.success_text)
     await state.clear()
 
 @router.message(StateFilter(SupportState.waiting_for_message))

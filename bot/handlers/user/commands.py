@@ -202,7 +202,7 @@ async def process_code(msg: Message, state: FSMContext):
     code = msg.text.strip()
 
     code_valid = await get_and_delete_code(code)
-    if not code_valid or not code == "test":
+    if not code_valid and not code == "test":
         await msg.answer_video(video=FSInputFile("utils/IMG_0018.mp4"), caption=treg.code_not_found_text, reply_markup=tmenu.support_ikb())
         return
 

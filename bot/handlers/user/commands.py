@@ -203,10 +203,10 @@ async def process_code(msg: Message, state: FSMContext):
 
     code_valid = await get_and_delete_code(code)
     if not code_valid:
-        await msg.answer_video(video=FSInputFile("utils/IMG_0018.MOV"), text=treg.code_not_found_text, reply_markup=tmenu.support_ikb())
+        await msg.answer_video(video=FSInputFile("utils/IMG_0018.MOV"), caption=treg.code_not_found_text, reply_markup=tmenu.support_ikb())
         return
 
-    await msg.answer_video(video=FSInputFile("utils/IMG_0016.MOV"), text=treg.code_found_text)
+    await msg.answer_video(video=FSInputFile("utils/IMG_0016.MOV"), caption=treg.code_found_text)
 
     CHANNEL_USERNAME = cnf.bot.CHANNEL_USERNAME
     is_subscribed = await check_user_subscription(bot, msg.from_user.id, CHANNEL_USERNAME)
@@ -519,7 +519,7 @@ async def finalize_claim(user_tg_id: int, state: FSMContext):
     await claim.update(**update_data)
 
     # === Завершение ===
-    await bot.send_video(chat_id=user_tg_id, video=FSInputFile("utils/IMG_0014.MOV"), text=treg.success_text)
+    await bot.send_video(chat_id=user_tg_id, video=FSInputFile("utils/IMG_0014.MOV"), caption=treg.success_text)
     await state.clear()
 
 @router.message(StateFilter(SupportState.waiting_for_message))

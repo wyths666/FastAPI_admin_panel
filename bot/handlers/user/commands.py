@@ -198,7 +198,7 @@ async def help_save(callback: CallbackQuery, state: FSMContext):
     )
     await state.set_state(SupportState.waiting_for_message)
 
-    # ИСПРАВЛЕНО
+    # ИСПРАВЛЕНО: Та же проверка для новой сессии
     if callback.message and callback.message.text:
         try:
             await callback.message.edit_text(

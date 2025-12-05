@@ -1894,17 +1894,18 @@ const captionHtml = captionToShow
 contentHtml = `
     <div class="${bubbleClass}" style="${bubbleStyle}">
         <a href="/support/session/${sessionId}/document/${m.document_file_id}"
-   class="inline-flex items-center gap-1 font-bold text-blue-600 hover:text-blue-800 no-underline break-all"
-   download="${escapeHtml(m.document_name || 'file')}">
-    📂 <span>${escapeHtml(m.document_name || 'Документ')}</span>
-</a>
+           class="inline-flex items-center gap-1 font-bold text-blue-600 hover:text-blue-800 no-underline break-all"
+           style="text-decoration: none !important; font-weight: bold !important;"
+           download="${escapeHtml(m.document_name || 'file')}">
+            📂 <span>${escapeHtml(m.document_name || 'Документ')}</span>
+        </a>
         ${captionHtml}
         <div class="text-[10px] text-gray-500 mt-0.5 flex justify-between">
             <span>${formatFileSize(m.document_size)}</span>
             <span>${formatMessageTime(m.timestamp)}</span>
         </div>
     </div>
-                `;
+`;
 
             } else {
                 const textContent = m.message || '';

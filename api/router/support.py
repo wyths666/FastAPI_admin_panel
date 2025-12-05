@@ -468,65 +468,40 @@ async def send_support_file(
 
 
 @router.get("/session/{session_id}/photo/{photo_file_id}")
-async def get_support_photo(
-    session_id: str,
-    photo_file_id: str,
-    ):
-    """Получение фото из чата поддержки — оптимизировано для копирования"""
+async def get_support_photo(session_id: str, photo_file_id: str):
+    """Получение фото из чата поддержки"""
     try:
-        try:
-            session_oid = ObjectId(session_id)
-        except (InvalidId, TypeError):
-            raise HTTPException(status_code=400, detail="Некорректный ID сессии")
-
-        session = await SupportSession.get(session_oid)
+        # Проверяем существование сессии
+        session = await SupportSession.get(session_id)
         if not session:
             raise HTTPException(status_code=404, detail="Сессия не найдена")
 
+        # Проверяем существование сообщения с фото
         message = await SupportMessage.find_one({
-            "session_id": session_oid,
+            "session_id": session.id,
             "photo_file_id": photo_file_id,
             "has_photo": True
         })
+
         if not message:
             raise HTTPException(status_code=404, detail="Фото не найдено")
 
+        # Получаем файл от Telegram
         try:
-            file_info = await bot.get_file(photo_file_id)
+            file = await bot.get_file(photo_file_id)
+            file_url = f"https://api.telegram.org/file/bot{bot.token}/{file.file_path}"
+
+            # Перенаправляем на файл Telegram
+            return RedirectResponse(file_url)
+
         except Exception as e:
-            logger.error(f"Telegram get_file failed for {photo_file_id}: {e}")
-            raise HTTPException(status_code=404, detail="Не удалось получить метаданные фото")
-
-        if not file_info.file_path:
-            raise HTTPException(status_code=500, detail="File path отсутствует в ответе Telegram")
-
-        file_url = f"https://api.telegram.org/file/bot{bot.token}/{file_info.file_path}"
-
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            resp = await client.get(file_url)
-            if resp.status_code != 200:
-                logger.error(f"HTTP {resp.status_code} при скачивании {file_url}")
-                raise HTTPException(status_code=502, detail="Не удалось загрузить фото с сервера Telegram")
-
-            content_type = resp.headers.get("content-type", "image/jpeg").split(";")[0].strip()
-            filename = f"photo_{session_id}_{photo_file_id}.{content_type.split('/')[1] if '/' in content_type else 'jpg'}"
-
-            headers = {
-                "Content-Type": content_type,
-                "Content-Disposition": f'inline; filename="{quote(filename)}"',  # ← КРИТИЧНО!
-                "Cache-Control": "public, max-age=300",
-            }
-
-            async def file_stream():
-                async for chunk in resp.aiter_bytes(65536):
-                    yield chunk
-
-            return StreamingResponse(file_stream(), headers=headers)
+            logger.error(f"❌ Ошибка получения фото: {str(e)}")
+            raise HTTPException(status_code=404, detail="Фото не доступно")
 
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"❌ get_support_photo({session_id}, {photo_file_id}): {e}", exc_info=True)
+        logger.error(f"❌ Ошибка получения фото: {str(e)}")
         raise HTTPException(status_code=500, detail="Внутренняя ошибка сервера")
 
 

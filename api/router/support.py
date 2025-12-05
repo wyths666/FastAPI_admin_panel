@@ -373,27 +373,23 @@ async def send_support_file(
 
 ):
     try:
-        # --- 1. Валидация session_id ---
         try:
             obj_id = PydanticObjectId(session_id)
         except Exception:
             raise HTTPException(status_code=400, detail="Некорректный session_id")
 
-        # --- 2. Загрузка сессии ---
         session = await SupportSession.get(obj_id)
         if not session:
             raise HTTPException(status_code=404, detail="Сессия не найдена")
         if session.resolved:
             raise HTTPException(status_code=400, detail="Сессия уже закрыта")
 
-        # --- 3. Проверка пользователя ---
         user = await User.find_one(User.tg_id == session.user_id)
         if not user:
             raise HTTPException(status_code=404, detail="Пользователь не найден")
         if user.banned:
             raise HTTPException(status_code=400, detail="Пользователь заблокирован")
 
-        # --- 4. Чтение файла ---
         contents = await file.read()
         size = len(contents)
 
@@ -407,7 +403,6 @@ async def send_support_file(
         input_file = BufferedInputFile(contents, filename=filename)
         safe_caption = (caption[:1024] or "").strip()
 
-        # --- 5. Отправка в Telegram ---
         is_photo = mime_type.startswith("image/") and not mime_type.endswith("svg+xml")
         file_id = None
 
@@ -435,7 +430,6 @@ async def send_support_file(
             logger.error(f"❌ Telegram send failed for session {session_id}: {e}")
             safe_caption += " (ошибка отправки)"
 
-        # --- 6. Сохранение в SupportMessage ---
         new_message = SupportMessage(
             session_id=obj_id,
             user_id=session.user_id,
@@ -509,7 +503,6 @@ async def get_support_photo(session_id: str, photo_file_id: str):
     except Exception as e:
         logger.error(f"❌ Ошибка получения фото: {str(e)}")
         raise HTTPException(status_code=500, detail="Внутренняя ошибка сервера")
-
 
 
 
@@ -924,7 +917,7 @@ def get_available_rollback_states_from_session(current_state: str) -> dict:
         },
 
         "RegState:waiting_for_screenshot": {
-            "RegState:waiting_for_code": "⏳ Ожидание кода"
+            "RegState:waiting_for_screenshot": "📸 Ожидание скриншота"
         },
 
         "RegState:waiting_for_phone_or_card": {
@@ -934,20 +927,17 @@ def get_available_rollback_states_from_session(current_state: str) -> dict:
 
         # Состояния после выбора карты
         "RegState:waiting_for_card_number": {
-            "RegState:waiting_for_code": "⏳ Ожидание кода",
             "RegState:waiting_for_screenshot": "📸 Ожидание скриншота",
             "RegState:waiting_for_phone_or_card": "💳 Выбор способа оплаты"
         },
 
         # Состояния после выбора СБП
         "RegState:waiting_for_phone_number": {
-            "RegState:waiting_for_code": "⏳ Ожидание кода",
             "RegState:waiting_for_screenshot": "📸 Ожидание скриншота",
             "RegState:waiting_for_phone_or_card": "💳 Выбор способа оплаты"
         },
 
         "RegState:waiting_for_bank": {
-            "RegState:waiting_for_code": "⏳ Ожидание кода",
             "RegState:waiting_for_screenshot": "📸 Ожидание скриншота",
             "RegState:waiting_for_phone_or_card": "💳 Выбор способа оплаты",
             "RegState:waiting_for_phone_number": "📱 Ожидание номера телефона"

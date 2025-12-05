@@ -1,43 +1,11 @@
 import logging
-from logging import Logger, getLogger, Formatter, StreamHandler, INFO
 
-
-def setting_logger(logger: Logger) -> Logger:
-    """
-        Setting logger. Add handlers formatter etc.
-    :param logger: Logger
-    """
-    # Create formatter
-    formatter = Formatter(
-        datefmt='%Y-%m-%d %H:%M:%S',
-        fmt="%(levelname)s - %(asctime)s - %(name)s - (Line: %(lineno)d) - [%(filename)s]: %(message)s"
-    )
-
-    # Create stream handler
-    stream_handler = StreamHandler(
-        # stream=sys.stdout
-    )
-    stream_handler.setFormatter(formatter)
-
-    # Add handlers to logger
-    logger.handlers = [stream_handler]
-    logger.propagate = False
-    logger.setLevel(INFO)
-
-    return logger
-
-
-# Create loggers
-bot_logger = setting_logger(
-    logger=getLogger('bot')
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(levelname)s - %(asctime)s - %(name)s - (Line: %(lineno)d) - [%(filename)s]: %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
 )
 
-bot_1_logger = setting_logger(
-    logger=getLogger('bot_1')
-)
-
-api_logger = setting_logger(
-    logger=getLogger('api')
-)
-
-logging.basicConfig(level=INFO)
+bot_logger = logging.getLogger('bot')
+bot_1_logger = logging.getLogger('bot_1')
+api_logger = logging.getLogger('api')

@@ -70,21 +70,10 @@ async def remove_problematic_indexes(database):
         messages_collection = database["messages"]
         indexes = await messages_collection.index_information()
 
-        print("🔍 Проверка индексов коллекции messages:")
-        for name, info in indexes.items():
-            unique = info.get('unique', False)
-            print(f"   {name}: {info['key']} {'(UNIQUE)' if unique else ''}")
-
-        # Удаляем только уникальный индекс для id
         if 'id_1' in indexes:
             index_info = indexes['id_1']
             if index_info.get('unique', False):
                 await messages_collection.drop_index('id_1')
-                print("✅ Удален уникальный индекс id_1")
-            else:
-                print("ℹ️ Индекс id_1 не уникальный, оставляем")
-        else:
-            print("ℹ️ Индекс id_1 не найден")
 
     except Exception as e:
         print(f"⚠️ Ошибка при проверке/удалении индексов: {e}")

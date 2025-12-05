@@ -211,7 +211,7 @@
             color: #6b7280;
         }
 .bubble-user, .bubble-admin {
-    max-width: 300px;
+    max-width: 70%;
     min-width: 120px;
     min-height: 36px;
     padding: 0.5rem 0.75rem;
@@ -950,6 +950,61 @@
         .opacity-80 { opacity: 0.8; }
         .cursor-pointer { cursor: pointer; }
         .hidden { display: none; }
+
+        /* Для встроенных изображений */
+.inline-image-container {
+    margin: 0.5rem 0;
+    max-width: 100%;
+    position: relative;
+    overflow: hidden;
+    border-radius: 0.5rem;
+    background: #f9fafb;
+    padding: 0.5rem;
+    border: 1px solid #e5e7eb;
+}
+
+.inline-image-preview {
+    opacity: 0;
+    transition: opacity 0.3s ease;
+    cursor: pointer;
+    display: block;
+    width: auto;
+    height: auto;
+    max-height: 200px;
+    object-fit: contain;
+    border-radius: 0.5rem;
+}
+
+.inline-image-preview:hover {
+    transform: scale(1.02);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+.drag-overlay {
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(255, 255, 255, 0.9);
+    border: 3px dashed #3b82f6;
+    border-radius: 8px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+}
+
+.drag-overlay.active {
+    opacity: 1;
+    pointer-events: all;
+}
+
+.drag-overlay i {
+    font-size: 4rem;
+    color: #3b82f6;
+    margin-bottom: 1rem;
+}
     </style>
 </head>
 <body>
@@ -1295,24 +1350,283 @@
     if (match) {
         const message = decodeURIComponent(match[2]);
         alert(message);
-        // Удаляем куку
         document.cookie = "flash_message=; Max-Age=0; path=/; samesite=lax";
     }
 })();
 
+    // Преобразование текста в url, images
     function linkify(htmlString) {
-    // Ищем URL в тексте, игнорируя уже существующие теги <a>
+    if (!htmlString) return '';
+
+    const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg', '.bmp', '.tiff', '.ico'];
     const urlRegex = /(\bhttps?:\/\/[^\s<>"{}|\\^`\[\]]+|\bwww\.[^\s<>"{}|\\^`\[\]]+)/gi;
+
     return htmlString.replace(urlRegex, match => {
-        if (/<\/?a\b/i.test(match)) return match; // защита от рекурсии
+        if (/<\/?a\b/i.test(match)) return match;
+        const lowerMatch = match.toLowerCase();
+        const isImage = imageExtensions.some(ext => lowerMatch.endsWith(ext));
+
+        if (isImage) {
+            const imgId = `inline-img-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+            return `
+                <div class="inline-image-container" style="margin: 0.5rem 0; max-width: 100%;">
+                    <img id="${imgId}"
+                         src="${match}"
+                         alt="Встроенное изображение"
+                         class="max-w-full rounded cursor-pointer inline-image-preview"
+                         style="max-height: 200px; object-fit: contain;"
+                         onload="handleInlineImageLoad('${imgId}')"
+                         onerror="handleInlineImageError('${imgId}')"
+                         onclick="openInlinePhotoModal('${match}', '${imgId}')">
+
+                </div>
+            `;
+        }
+
+        // Если не изображение — обычный link
         const url = match.startsWith('http') ? match : 'https://' + match;
-        return `<a href="${url}" target="_blank" rel="noopener noreferrer" class="underline text-blue-600 hover:text-blue-800 break-all">${match}</a>`;
+        return `<a href="${url}" target="_blank" rel="noopener noreferrer" class="font-bold text-blue-600 hover:text-blue-800 no-underline break-all">${match}</a>`;
     });
 }
+
+// Обработка успешной загрузки изображения
+function handleInlineImageLoad(imgId) {
+    const img = document.getElementById(imgId);
+    if (img) {
+        img.style.opacity = '1';
+        img.style.transition = 'opacity 0.3s ease';
+    }
+}
+
+// Обработка ошибки загрузки изображения
+function handleInlineImageError(imgId) {
+    const container = document.getElementById(imgId)?.parentElement;
+    if (container) {
+        container.innerHTML = `
+            <div class="text-center text-red-500 py-1 px-2 bg-red-50 rounded text-xs">
+                ❌ Не удалось загрузить изображение
+            </div>
+        `;
+    }
+}
+
+// Открытие модального окна для встроенного изображения
+function openInlinePhotoModal(imageUrl, imgId) {
+    currentPhotoScale = 1;
+    translateX = 0;
+    translateY = 0;
+    const oldModal = document.getElementById('supportPhotoModal');
+    if (oldModal) oldModal.remove();
+
+    const modal = document.createElement('div');
+    modal.id = 'supportPhotoModal';
+    modal.className = 'photo-modal';
+
+    modal.innerHTML = `
+        <div class="photo-modal-overlay">
+            <div class="photo-modal-container">
+                <div class="photo-modal-header">
+                    <div class="photo-modal-controls">
+                        <button class="photo-modal-btn" onclick="supportZoomIn()" title="Увеличить">+</button>
+                        <span class="photo-modal-scale" id="supportPhotoScale">100%</span>
+                        <button class="photo-modal-btn" onclick="supportZoomOut()" title="Уменьшить">−</button>
+                        <button class="photo-modal-btn" onclick="supportResetZoom()" title="Сбросить масштаб">⟲</button>
+                        <button class="photo-modal-btn" onclick="supportDownloadInlinePhoto('${imageUrl}')" title="Скачать фото">⤓</button>
+                    </div>
+                    <button class="photo-modal-close" onclick="closeSupportPhotoModal()" title="Закрыть">&times;</button>
+                </div>
+                <div class="photo-modal-content-area">
+                    <div class="photo-image-wrapper">
+                        <img class="photo-modal-content" id="supportModalPhoto"
+                             src="${imageUrl}"
+                             alt="Встроенное изображение"
+                             onmousedown="startDrag(event)"
+                             onmousemove="drag(event)"
+                             onmouseup="endDrag()"
+                             onmouseleave="endDrag()">
+                    </div>
+                </div>
+                <div class="photo-modal-hint" id="photoHint">
+                    Колесо мыши — масштаб | Перетаскивание — панорамирование
+                </div>
+            </div>
+        </div>
+    `;
+
+    document.body.appendChild(modal);
+
+    // Закрытие по клику на оверлей
+    modal.querySelector('.photo-modal-overlay').onclick = function(event) {
+        if (event.target === this) closeSupportPhotoModal();
+    };
+
+    document.addEventListener('keydown', handleSupportPhotoModalKeydown);
+    modal.addEventListener('wheel', handleSupportPhotoZoom, { passive: false });
+
+    setTimeout(() => {
+        const hint = document.getElementById('photoHint');
+        if (hint) hint.style.opacity = '0';
+    }, 3000);
+
+    supportResetZoom();
+    modal.style.display = 'block';
+    document.body.style.overflow = 'hidden';
+}
+
+// Функция скачивания встроенного фото
+function supportDownloadInlinePhoto(imageUrl) {
+    const link = document.createElement('a');
+    link.href = imageUrl;
+    link.download = `inline_image_${Date.now()}.jpg`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+}
+
 
 function isScrolledToBottom(el) {
     return el.scrollHeight - el.scrollTop <= el.clientHeight + 5;
 }
+////////////////////////////////////////////////////////////
+    ////////////// начало секции drag'n'drop
+function initDragAndDropForChats() {
+    // Находим все контейнеры чатов (именно .chat-container, внутри которых messages и форма)
+    document.querySelectorAll('.chat-container').forEach(chatEl => {
+        if (chatEl.dataset.dragInitialized) return; // защита от двойной инициализации
+        chatEl.dataset.dragInitialized = "true";
+
+        let dragCounter = 0;
+        let overlay = null;
+
+        // Функция создания оверлея (внутри конкретного chatEl)
+        function createOverlay() {
+            if (overlay) return;
+            overlay = document.createElement('div');
+            overlay.className = 'drag-overlay';
+            overlay.innerHTML = `
+                <div>
+                    <span style="font-size: 4rem;">📁</span>
+                    <p style="font-size: 1.2rem; font-weight: 600; margin: 0.5rem 0;">Перетащите файлы сюда</p>
+
+                </div>
+            `;
+            chatEl.appendChild(overlay);
+        }
+
+        function showOverlay() {
+            createOverlay();
+            overlay.classList.add('active');
+        }
+        function hideOverlay() {
+            if (overlay) overlay.classList.remove('active');
+        }
+
+        // Привязываем события к конкретному .chat-container
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(evt => {
+            chatEl.addEventListener(evt, e => e.preventDefault(), false);
+        });
+
+        chatEl.addEventListener('dragenter', e => {
+            e.stopPropagation();
+            dragCounter++;
+            if (dragCounter === 1) showOverlay();
+        });
+
+        chatEl.addEventListener('dragleave', e => {
+            e.stopPropagation();
+            dragCounter--;
+            if (dragCounter === 0) hideOverlay();
+        });
+
+        chatEl.addEventListener('drop', async e => {
+            e.stopPropagation();
+            dragCounter = 0;
+            hideOverlay();
+
+            const files = e.dataTransfer?.files;
+            if (!files || files.length === 0) return;
+
+            // Извлекаем session_id из data-атрибута родителя
+            const sessionEl = chatEl.closest('.session');
+            const sessionId = sessionEl?.dataset.sessionId;
+            if (!sessionId) {
+                console.error('Session ID not found for dropped file');
+                return;
+            }
+
+            // Отправляем файлы
+            for (let file of files) {
+                await sendFileToSession(sessionId, file);
+            }
+        });
+    });
+}
+
+// ✅ Отправка одного файла в сессию
+async function sendFileToSession(sessionId, file) {
+    const maxSize = 50 * 1024 * 1024;
+    if (file.size > maxSize) {
+        alert(`Файл "${file.name}" слишком большой (макс. 50 МБ)`);
+        return;
+    }
+
+    // Визуальный фидбек: добавляем "отправку..." в чат
+    const tempId = `temp-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
+    const messagesEl = document.getElementById(`messages-${sessionId}`);
+    if (!messagesEl) return;
+
+    const isImage = file.type.startsWith('image/');
+    const preview = isImage
+        ? `<img src="${URL.createObjectURL(file)}" class="max-w-32 max-h-32 rounded opacity-60">`
+        : `📁 <span class="font-medium">${escapeHtml(file.name)}</span>`;
+
+    const tempMsg = document.createElement('div');
+    tempMsg.id = tempId;
+    tempMsg.className = `message message-admin`;
+    tempMsg.innerHTML = `
+        <div class="bubble-admin" style="max-width: 300px; padding: 0.5rem 0.75rem; background: #dbeafe;">
+            ${preview}
+            <div class="text-xs text-blue-700 mt-1">📤 Отправка…</div>
+        </div>
+    `;
+    messagesEl.appendChild(tempMsg);
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+
+    try {
+        const formData = new FormData();
+        formData.append('file', file);
+        const caption = document.getElementById(`message-input-${sessionId}`)?.value.trim();
+        if (caption) formData.append('caption', caption);
+
+        const res = await fetch(`/support/session/${sessionId}/send_file`, {
+            method: 'POST',
+            body: formData
+        });
+
+        if (!res.ok) throw await res.json();
+
+        // Удаляем временный элемент
+        tempMsg.remove();
+
+        // Сбрасываем поле ввода
+        const input = document.getElementById(`message-input-${sessionId}`);
+        if (input) input.value = '';
+
+        // Обновляем чат
+        await loadSessionMessages(sessionId, true);
+
+    } catch (err) {
+        console.error('Drag&drop upload failed:', err);
+        const el = document.getElementById(tempId);
+        if (el) {
+            el.querySelector('.text-blue-700').textContent = `❌ Ошибка`;
+            el.querySelector('.text-blue-700').className = 'text-xs text-red-600 mt-1';
+        }
+        setTimeout(() => el?.remove(), 3000);
+    }
+}
+
+// конец секции drag'n'drop
 
 // Функция загрузки доступных состояний для отката
 async function loadAvailableRollbackStates(sessionId) {
@@ -1573,25 +1887,25 @@ async function loadAvailableRollbackStates(sessionId) {
 
             } else if (m.has_document && m.document_file_id) {
                 // Это документ
-                const captionToShow = (m.message && m.message !== m.document_name) ? m.message : '';
-                const captionHtml = captionToShow
-                    ? `<div class="text-xs mt-0.5">${escapeHtml(captionToShow)}</div>`
-                    : '';
-                contentHtml = `
-                    <div class="${bubbleClass}" style="${bubbleStyle}">
-                        <a href="/support/session/${sessionId}/document/${m.document_file_id}"
-                           class="flex items-center text-xs font-medium text-current hover:underline"
-                           download="${escapeHtml(m.document_name || 'file')}">
-                            <span class="mr-1">📎</span>
-                            <span class="break-all">${escapeHtml(m.document_name || 'Документ')}</span>
-                        </a>
-                        ${captionHtml}
-                        <div class="text-[10px] text-gray-500 mt-0.5 flex justify-between">
-                            <span>${formatFileSize(m.document_size)}</span>
-                            <span>${formatMessageTime(m.timestamp)}</span>
-                        </div>
-                    </div>
-                `;
+const captionToShow = (m.message && m.message !== m.document_name) ? m.message : '';
+const captionHtml = captionToShow
+    ? `<div class="text-xs mt-0.5">${escapeHtml(captionToShow)}</div>`
+    : '';
+contentHtml = `
+    <div class="${bubbleClass}" style="${bubbleStyle}">
+        <a href="/support/session/${sessionId}/document/${m.document_file_id}"
+           class="inline-flex items-center gap-1 font-bold text-blue-600 hover:text-blue-800 no-underline break-all"
+           style="text-decoration: none !important; font-weight: bold !important;"
+           download="${escapeHtml(m.document_name || 'file')}">
+            📂 <span>${escapeHtml(m.document_name || 'Документ')}</span>
+        </a>
+        ${captionHtml}
+        <div class="text-[10px] text-gray-500 mt-0.5 flex justify-between">
+            <span>${formatFileSize(m.document_size)}</span>
+            <span>${formatMessageTime(m.timestamp)}</span>
+        </div>
+    </div>
+`;
 
             } else {
                 const textContent = m.message || '';
@@ -1708,6 +2022,7 @@ function handleImageLoad() {
         prev?.classList.remove('open');
         prevIcon?.classList.remove('open');
         stopSmartRefresh(currentOpenSession);
+
     }
 
     details.classList.toggle('open');
@@ -1718,6 +2033,7 @@ function handleImageLoad() {
         loadSessionMessages(sessionId);
         loadAvailableRollbackStates(sessionId);  // ← Загружаем состояния при открытии
         startSmartRefresh(sessionId);
+        initDragAndDropForChats();
     } else {
         currentOpenSession = null;
         stopSmartRefresh(sessionId);

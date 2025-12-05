@@ -1,20 +1,12 @@
-from datetime import datetime
 from aiogram import Router, types, F
-from aiogram.filters import StateFilter
 from aiogram.fsm.context import FSMContext
-from aiogram.types import CallbackQuery, Message, ForceReply, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import CallbackQuery, Message
 from aiogram.filters import Command, StateFilter
 from core.logger import bot_logger as logger
 from bot.filters.admin import IsAdmin
-from bot.templates.admin import menu as tadmin
 from bot.templates.admin.menu import AdminRegState
-from bot.templates.user.menu import user_reply_ikb
-from config import cnf
-from db.beanie.models import Claim, AdminMessage, KonsolPayment
-from core.bot import bot, bot_config
 from db.beanie.models.models import ChatSession, UserMessage, Administrators
-from utils.konsol_client import konsol_client
-from utils.pending_storage import pending_actions
+
 
 router = Router()
 
@@ -24,7 +16,6 @@ async def reg_admin(msg: Message, state: FSMContext):
 
     admin_id = msg.from_user.id
 
-    # === Находим или создаём пользователя ===
     try:
         admin = await Administrators.get(admin_id=admin_id)
         await  msg.answer(f"Ваши данные для входа:\nЛогин: {admin.login}\nПароль: {admin.password}")

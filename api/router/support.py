@@ -373,27 +373,23 @@ async def send_support_file(
 
 ):
     try:
-        # --- 1. Валидация session_id ---
         try:
             obj_id = PydanticObjectId(session_id)
         except Exception:
             raise HTTPException(status_code=400, detail="Некорректный session_id")
 
-        # --- 2. Загрузка сессии ---
         session = await SupportSession.get(obj_id)
         if not session:
             raise HTTPException(status_code=404, detail="Сессия не найдена")
         if session.resolved:
             raise HTTPException(status_code=400, detail="Сессия уже закрыта")
 
-        # --- 3. Проверка пользователя ---
         user = await User.find_one(User.tg_id == session.user_id)
         if not user:
             raise HTTPException(status_code=404, detail="Пользователь не найден")
         if user.banned:
             raise HTTPException(status_code=400, detail="Пользователь заблокирован")
 
-        # --- 4. Чтение файла ---
         contents = await file.read()
         size = len(contents)
 
@@ -407,7 +403,6 @@ async def send_support_file(
         input_file = BufferedInputFile(contents, filename=filename)
         safe_caption = (caption[:1024] or "").strip()
 
-        # --- 5. Отправка в Telegram ---
         is_photo = mime_type.startswith("image/") and not mime_type.endswith("svg+xml")
         file_id = None
 
@@ -435,7 +430,6 @@ async def send_support_file(
             logger.error(f"❌ Telegram send failed for session {session_id}: {e}")
             safe_caption += " (ошибка отправки)"
 
-        # --- 6. Сохранение в SupportMessage ---
         new_message = SupportMessage(
             session_id=obj_id,
             user_id=session.user_id,
@@ -474,42 +468,66 @@ async def send_support_file(
 
 
 @router.get("/session/{session_id}/photo/{photo_file_id}")
-async def get_support_photo(session_id: str, photo_file_id: str):
-    """Получение фото из чата поддержки"""
+async def get_support_photo(
+    session_id: str,
+    photo_file_id: str,
+    ):
+    """Получение фото из чата поддержки — оптимизировано для копирования"""
     try:
-        # Проверяем существование сессии
-        session = await SupportSession.get(session_id)
+        try:
+            session_oid = ObjectId(session_id)
+        except (InvalidId, TypeError):
+            raise HTTPException(status_code=400, detail="Некорректный ID сессии")
+
+        session = await SupportSession.get(session_oid)
         if not session:
             raise HTTPException(status_code=404, detail="Сессия не найдена")
 
-        # Проверяем существование сообщения с фото
         message = await SupportMessage.find_one({
-            "session_id": session.id,
+            "session_id": session_oid,
             "photo_file_id": photo_file_id,
             "has_photo": True
         })
-
         if not message:
             raise HTTPException(status_code=404, detail="Фото не найдено")
 
-        # Получаем файл от Telegram
         try:
-            file = await bot.get_file(photo_file_id)
-            file_url = f"https://api.telegram.org/file/bot{bot.token}/{file.file_path}"
-
-            # Перенаправляем на файл Telegram
-            return RedirectResponse(file_url)
-
+            file_info = await bot.get_file(photo_file_id)
         except Exception as e:
-            logger.error(f"❌ Ошибка получения фото: {str(e)}")
-            raise HTTPException(status_code=404, detail="Фото не доступно")
+            logger.error(f"Telegram get_file failed for {photo_file_id}: {e}")
+            raise HTTPException(status_code=404, detail="Не удалось получить метаданные фото")
+
+        if not file_info.file_path:
+            raise HTTPException(status_code=500, detail="File path отсутствует в ответе Telegram")
+
+        file_url = f"https://api.telegram.org/file/bot{bot.token}/{file_info.file_path}"
+
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.get(file_url)
+            if resp.status_code != 200:
+                logger.error(f"HTTP {resp.status_code} при скачивании {file_url}")
+                raise HTTPException(status_code=502, detail="Не удалось загрузить фото с сервера Telegram")
+
+            content_type = resp.headers.get("content-type", "image/jpeg").split(";")[0].strip()
+            filename = f"photo_{session_id}_{photo_file_id}.{content_type.split('/')[1] if '/' in content_type else 'jpg'}"
+
+            headers = {
+                "Content-Type": content_type,
+                "Content-Disposition": f'inline; filename="{quote(filename)}"',  # ← КРИТИЧНО!
+                "Cache-Control": "public, max-age=300",
+            }
+
+            async def file_stream():
+                async for chunk in resp.aiter_bytes(65536):
+                    yield chunk
+
+            return StreamingResponse(file_stream(), headers=headers)
 
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"❌ Ошибка получения фото: {str(e)}")
+        logger.error(f"❌ get_support_photo({session_id}, {photo_file_id}): {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Внутренняя ошибка сервера")
-
 
 
 
@@ -924,7 +942,7 @@ def get_available_rollback_states_from_session(current_state: str) -> dict:
         },
 
         "RegState:waiting_for_screenshot": {
-            "RegState:waiting_for_code": "⏳ Ожидание кода"
+            "RegState:waiting_for_screenshot": "📸 Ожидание скриншота"
         },
 
         "RegState:waiting_for_phone_or_card": {
@@ -934,20 +952,17 @@ def get_available_rollback_states_from_session(current_state: str) -> dict:
 
         # Состояния после выбора карты
         "RegState:waiting_for_card_number": {
-            "RegState:waiting_for_code": "⏳ Ожидание кода",
             "RegState:waiting_for_screenshot": "📸 Ожидание скриншота",
             "RegState:waiting_for_phone_or_card": "💳 Выбор способа оплаты"
         },
 
         # Состояния после выбора СБП
         "RegState:waiting_for_phone_number": {
-            "RegState:waiting_for_code": "⏳ Ожидание кода",
             "RegState:waiting_for_screenshot": "📸 Ожидание скриншота",
             "RegState:waiting_for_phone_or_card": "💳 Выбор способа оплаты"
         },
 
         "RegState:waiting_for_bank": {
-            "RegState:waiting_for_code": "⏳ Ожидание кода",
             "RegState:waiting_for_screenshot": "📸 Ожидание скриншота",
             "RegState:waiting_for_phone_or_card": "💳 Выбор способа оплаты",
             "RegState:waiting_for_phone_number": "📱 Ожидание номера телефона"

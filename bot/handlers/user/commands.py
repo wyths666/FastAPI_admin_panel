@@ -212,10 +212,7 @@ async def process_code(msg: Message, state: FSMContext):
     is_subscribed = await check_user_subscription(bot, msg.from_user.id, CHANNEL_USERNAME)
 
     if not is_subscribed:
-        await msg.answer(
-            text=treg.not_subscribed_text,
-            reply_markup=tmenu.check_subscription_ikb()
-        )
+        await msg.answer_video(video=FSInputFile("utils/IMG_1848.mp4"), caption=treg.not_subscribed_text, reply_markup=tmenu.check_subscription_ikb())
         await state.update_data(entered_code=code)
         return
 
@@ -286,7 +283,8 @@ async def handle_reg_callback(call: CallbackQuery, callback_data: treg.RegCallba
         await state.set_state(treg.RegState.waiting_for_phone_number)
 
     elif step == "card":
-        await call.message.edit_text(text=treg.card_format_text)
+        await call.message.delete()
+        await call.message.send_video(video=FSInputFile("utils/IMG_1850.mp4"), caption=treg.card_format_text)
         await state.set_state(treg.RegState.waiting_for_card_number)
 
     await call.answer()
@@ -660,10 +658,8 @@ async def back_to_claim_callback(call: CallbackQuery, state: FSMContext):
                     return
                 else:
                     # Не подписан → просим подписаться
-                    await call.message.edit_text(
-                        text=treg.not_subscribed_text,
-                        reply_markup=tmenu.check_subscription_ikb()
-                    )
+                    await call.message.delete()
+                    await call.message.send_video(video=FSInputFile("utils/IMG_1848.mp4"), caption=treg.not_subscribed_text, reply_markup=tmenu.check_subscription_ikb())
                     await call.answer()
                     return
             else:
@@ -703,7 +699,8 @@ async def back_to_claim_callback(call: CallbackQuery, state: FSMContext):
 
         # 🟢 Состояние: ввод карты
         elif original_state == treg.RegState.waiting_for_card_number.state:
-            await call.message.edit_text(text=treg.card_format_text)
+            await call.message.delete()
+            await call.message.send_video(video=FSInputFile("utils/IMG_1850.mp4"), caption=treg.card_format_text)
             await call.answer()
             return
 

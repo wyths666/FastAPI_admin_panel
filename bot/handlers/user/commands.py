@@ -22,7 +22,6 @@ async def ban_check_middleware(handler, event, data):
     if hasattr(event, 'from_user') and event.from_user:
         user = await User.get(tg_id=event.from_user.id)
         if user and user.banned:
-            # Просто отвечаем на колбэк без уведомления
             if isinstance(event, CallbackQuery):
                 await event.answer()
             return
@@ -32,6 +31,9 @@ router.message.middleware(ban_check_middleware)
 
 @router.message(Command("start"))
 async def start_new_user(msg: Message, state: FSMContext):
+    current_state = await state.get_state()
+    if current_state == "SupportState:waiting_for_message":
+        return
     await state.clear()
 
     user_id = msg.from_user.id
@@ -251,7 +253,7 @@ async def proceed_to_review(user_tg_id: int, state: FSMContext, code: str):
 @router.callback_query(treg.RegCallback.filter())
 async def handle_reg_callback(call: CallbackQuery, callback_data: treg.RegCallback, state: FSMContext):
     step = callback_data.step
-
+    # answer_video вместо send_video
     if step == "send_screenshot":
         await call.message.edit_text(text=treg.screenshot_request_text)
         await state.set_state(treg.RegState.waiting_for_screenshot)
@@ -262,7 +264,7 @@ async def handle_reg_callback(call: CallbackQuery, callback_data: treg.RegCallba
 
     elif step == "card":
         await call.message.delete()
-        await call.message.send_video(video=FSInputFile("utils/IMG_1850.mp4"), caption=treg.card_format_text)
+        await call.message.answer_video(video=FSInputFile("utils/IMG_1850.mp4"), caption=treg.card_format_text)
         await state.set_state(treg.RegState.waiting_for_card_number)
 
     await call.answer()

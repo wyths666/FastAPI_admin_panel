@@ -921,7 +921,6 @@ def get_available_rollback_states_from_session(current_state: str) -> dict:
         },
 
         "RegState:waiting_for_phone_or_card": {
-            "RegState:waiting_for_code": "⏳ Ожидание кода",
             "RegState:waiting_for_screenshot": "📸 Ожидание скриншота"
         },
 

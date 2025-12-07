@@ -188,13 +188,13 @@ async def process_code(msg: Message, state: FSMContext):
         await msg.answer_video(video=FSInputFile("utils/IMG_0018.mp4"), caption=treg.code_not_found_text, reply_markup=tmenu.support_ikb())
         return
 
-    await msg.answer_video(video=FSInputFile("utils/IMG_0016.mp4"), caption=treg.code_found_text)
+    await msg.answer_video(video=FSInputFile("utils/IMG_1848.mp4"), caption=treg.code_found_text)
 
     CHANNEL_USERNAME = cnf.bot.CHANNEL_USERNAME
     is_subscribed = await check_user_subscription(bot, msg.from_user.id, CHANNEL_USERNAME)
 
     if not is_subscribed:
-        await msg.answer_video(video=FSInputFile("utils/IMG_1848.mp4"), caption=treg.not_subscribed_text, reply_markup=tmenu.check_subscription_ikb())
+        await msg.answer_video(video=FSInputFile("utils/IMG_0016.mp4"), caption=treg.not_subscribed_text, reply_markup=tmenu.check_subscription_ikb())
         await state.update_data(entered_code=code)
         return
 
@@ -259,7 +259,7 @@ async def handle_reg_callback(call: CallbackQuery, callback_data: treg.RegCallba
         await state.set_state(treg.RegState.waiting_for_screenshot)
 
     elif step == "phone":
-        await call.message.edit_text(text=treg.phone_format_text)
+        await call.message.answer_video(video=FSInputFile("utils/IMG_0014.mp4"), caption=treg.phone_format_text)
         await state.set_state(treg.RegState.waiting_for_phone_number)
 
     elif step == "card":
@@ -413,7 +413,7 @@ async def finalize_claim(user_tg_id: int, state: FSMContext):
         update_data["bank"] = bank
     await claim.update(**update_data)
 
-    await bot.send_video(chat_id=user_tg_id, video=FSInputFile("utils/IMG_0014.mp4"), caption=treg.success_text)
+    await bot.send_message(chat_id=user_tg_id, text=treg.success_text)
     await state.clear()
 
 @router.message(StateFilter(SupportState.waiting_for_message))
@@ -489,154 +489,3 @@ async def handle_support_message(msg: Message, state: FSMContext):
 
     )
 
-@router.callback_query(F.data == "support:back_to_claim")
-async def back_to_claim_callback(call: CallbackQuery, state: FSMContext):
-    user_id = call.from_user.id
-    data = await state.get_data()
-
-    original_state = data.get("original_state")
-    original_data = data.get("original_data", {})
-
-    if not original_state:
-        await state.clear()
-        try:
-            await call.message.edit_text("❌ Незавершенная заявка не найдена. Начните заново: /start")
-        except Exception:
-            await call.message.answer("❌ Незавершенная не найдена. Начните заново: /start")
-        await call.answer()
-        return
-
-    # === 1. Находим и закрываем последнюю активную сессию ===
-    session = await SupportSession.find(
-        SupportSession.user_id == user_id,
-        SupportSession.resolved == False
-    ).sort(-SupportSession.created_at).first_or_none()
-
-    if session:
-        await session.set({"resolved": True, "resolved_by_admin_id": -1})
-
-    # === 2. Восстанавливаем FSM-контекст ===
-    await state.set_state(original_state)
-    await state.set_data(original_data)
-
-    # === 3. Определяем, какое сообщение показать пользователю ===
-    try:
-        # 🟢 Состояние: ожидание кода
-        if original_state == treg.RegState.waiting_for_code.state:
-            code = original_data.get("entered_code")
-            if code:
-                # → уже ввёл код → проверяем подписку
-                CHANNEL_USERNAME = cnf.bot.CHANNEL_USERNAME
-                is_subscribed = await check_user_subscription(bot, user_id, CHANNEL_USERNAME)
-
-                if is_subscribed:
-                    # Подписан → переходим к отзыву
-                    await proceed_to_review(user_tg_id=user_id, state=state, code=code)
-                    await call.message.delete()
-                    await call.answer()
-                    return
-                else:
-                    # Не подписан → просим подписаться
-                    await call.message.edit_text(
-                        text=treg.not_subscribed_text,
-                        reply_markup=tmenu.check_subscription_ikb()
-                    )
-                    await call.answer()
-                    return
-            else:
-                # Ещё не вводил код → приветствие
-                welcome_photo = FSInputFile("utils/IMG_1262.png")
-                await call.message.delete()
-                await call.message.answer_photo(
-                    photo=welcome_photo,
-                    caption="👋 Привет! Это бот компании Pure. Введите секретный код, указанный на голограмме."
-                )
-                await call.answer()
-                return
-
-        # 🟢 Состояние: ожидание скриншота
-        elif original_state == treg.RegState.waiting_for_screenshot.state:
-            await call.message.edit_text(
-                text=treg.screenshot_request_text,
-                reply_markup=None
-            )
-            await call.answer()
-            return
-
-        claim_id = chat_session.claim_id
-
-        # Проверяем поддерживаемые типы сообщений
-        if not message.text and not message.photo and not message.document:
-            await message.answer("❌ Поддерживаются только текстовые сообщения, фото и документы.")
-            return
-
-        # 🟢 Состояние: ввод карты
-        elif original_state == treg.RegState.waiting_for_card_number.state:
-            await call.message.edit_text(text=treg.card_format_text)
-            await call.answer()
-            return
-
-        # 🟢 Состояние: ввод банка
-        elif original_state == treg.RegState.waiting_for_bank.state:
-            await call.message.edit_text(text=treg.bank_request_text)
-            await call.answer()
-            return
-
-        # ❗ Неизвестное состояние — fallback
-        else:
-            text = ""
-
-        # Обрабатываем фото
-        photo_file_id = None
-        has_photo = False
-        if message.photo:
-            photo_file_id = message.photo[-1].file_id
-            has_photo = True
-
-        # Обрабатываем документы (has_photo=False, но photo_file_id заполнен)
-        document_file_id = None
-        document_name = None
-        document_size = None
-        if message.document:
-            document_file_id = message.document.file_id
-            document_name = message.document.file_name
-            document_size = message.document.file_size
-            # Для документов используем photo_file_id поле, но has_photo=False
-            photo_file_id = document_file_id
-            has_photo = False
-
-        # Сохраняем сообщение в chat_messages
-        chat_message = ChatMessage(
-            session_id=claim_id,
-            claim_id=claim_id,
-            user_id=user_id,
-            message=text,
-            is_bot=False,
-            has_photo=has_photo,
-            photo_file_id=photo_file_id,
-            photo_caption=text if (has_photo or message.document) else None,
-            timestamp=datetime.now()
-        )
-
-        await chat_message.insert()
-
-        if message.document:
-            if text:
-                chat_message.message = f"📎 {document_name}\n{text}"
-            else:
-                chat_message.message = f"📎 {document_name}"
-            await chat_message.save()
-
-        chat_session.last_interaction = datetime.now()
-        chat_session.has_unanswered = True
-        await chat_session.save()
-
-        print(f"✅ Сообщение пользователя {user_id} сохранено в сессию {claim_id} "
-              f"({'текст' if message.text else 'фото' if message.photo else 'документ'})")
-
-
-
-    except Exception as e:
-        print(f"❌ Ошибка сохранения сообщения пользователя: {e}")
-        import traceback
-        traceback.print_exc()

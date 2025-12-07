@@ -480,17 +480,173 @@
         }
 
         /* Photo Modal */
-        .photo-modal {
-            display: none;
-            position: fixed;
-            z-index: 10000;
-            left: 0;
-            top: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(0,0,0,0.95);
-            animation: fadeIn 0.3s ease;
-        }
+        /*.photo-modal {*/
+        /*    display: none;*/
+        /*    position: fixed;*/
+        /*    z-index: 10000;*/
+        /*    left: 0;*/
+        /*    top: 0;*/
+        /*    width: 100%;*/
+        /*    height: 100%;*/
+        /*    background-color: rgba(0,0,0,0.95);*/
+        /*    animation: fadeIn 0.3s ease;*/
+        /*}*/
+        /* Стили для модального окна фото */
+.photo-modal {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 10000;
+}
+
+.photo-modal-overlay {
+    background-color: rgba(0, 0, 0, 0.9);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    padding: 20px;
+}
+
+.photo-modal-container {
+    background-color: #1f2937;
+    border-radius: 12px;
+    width: 100%;
+    max-width: 90vw;
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.photo-modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 16px;
+    background-color: #374151;
+    border-bottom: 1px solid #4b5563;
+}
+
+.photo-modal-controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.photo-modal-btn {
+    background-color: #4b5563;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    padding: 6px 12px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: background-color 0.2s;
+    min-width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.photo-modal-btn:hover {
+    background-color: #6b7280;
+}
+
+.photo-modal-scale {
+    color: white;
+    font-size: 14px;
+    min-width: 50px;
+    text-align: center;
+    font-weight: 500;
+}
+
+.photo-modal-close {
+    background: none;
+    border: none;
+    color: white;
+    font-size: 24px;
+    cursor: pointer;
+    padding: 4px 8px;
+    line-height: 1;
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 6px;
+}
+
+.photo-modal-close:hover {
+    background-color: #6b7280;
+}
+
+.photo-modal-content-area {
+    flex: 1;
+    overflow: hidden;
+    position: relative;
+    min-height: 200px;
+}
+
+.photo-image-wrapper {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: auto;
+    padding: 20px;
+}
+
+.photo-modal-content {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+    cursor: grab;
+    transform-origin: center center;
+    border-radius: 4px;
+}
+
+.photo-modal-hint {
+    color: #9ca3af;
+    font-size: 12px;
+    text-align: center;
+    padding: 8px;
+    border-top: 1px solid #374151;
+    transition: opacity 0.3s;
+    background-color: #374151;
+}
+
+/* Стиль для превью изображений */
+.inline-image-container {
+    margin: 8px 0;
+    max-width: 100%;
+}
+
+.inline-image-preview {
+    max-height: 200px;
+    object-fit: contain;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: opacity 0.3s, transform 0.2s;
+}
+
+.inline-image-preview:hover {
+    opacity: 0.9;
+    transform: scale(1.02);
+}
+
+/* Анимация загрузки */
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
 
         .photo-modal-overlay {
             position: absolute;
@@ -1163,8 +1319,6 @@
     const chatIntervals = {};
     const unreadCounters = {};
     const banksData = {{ banks|tojson }};
-
-    // Глобальные переменные для масштабирования
     let currentScale = 1;
     let chatPhotoScale = 1;
     const ZOOM_STEP = 0.2;
@@ -1174,6 +1328,419 @@
     let currentClaimId = '';
     let totalPhotos = 0;
 
+    function linkify(htmlString) {
+    if (!htmlString) return '';
+    // Список расширений изображений
+    const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.tiff', '.ico'];
+    // Регулярное выражение для URL
+    const urlRegex = /(\bhttps?:\/\/[^\s<>"{}|\\^`\[\]]+|\bwww\.[^\s<>"{}|\\^`\[\]]+)/gi;
+
+    return htmlString.replace(urlRegex, match => {
+        if (/<\/?a\b|<img\b/i.test(match)) return match;
+
+        const lowerMatch = match.toLowerCase();
+        const isImage = imageExtensions.some(ext => lowerMatch.endsWith(ext));
+
+        if (isImage) {
+            const imgId = `inline-img-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+            return `
+                <div class="inline-image-container" style="margin: 0.5rem 0; max-width: 100%;">
+                    <img id="${imgId}"
+                         src="${match}"
+                         alt="Встроенное изображение"
+                         class="max-w-full rounded cursor-pointer inline-image-preview"
+                         style="max-height: 200px; object-fit: contain;"
+                         onload="handleInlineImageLoad('${imgId}')"
+                         onerror="handleInlineImageError('${imgId}')"
+                         onclick="openInlinePhotoModal('${match}', '${imgId}')">
+                </div>
+            `;
+        }
+
+        const url = match.startsWith('http') ? match : 'https://' + match;
+        // Используем тот же стиль, что и для файлов
+        return `<a href="${url}" target="_blank" rel="noopener noreferrer"
+                   style="font-weight: bold !important; color: #2563eb !important; text-decoration: none !important; word-break: break-all;"
+                   class="text-blue-600 hover:text-blue-800 no-underline">${match}</a>`;
+    });
+}
+
+    // Обработчики встроенных изображений
+    function handleInlineImageLoad(imgId) {
+        const img = document.getElementById(imgId);
+        if (img) {
+            img.style.opacity = '1';
+            img.style.transition = 'opacity 0.3s ease';
+        }
+    }
+    function handleInlineImageError(imgId) {
+        const container = document.getElementById(imgId)?.parentElement;
+        if (container) {
+            container.innerHTML = `
+                <div class="text-center text-red-500 py-1 px-2 bg-red-50 rounded text-xs">
+                    ❌ Не удалось загрузить изображение
+                </div>
+            `;
+        }
+    }
+    function openInlinePhotoModal(imageUrl, imgId) {
+    currentPhotoScale = 1;
+    translateX = 0;
+    translateY = 0;
+    const oldModal = document.getElementById('claimPhotoModal');
+    if (oldModal) oldModal.remove();
+
+    const modal = document.createElement('div');
+    modal.id = 'claimPhotoModal';
+    modal.className = 'photo-modal';
+
+    modal.innerHTML = `
+        <div class="photo-modal-overlay">
+            <div class="photo-modal-container">
+                <div class="photo-modal-header">
+                    <div class="photo-modal-controls">
+                        <button class="photo-modal-btn" onclick="claimZoomIn()" title="Увеличить">+</button>
+                        <span class="photo-modal-scale" id="claimPhotoScale">100%</span>
+                        <button class="photo-modal-btn" onclick="claimZoomOut()" title="Уменьшить">−</button>
+                        <button class="photo-modal-btn" onclick="claimResetZoom()" title="Сбросить масштаб">⟲</button>
+                        <button class="photo-modal-btn" onclick="claimDownloadUrlPhoto('${imageUrl}')" title="Скачать фото">⤓</button>
+                    </div>
+                    <button class="photo-modal-close" onclick="closeClaimPhotoModal()" title="Закрыть">&times;</button>
+                </div>
+                <div class="photo-modal-content-area">
+                    <div class="photo-image-wrapper">
+                        <img class="photo-modal-content" id="claimModalPhoto"
+                             src="${imageUrl}"
+                             alt="Встроенное изображение"
+                             onmousedown="claimStartDrag(event)"
+                             onmousemove="claimDrag(event)"
+                             onmouseup="claimEndDrag()"
+                             onmouseleave="claimEndDrag()">
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    `;
+
+    document.body.appendChild(modal);
+
+    // Закрытие по клику на оверлей
+    modal.querySelector('.photo-modal-overlay').onclick = function(event) {
+        if (event.target === this) closeClaimPhotoModal();
+    };
+
+    document.addEventListener('keydown', handleClaimPhotoModalKeydown);
+    modal.addEventListener('wheel', handleClaimPhotoZoom, { passive: false });
+
+    setTimeout(() => {
+        const hint = document.getElementById('claimPhotoHint');
+        if (hint) hint.style.opacity = '0';
+    }, 3000);
+
+    claimResetZoom();
+    modal.style.display = 'block';
+    document.body.style.overflow = 'hidden';
+}
+// ==============================================
+// ФУНКЦИИ ДЛЯ МОДАЛЬНЫХ ОКОН ФОТО (CLAIMS)
+// ==============================================
+
+// Глобальные переменные для claims фото
+let isDragging = false;
+let startX = 0, startY = 0;
+let translateX = 0, translateY = 0;
+let currentPhotoScale = 1;
+
+// Функции для масштабирования claims фото
+function claimZoomIn() {
+    if (currentPhotoScale < MAX_ZOOM) {
+        currentPhotoScale += ZOOM_STEP;
+        applyClaimZoom();
+    }
+}
+
+function claimZoomOut() {
+    if (currentPhotoScale > MIN_ZOOM) {
+        currentPhotoScale -= ZOOM_STEP;
+        applyClaimZoom();
+    }
+}
+
+function claimResetZoom() {
+    currentPhotoScale = 1;
+    translateX = 0;
+    translateY = 0;
+    applyClaimZoom();
+}
+
+function applyClaimZoom() {
+    const modalPhoto = document.getElementById('claimModalPhoto');
+    const scaleIndicator = document.getElementById('claimPhotoScale');
+    if (modalPhoto) {
+        modalPhoto.style.transform = `scale(${currentPhotoScale}) translate(${translateX}px, ${translateY}px)`;
+        modalPhoto.style.transition = 'transform 0.2s ease';
+    }
+    if (scaleIndicator) {
+        scaleIndicator.textContent = `${Math.round(currentPhotoScale * 100)}%`;
+    }
+}
+// Функция скачивания фото из claims модального окна
+async function claimDownloadUrlPhoto(imageUrl) {
+    try {
+        const response = await fetch(imageUrl);
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+        const blob = await response.blob();
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `claim_image_${Date.now()}.jpg`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url); // освобождаем память
+    } catch (err) {
+        console.error('❌ Ошибка скачивания фото:', err);
+        alert('Не удалось скачать изображение. Попробуйте ещё раз.');
+    }
+}
+// Функции для перетаскивания claims фото
+function claimStartDrag(event) {
+    if (event.button !== 0) return;
+    isDragging = true;
+    startX = event.clientX - translateX;
+    startY = event.clientY - translateY;
+    const modalPhoto = document.getElementById('claimModalPhoto');
+    if (modalPhoto) modalPhoto.style.cursor = 'grabbing';
+    event.preventDefault();
+}
+
+function claimDrag(event) {
+    if (!isDragging) return;
+    translateX = event.clientX - startX;
+    translateY = event.clientY - startY;
+    applyClaimZoom();
+}
+
+function claimEndDrag() {
+    isDragging = false;
+    const modalPhoto = document.getElementById('claimModalPhoto');
+    if (modalPhoto) modalPhoto.style.cursor = 'grab';
+}
+
+// Обработка зума колесом мыши
+function handleClaimPhotoZoom(event) {
+    event.preventDefault();
+    if (event.deltaY < 0) {
+        claimZoomIn();
+    } else {
+        claimZoomOut();
+    }
+}
+
+// Обработка клавиш для claims модального окна
+function handleClaimPhotoModalKeydown(event) {
+    const modal = document.getElementById('claimPhotoModal');
+    if (!modal || modal.style.display !== 'block') return;
+
+    if (event.key === 'Escape') {
+        closeClaimPhotoModal();
+    } else if (event.key === '+' || event.key === '=') {
+        event.preventDefault();
+        claimZoomIn();
+    } else if (event.key === '-' || event.key === '_') {
+        event.preventDefault();
+        claimZoomOut();
+    } else if (event.key === '0') {
+        event.preventDefault();
+        claimResetZoom();
+    } else if (event.key === 'ArrowLeft') {
+        translateX -= 50;
+        applyClaimZoom();
+    } else if (event.key === 'ArrowRight') {
+        translateX += 50;
+        applyClaimZoom();
+    } else if (event.key === 'ArrowUp') {
+        translateY -= 50;
+        applyClaimZoom();
+    } else if (event.key === 'ArrowDown') {
+        translateY += 50;
+        applyClaimZoom();
+    }
+}
+
+// Закрытие модального окна claims
+function closeClaimPhotoModal() {
+    const modal = document.getElementById('claimPhotoModal');
+    if (modal) {
+        modal.remove();
+    }
+    document.removeEventListener('keydown', handleClaimPhotoModalKeydown);
+    document.body.style.overflow = 'auto';
+}
+
+// Функция скачивания фото из claims модального окна
+function claimDownloadPhoto(imageUrl) {
+    const link = document.createElement('a');
+    link.href = imageUrl;
+    link.download = `claim_image_${Date.now()}.jpg`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+}
+
+// Обработка клавиш для chat фото (если используется)
+function handleChatPhotoModalKeydown(event) {
+    const modal = document.getElementById('chatPhotoModal');
+    if (!modal || modal.style.display !== 'block') return;
+
+    if (event.key === 'Escape') {
+        closeChatPhotoModal();
+    } else if (event.key === '+' || event.key === '=') {
+        event.preventDefault();
+        zoomInChat();
+    } else if (event.key === '-' || event.key === '_') {
+        event.preventDefault();
+        zoomOutChat();
+    } else if (event.key === '0') {
+        event.preventDefault();
+        resetZoomChat();
+    }
+}
+
+
+    // ————————————————————————————————————————
+    // Drag & Drop для чатов (как в support)
+    // ————————————————————————————————————————
+    function initDragAndDropForChats() {
+        document.querySelectorAll('.chat-container').forEach(chatEl => {
+            if (chatEl.dataset.dragInitialized) return;
+            chatEl.dataset.dragInitialized = "true";
+
+            let dragCounter = 0;
+            let overlay = null;
+
+            function createOverlay() {
+                if (overlay) return;
+                overlay = document.createElement('div');
+                overlay.className = 'drag-overlay';
+                overlay.innerHTML = `
+<!--                    <div>-->
+<!--                        <span style="font-size: 4rem;">📁</span>-->
+<!--                        <p style="font-size: 1.2rem; font-weight: 600; margin: 0.5rem 0;">Перетащите файлы сюда</p>-->
+
+<!--                    </div>-->
+                `;
+                chatEl.appendChild(overlay);
+            }
+
+            function showOverlay() {
+                createOverlay();
+                overlay.classList.add('active');
+            }
+            function hideOverlay() {
+                if (overlay) overlay.classList.remove('active');
+            }
+
+            ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(evt => {
+                chatEl.addEventListener(evt, e => e.preventDefault(), false);
+            });
+
+            chatEl.addEventListener('dragenter', e => {
+                e.stopPropagation();
+                dragCounter++;
+                if (dragCounter === 1) showOverlay();
+            });
+
+            chatEl.addEventListener('dragleave', e => {
+                e.stopPropagation();
+                dragCounter--;
+                if (dragCounter === 0) hideOverlay();
+            });
+
+            chatEl.addEventListener('drop', async e => {
+                e.stopPropagation();
+                dragCounter = 0;
+                hideOverlay();
+
+                const files = e.dataTransfer?.files;
+                if (!files || files.length === 0) return;
+
+                const claimEl = chatEl.closest('.claim');
+                const claimId = claimEl?.dataset.claimId;
+                const userId = claimEl?.dataset.userId;
+                if (!claimId || !userId) {
+                    console.error('Claim ID or User ID not found for dropped file');
+                    return;
+                }
+
+                for (let file of files) {
+                    await sendFileToClaim(claimId, userId, file);
+                }
+            });
+        });
+    }
+
+    async function sendFileToClaim(claimId, userId, file) {
+        const maxSize = 50 * 1024 * 1024;
+        if (file.size > maxSize) {
+            alert(`Файл "${file.name}" слишком большой (макс. 50 МБ)`);
+            return;
+        }
+
+        const messageId = `temp-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
+        const messagesEl = document.getElementById(`messages-${claimId}`);
+        if (!messagesEl) return;
+
+        const isImage = file.type.startsWith('image/');
+        const preview = isImage
+            ? `<img src="${URL.createObjectURL(file)}" class="max-w-24 max-h-24 rounded opacity-60">`
+            : `📁 <span class="font-medium break-all">${escapeHtml(file.name)}</span>`;
+
+        const tempMsg = document.createElement('div');
+        tempMsg.id = messageId;
+        tempMsg.className = 'message bot';
+        tempMsg.innerHTML = `
+            <div style="background: #e3f2fd; padding: 0.5rem 0.75rem; border-radius: 8px; max-width: 70%; min-width: 120px;">
+                ${preview}
+                <div class="text-xs text-blue-700 mt-1">📤 Отправка…</div>
+            </div>
+        `;
+        messagesEl.appendChild(tempMsg);
+        messagesEl.scrollTop = messagesEl.scrollHeight;
+
+        try {
+            const formData = new FormData();
+            formData.append('claim_id', claimId);
+            formData.append('file', file);
+            const caption = document.getElementById(`message-input-${claimId}`)?.value.trim();
+            if (caption) formData.append('caption', caption);
+
+            const res = await fetch('/claims/chat/send-file', {
+                method: 'POST',
+                body: formData
+            });
+
+            const result = await res.json();
+            if (!res.ok || !result.ok) throw new Error(result.detail || 'Неизвестная ошибка');
+
+            tempMsg.remove();
+            await loadChatHistory(claimId);
+        } catch (err) {
+            console.error('Drag&drop upload failed:', err);
+            const el = document.getElementById(messageId);
+            if (el) {
+                el.querySelector('.text-blue-700').textContent = `❌ ${err.message || 'ошибка'}`;
+                el.querySelector('.text-blue-700').style.color = '#ef4444';
+            }
+            setTimeout(() => el?.remove(), 3000);
+        }
+    }
+
+    // ————————————————————————————————————————
+    // Вспомогательные функции
+    // ————————————————————————————————————————
     function escapeHtml(unsafe) {
         if (typeof unsafe !== 'string') return '';
         return unsafe
@@ -1181,18 +1748,99 @@
             .replace(/</g, "&lt;")
             .replace(/>/g, "&gt;")
             .replace(/"/g, "&quot;")
-            .replace(/'/g, "&#039;");
+            .replace(/'/g, "&#039;")
+            .replace(/\n/g, '<br>');
     }
 
-    function linkify(text) {
-        if (!text) return '';
-        const escaped = escapeHtml(text);
-        const urlRegex = /(\b(?:https?:\/\/|www\.)[^\s<>"{}|\\^`[\]]*\b)/gi;
-        return escaped.replace(urlRegex, (url) => {
-            const fullUrl = url.startsWith('http') ? url : 'http://' + url;
-            return `<a href="${fullUrl}" target="_blank" rel="noopener noreferrer"
-                       style="color: var(--primary); text-decoration: underline;">${url}</a>`;
-        });
+    function formatMessageTime(ts) {
+        const d = new Date(ts);
+        const now = new Date();
+        const diff = (now - d) / 60000; // minutes
+        if (diff < 1) return 'только что';
+        if (diff < 60) return `${Math.floor(diff)} мин назад`;
+        if (diff < 60 * 24) return `${Math.floor(diff / 60)} ч назад`;
+        return d.toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+    }
+
+    function formatFileSize(bytes) {
+        if (!bytes) return '–';
+        const k = 1024;
+        const units = ['B', 'KB', 'MB'];
+        let i = Math.floor(Math.log(bytes) / Math.log(k));
+        i = Math.min(i, 2);
+        return (bytes / Math.pow(k, i)).toFixed(i ? 1 : 0) + ' ' + units[i];
+    }
+
+    function autoResizeTextarea(textarea) {
+        if (!textarea) return;
+        textarea.style.height = 'auto';
+        const newHeight = Math.min(150, Math.max(40, textarea.scrollHeight));
+        textarea.style.height = newHeight + 'px';
+    }
+
+    // ————————————————————————————————————————
+    // Функции для встроенных изображений (drag в модалке)
+    // ————————————————————————————————————————
+    let isDraggingChat = false;
+    let startXChat, startYChat;
+    let translateXChat = 0, translateYChat = 0;
+
+    function startDragChat(event) {
+        if (event.button !== 0) return;
+        isDraggingChat = true;
+        startXChat = event.clientX - translateXChat;
+        startYChat = event.clientY - translateYChat;
+        const img = document.getElementById('chatModalPhoto');
+        if (img) img.style.cursor = 'grabbing';
+        event.preventDefault();
+    }
+    function dragChat(event) {
+        if (!isDraggingChat) return;
+        translateXChat = event.clientX - startXChat;
+        translateYChat = event.clientY - startYChat;
+        applyZoomChat();
+    }
+    function endDragChat() {
+        isDraggingChat = false;
+        const img = document.getElementById('chatModalPhoto');
+        if (img) img.style.cursor = 'grab';
+    }
+
+    // ————————————————————————————————————————
+    // Функции масштабирования для встроенных изображений
+    // ————————————————————————————————————————
+    function handleChatPhotoZoom(event) {
+        event.preventDefault();
+        if (event.deltaY < 0) zoomInChat(); else zoomOutChat();
+    }
+    function zoomInChat() {
+        if (chatPhotoScale < MAX_ZOOM) {
+            chatPhotoScale += ZOOM_STEP;
+            applyZoomChat();
+        }
+    }
+    function zoomOutChat() {
+        if (chatPhotoScale > MIN_ZOOM) {
+            chatPhotoScale -= ZOOM_STEP;
+            applyZoomChat();
+        }
+    }
+    function resetZoomChat() {
+        chatPhotoScale = 1;
+        translateXChat = 0;
+        translateYChat = 0;
+        applyZoomChat();
+    }
+    function applyZoomChat() {
+        const img = document.getElementById('chatModalPhoto');
+        const scaleIndicator = document.getElementById('chatPhotoScale');
+        if (img) {
+            img.style.transform = `scale(${chatPhotoScale}) translate(${translateXChat}px, ${translateYChat}px)`;
+            img.style.transition = 'transform 0.2s ease';
+        }
+        if (scaleIndicator) {
+            scaleIndicator.textContent = `${Math.round(chatPhotoScale * 100)}%`;
+        }
     }
 
     function toggleClaimDetails(element) {
@@ -1202,7 +1850,6 @@
     async function toggleUserBan(userId, claimId, ban) {
         const action = ban ? 'блокировку' : 'разблокировку';
         if (!confirm(`Вы уверены, что хотите выполнить ${action} пользователя ${userId}?`)) return;
-
         try {
             const endpoint = ban ? '/claims/user/ban' : '/claims/user/unban';
             const response = await fetch(endpoint, {
@@ -1210,7 +1857,6 @@
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({user_id: parseInt(userId), claim_id: claimId})
             });
-
             const result = await response.json();
             if (result.ok) {
                 alert(`✅ ${result.message}`);
@@ -1224,16 +1870,13 @@
         }
     }
 
-    // Функции для работы с поиском банков
     function filterBanks(claimId, searchText) {
         const dropdown = document.getElementById(`bank-dropdown-${claimId}`);
         dropdown.innerHTML = '';
-
         if (!searchText.trim()) {
             populateBankDropdown(claimId, banksData);
             return;
         }
-
         const filteredBanks = {};
         const searchLower = searchText.toLowerCase();
         for (const [bankId, bankName] of Object.entries(banksData)) {
@@ -1241,21 +1884,18 @@
                 filteredBanks[bankId] = bankName;
             }
         }
-
         populateBankDropdown(claimId, filteredBanks);
         if (Object.keys(filteredBanks).length === 1) {
             const [singleBankId, singleBankName] = Object.entries(filteredBanks)[0];
             selectBank(claimId, singleBankId, singleBankName);
         }
     }
-
     function populateBankDropdown(claimId, banks) {
         const dropdown = document.getElementById(`bank-dropdown-${claimId}`);
         if (Object.keys(banks).length === 0) {
             dropdown.innerHTML = '<div class="bank-option">Банки не найдены</div>';
             return;
         }
-
         for (const [bankId, bankName] of Object.entries(banks)) {
             const option = document.createElement('div');
             option.className = 'bank-option';
@@ -1270,7 +1910,6 @@
             dropdown.appendChild(option);
         }
     }
-
     function selectBank(claimId, bankId, bankName) {
         const searchInput = document.getElementById(`bank-search-${claimId}`);
         const hiddenInput = document.getElementById(`bank-id-${claimId}`);
@@ -1280,7 +1919,6 @@
         currentBankElement.textContent = bankId;
         updateBankMemberId(claimId, bankId);
     }
-
     function showBankDropdown(claimId) {
         const dropdown = document.getElementById(`bank-dropdown-${claimId}`);
         const searchInput = document.getElementById(`bank-search-${claimId}`);
@@ -1289,14 +1927,12 @@
         }
         dropdown.classList.add('active');
     }
-
     function hideBankDropdown(claimId) {
         setTimeout(() => {
             const dropdown = document.getElementById(`bank-dropdown-${claimId}`);
             dropdown.classList.remove('active');
         }, 200);
     }
-
     function clearBankSearch(claimId) {
         const searchInput = document.getElementById(`bank-search-${claimId}`);
         const hiddenInput = document.getElementById(`bank-id-${claimId}`);
@@ -1308,7 +1944,6 @@
         const dropdown = document.getElementById(`bank-dropdown-${claimId}`);
         dropdown.innerHTML = '';
     }
-
     async function updateBankMemberId(claimId, bankId) {
         const statusElement = document.getElementById(`bank-status-${claimId}`);
         const currentBankElement = document.getElementById(`current-bank-${claimId}`);
@@ -1352,37 +1987,25 @@
     }
 
     async function toggleChat(button, claimId, userId) {
-    const chatContainer = document.getElementById(`chat-${claimId}`);
-    const toggleButton = document.getElementById(`chat-toggle-${claimId}`);
-    const isActive = chatContainer.classList.contains('active');
-
-    if (!isActive) {
-        await startChatSession(claimId);
-        await loadChatHistory(claimId);
-        startPolling(claimId);
-        setupFileUploadForClaim(claimId);
-
-        // Меняем текст кнопки на "свернуть"
-        toggleButton.innerHTML = `🔼 Свернуть чат`;
-
-        // 🔥 ДОБАВЛЕНО: Прокрутка к чату
-        setTimeout(() => {
-            chatContainer.scrollIntoView({
-                behavior: 'smooth',
-                block: 'center',
-                inline: 'nearest'
-            });
-        }, 100);
-
-    } else {
-        stopPolling(claimId);
-
-        // Возвращаем исходный текст кнопки
-        toggleButton.innerHTML = `💬 Чат с клиентом`;
+        const chatContainer = document.getElementById(`chat-${claimId}`);
+        const toggleButton = document.getElementById(`chat-toggle-${claimId}`);
+        const isActive = chatContainer.classList.contains('active');
+        if (!isActive) {
+            await startChatSession(claimId);
+            await loadChatHistory(claimId);
+            startPolling(claimId);
+            setupFileUploadForClaim(claimId);
+            initDragAndDropForChats(); // ← инициализация DnD при открытии
+            toggleButton.innerHTML = `🔼 Свернуть чат`;
+            setTimeout(() => {
+                chatContainer.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }, 100);
+        } else {
+            stopPolling(claimId);
+            toggleButton.innerHTML = `💬 Чат с клиентом`;
+        }
+        chatContainer.classList.toggle('active');
     }
-
-    chatContainer.classList.toggle('active');
-}
 
     async function loadChatHistory(claimId) {
         try {
@@ -1397,90 +2020,119 @@
     }
 
     async function displayMessages(claimId, messages) {
-        const container = document.getElementById(`messages-${claimId}`);
-        if (!container) return;
+    const container = document.getElementById(`messages-${claimId}`);
+    if (!container) return;
 
-        const photoUrlMap = {};
-        const photoPromises = messages
-            .filter(msg => msg.has_photo && msg.photo_file_id)
-            .map(async (msg) => {
-                try {
-                    const resp = await fetch(`/claims/chat/photo-url/${msg.id}`);
-                    if (resp.ok) {
-                        const data = await resp.json();
-                        photoUrlMap[msg.id] = data.url;
-                    }
-                } catch (e) {
-                    console.warn(`⚠️ Не удалось получить URL фото ${msg.id}`);
+    const photoUrlMap = {};
+    const photoPromises = messages
+        .filter(msg => msg.has_photo && msg.photo_file_id)
+        .map(async (msg) => {
+            try {
+                const resp = await fetch(`/claims/chat/photo-url/${msg.id}`);
+                if (resp.ok) {
+                    const data = await resp.json();
+                    photoUrlMap[msg.id] = data.url;
                 }
-            });
-        await Promise.all(photoPromises);
+            } catch (e) {
+                console.warn(`⚠️ Не удалось получить URL фото ${msg.id}`);
+            }
+        });
+    await Promise.all(photoPromises);
 
-        const fragment = document.createDocumentFragment();
-        for (const msg of messages) {
-            const div = document.createElement('div');
-            div.className = `message ${msg.is_bot ? 'bot' : 'user'}`;
-            const ts = new Date(msg.timestamp);
-            const timeStr = ts.toLocaleTimeString('ru-RU', {hour: '2-digit', minute: '2-digit'});
-            let content = '';
+    const fragment = document.createDocumentFragment();
+    for (const msg of messages) {
+        const div = document.createElement('div');
+        div.className = `message ${msg.is_bot ? 'bot' : 'user'}`;
+        const timeStr = formatMessageTime(msg.timestamp);
+        let content = '';
 
-            if (msg.has_photo && msg.photo_file_id) {
-                const url = photoUrlMap[msg.id];
-                if (url) {
-                    content += `
-                        <div style="margin-bottom: 6px;">
-                            <img src="${url}" alt="Фото"
-                                 style="max-width: 100px; max-height: 100px; border-radius: 6px; border: 2px solid var(--primary); cursor: pointer;"
-                                 onclick="openChatPhoto('${msg.id}')"
-                                 onerror="this.parentElement.innerHTML='🖼️ Ошибка'">
-                        </div>`;
-                } else {
-                    content += `<div style="color:#e63946;">❌ Фото недоступно</div>`;
-                }
-                if (msg.message) {
-                    content += `<div style="margin-top: 4px; white-space: pre-wrap; word-wrap: break-word;">${linkify(escapeHtml(msg.message))}</div>`;
-                }
-            } else if (msg.photo_file_id) {
-                const fileName = msg.message?.split('\n')[0]?.trim() || 'Файл';
+        if (msg.has_photo && msg.photo_file_id) {
+            // ФОТО с превью
+            const url = photoUrlMap[msg.id];
+            if (url) {
                 content += `
                     <div style="margin-bottom: 6px;">
-                        <a href="/claims/chat/download/${msg.id}" target="_blank" title="Скачать ${escapeHtml(fileName)}"
-                           style="color: #4361ee; font-weight: bold; text-decoration: none; display: inline-flex; align-items: center; gap: 6px; padding: 4px 8px; border-radius: 4px; background: rgba(67, 97, 238, 0.1);">
-                            📎 ${escapeHtml(fileName)} ⬇️
-                        </a>
+                        <img src="${url}" alt="Фото"
+                             style="max-width: 100px; max-height: 100px; border-radius: 6px; border: 2px solid var(--primary); cursor: pointer;"
+                             onclick="openChatPhoto('${msg.id}')"
+                             onerror="this.parentElement.innerHTML='🖼️ Ошибка'">
                     </div>`;
-                if (msg.message && msg.message.trim() !== fileName) {
-                    content += `<div style="margin-top: 4px; font-size: 0.9em; white-space: pre-wrap; word-wrap: break-word;">${linkify(escapeHtml(msg.message))}</div>`;
-                }
-            } else if (msg.message) {
-                content += `<div style="white-space: pre-wrap; word-wrap: break-word; overflow-wrap: break-word;">${linkify(escapeHtml(msg.message))}</div>`;
             } else {
-                content += `<em style="color: var(--gray);">[пустое сообщение]</em>`;
+                content += `<div style="color:#e63946;">❌ Фото недоступно</div>`;
             }
 
-            div.innerHTML = `${content}<div class="message-time">${timeStr}</div>`;
-            fragment.appendChild(div);
+            // Для фото: если сообщение содержит только название файла - не показываем его
+            if (msg.message) {
+                const lines = msg.message.split('\n');
+                // Проверяем, содержит ли сообщение только название файла
+                const isJustFileName = lines.length === 1 &&
+                    (lines[0].trim().toLowerCase().endsWith('.jpg') ||
+                     lines[0].trim().toLowerCase().endsWith('.jpeg') ||
+                     lines[0].trim().toLowerCase().endsWith('.png') ||
+                     lines[0].trim().toLowerCase().endsWith('.gif'));
+
+                if (!isJustFileName) {
+                    content += `<div style="margin-top: 4px;">${linkify(escapeHtml(msg.message))}</div>`;
+                }
+            }
+        } else if (msg.photo_file_id) {
+            // ДОКУМЕНТ (файл без превью)
+            const lines = msg.message?.split('\n') || [];
+            const fileName = lines[0]?.trim() || 'Файл';
+
+            // Формируем оставшийся текст (без первой строки, если это название файла)
+            let remainingText = '';
+            if (lines.length > 1) {
+                // Если есть несколько строк, берем все кроме первой
+                remainingText = lines.slice(1).join('\n').trim();
+            } else if (lines.length === 1) {
+                // Если только одна строка, проверяем, не является ли она названием файла
+                const isFileName = fileName.toLowerCase().match(/\.(jpg|jpeg|png|gif|pdf|doc|docx|xls|xlsx|txt|zip|rar)$/);
+                if (!isFileName) {
+                    remainingText = fileName; // Это не название файла, а текст сообщения
+                }
+                // Если это название файла - remainingText останется пустым
+            }
+
+            content = `
+    <div style="margin-bottom: 6px;">
+        <a href="/claims/chat/download/${msg.id}"
+           style="font-weight: bold !important; color: #2563eb !important; text-decoration: none !important; word-break: break-all; display: inline-flex; align-items: center; gap: 4px;"
+           title="Скачать ${escapeHtml(fileName)}">
+            📂 <span>${escapeHtml(fileName)}</span>
+        </a>
+    </div>
+`;
+            // Показываем оставшийся текст только если он есть
+            if (remainingText) {
+                content += `<div style="margin-top: 4px;">${linkify(escapeHtml(remainingText))}</div>`;
+            }
+        } else {
+            // Обычное текстовое сообщение
+            content = `<div>${linkify(escapeHtml(msg.message || '[пустое сообщение]'))}</div>`;
         }
 
-        container.innerHTML = '';
-        container.appendChild(fragment);
-        initializeChatScroll(claimId);
-        setTimeout(() => { container.scrollTop = container.scrollHeight; }, 100);
+        div.innerHTML = `${content}<div class="message-time">${timeStr}</div>`;
+        fragment.appendChild(div);
     }
+
+    container.innerHTML = '';
+    container.appendChild(fragment);
+    initializeChatScroll(claimId);
+    setTimeout(() => { container.scrollTop = container.scrollHeight; }, 100);
+}
 
     async function sendMessage(event, claimId, userId) {
         event.preventDefault();
         const input = document.getElementById(`message-input-${claimId}`);
         const text = input.value.trim();
         if (!text) return;
-
         try {
             const res = await fetch('/claims/chat/send', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({claim_id: claimId, text, is_bot: true})
             });
-
             if (res.ok) {
                 input.value = '';
                 resetTextareaHeight(input);
@@ -1501,7 +2153,6 @@
     function initializeChatScroll(claimId) {
         const container = document.getElementById(`messages-${claimId}`);
         if (!container) return;
-
         let isScrollingChat = false;
         container.addEventListener('wheel', (e) => {
             const atTop = container.scrollTop === 0;
@@ -1513,7 +2164,6 @@
                 e.stopPropagation();
             }
         });
-
         container.addEventListener('touchstart', (e) => { isScrollingChat = true; });
         container.addEventListener('touchmove', (e) => { if (isScrollingChat) e.stopPropagation(); });
         container.addEventListener('touchend', (e) => { isScrollingChat = false; });
@@ -1523,13 +2173,11 @@
         const fileInput = document.getElementById(`fileInput-${claimId}`);
         const statusDiv = document.getElementById(`fileStatus-${claimId}`);
         const chatInput = document.getElementById(`message-input-${claimId}`);
-
         if (!fileInput || !statusDiv) return;
 
         fileInput.addEventListener('change', async function(e) {
             const file = e.target.files[0];
             if (!file) return;
-
             statusDiv.textContent = `📤 Отправка ${file.name}...`;
             statusDiv.style.color = '#6c757d';
 
@@ -1561,17 +2209,12 @@
         });
     }
 
-    function autoResizeTextarea(textarea) {
-        textarea.style.height = 'auto';
-        const newHeight = Math.min(textarea.scrollHeight, 120);
-        textarea.style.height = newHeight + 'px';
-    }
-
     function resetTextareaHeight(textarea) {
         textarea.style.height = 'auto';
         textarea.style.height = '44px';
     }
 
+    // Инициализация форм
     document.addEventListener('DOMContentLoaded', function() {
         document.addEventListener('input', function(e) {
             if (e.target.classList.contains('chat-input')) autoResizeTextarea(e.target);
@@ -1580,12 +2223,15 @@
             if (e.target.classList.contains('chat-input') && e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
                 const claimId = e.target.id.replace('message-input-', '');
-                const userId = document.querySelector(`[data-claim-id="${claimId}"]`).dataset.userId;
-                sendMessage(e, claimId, userId);
+                const userId = document.querySelector(`[data-claim-id="${claimId}"]`)?.dataset.userId;
+                if (userId) {
+                    sendMessage(e, claimId, userId);
+                }
             }
         });
     });
 
+    // Polling — без изменений
     function startPolling(claimId) {
         stopPolling(claimId);
         chatIntervals[claimId] = setInterval(async () => {
@@ -1683,13 +2329,14 @@
         }
     }
 
-    // Функции для модальных окон фото
+    // ————————————————————————————————————————
+    // Модальные окна (без изменений логики, только совместимость)
+    // ————————————————————————————————————————
     function openPhotoModal(claimId, photoIndex, photoCount) {
         currentClaimId = claimId;
         currentPhotoIndex = photoIndex;
         totalPhotos = photoCount;
         currentScale = 1;
-
         const oldModal = document.getElementById('photoModal');
         if (oldModal) oldModal.remove();
 
@@ -1720,7 +2367,6 @@
                 </div>
             </div>
         `;
-
         document.body.appendChild(modal);
         modal.querySelector('.photo-modal-overlay').onclick = function(event) {
             if (event.target === this) closePhotoModal();
@@ -1734,6 +2380,11 @@
     }
 
     function openChatPhoto(messageId) {
+    // Сброс глобальных переменных
+    chatPhotoScale = 1;
+    translateXChat = 0;
+    translateYChat = 0;
+
     const oldModal = document.getElementById('chatPhotoModal');
     if (oldModal) oldModal.remove();
 
@@ -1761,79 +2412,57 @@
             </div>
         </div>
     `;
-
     document.body.appendChild(modal);
 
-    // Закрытие по клику на оверлей
-    modal.querySelector('.photo-modal-overlay').onclick = function(event) {
-        if (event.target === this) closeChatPhotoModal();
+    // Обработчики
+    modal.querySelector('.photo-modal-overlay').onclick = function(e) {
+        if (e.target === this) closeChatPhotoModal();
     };
-
-    // 🔥 ДОБАВЛЕНО: Обработчик скролла для масштабирования
     modal.addEventListener('wheel', handleChatPhotoZoom, { passive: false });
-
-    // 🔥 ДОБАВЛЕНО: Обработчик клавиш для фото из чата
     document.addEventListener('keydown', handleChatPhotoModalKeydown);
 
+    resetZoomChat();
     loadChatPhoto(messageId, modal);
+
     modal.style.display = 'block';
     document.body.style.overflow = 'hidden';
 }
 
-// 🔥 ДОБАВЛЕНО: Обработчик скролла для фото из чата
-function handleChatPhotoZoom(event) {
-    event.preventDefault();
-    if (event.deltaY < 0) {
-        zoomInChat();
-    } else {
-        zoomOutChat();
+    function closeChatPhotoModal() {
+        const modal = document.getElementById('chatPhotoModal');
+        if (modal) modal.remove();
+        document.removeEventListener('keydown', handleChatPhotoModalKeydown);
+        document.body.style.overflow = 'auto';
     }
-}
 
-// 🔥 ДОБАВЛЕНО: Обработчик клавиш для фото из чата
-function handleChatPhotoModalKeydown(event) {
-    const modal = document.getElementById('chatPhotoModal');
-    if (!modal || modal.style.display !== 'block') return;
-
-    if (event.key === 'Escape') {
-        closeChatPhotoModal();
-    } else if (event.key === '+' || event.key === '=') {
-        event.preventDefault();
-        zoomInChat();
-    } else if (event.key === '-' || event.key === '_') {
-        event.preventDefault();
-        zoomOutChat();
-    } else if (event.key === '0') {
-        event.preventDefault();
-        resetZoomChat();
+    function closePhotoModal() {
+        const modal = document.getElementById('photoModal');
+        if (modal) modal.remove();
+        document.body.style.overflow = 'auto';
+        document.removeEventListener('keydown', handlePhotoModalKeydown);
     }
-}
 
-    // Функции для фото из заявок
+    // Функции масштабирования — оставлены как есть
     function handlePhotoZoom(event) {
         event.preventDefault();
         if (event.deltaY < 0) zoomIn(); else zoomOut();
     }
-
     function zoomIn() {
         if (currentScale < MAX_ZOOM) {
             currentScale += ZOOM_STEP;
             applyZoom();
         }
     }
-
     function zoomOut() {
         if (currentScale > MIN_ZOOM) {
             currentScale -= ZOOM_STEP;
             applyZoom();
         }
     }
-
     function resetZoom() {
         currentScale = 1;
         applyZoom();
     }
-
     function applyZoom() {
         const modalPhoto = document.getElementById('modalPhoto');
         const scaleIndicator = document.getElementById('photoScale');
@@ -1843,7 +2472,6 @@ function handleChatPhotoModalKeydown(event) {
         }
         if (scaleIndicator) scaleIndicator.textContent = `${Math.round(currentScale * 100)}%`;
     }
-
     function downloadCurrentPhoto() {
         const modalPhoto = document.getElementById('modalPhoto');
         if (!modalPhoto || !modalPhoto.src) return;
@@ -1854,60 +2482,6 @@ function handleChatPhotoModalKeydown(event) {
         link.click();
         document.body.removeChild(link);
     }
-
-    // Функции для фото из чата
-    function zoomInChat() {
-        if (chatPhotoScale < MAX_ZOOM) {
-            chatPhotoScale += ZOOM_STEP;
-            applyZoomChat();
-        }
-    }
-
-    function zoomOutChat() {
-        if (chatPhotoScale > MIN_ZOOM) {
-            chatPhotoScale -= ZOOM_STEP;
-            applyZoomChat();
-        }
-    }
-
-    function resetZoomChat() {
-        chatPhotoScale = 1;
-        applyZoomChat();
-    }
-
-    function applyZoomChat() {
-        const modalPhoto = document.getElementById('chatModalPhoto');
-        const scaleIndicator = document.getElementById('chatPhotoScale');
-        if (modalPhoto) {
-            modalPhoto.style.transform = `scale(${chatPhotoScale})`;
-            modalPhoto.style.transition = 'transform 0.2s ease';
-        }
-        if (scaleIndicator) scaleIndicator.textContent = `${Math.round(chatPhotoScale * 100)}%`;
-    }
-
-    async function loadChatPhoto(messageId, modal) {
-        try {
-            const resp = await fetch(`/claims/chat/photo-url/${messageId}`);
-            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-            const { url } = await resp.json();
-            const modalPhoto = document.getElementById('chatModalPhoto');
-            if (modalPhoto) {
-                modalPhoto.src = url;
-                modalPhoto.alt = "Фото из чата";
-                modalPhoto.onerror = function() {
-                    this.src = 'https://via.placeholder.com/400x300/333/999?text=🖼️+Ошибка+загрузки';
-                };
-            }
-        } catch (error) {
-            console.error("❌ loadChatPhoto error:", error);
-            const modalPhoto = document.getElementById('chatModalPhoto');
-            if (modalPhoto) {
-                modalPhoto.src = 'https://via.placeholder.com/400x300/333/999?text=🖼️+Ошибка+загрузки';
-                modalPhoto.alt = "Ошибка загрузки фото";
-            }
-        }
-    }
-
     function downloadChatPhoto(messageId) {
         const modalPhoto = document.getElementById('chatModalPhoto');
         if (!modalPhoto || !modalPhoto.src) return;
@@ -1918,65 +2492,76 @@ function handleChatPhotoModalKeydown(event) {
         link.click();
         document.body.removeChild(link);
     }
+    async function loadChatPhoto(messageId, modal) {
+    try {
+        const resp = await fetch(`/claims/chat/photo-url/${messageId}`);
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const { url } = await resp.json();
 
-    function closeChatPhotoModal() {
-    const modal = document.getElementById('chatPhotoModal');
-    if (modal) {
-        modal.remove();
+        const img = document.getElementById('chatModalPhoto');
+        if (!img) return;
+
+        // Очистка перед загрузкой
+        img.onerror = null;
+        img.onload = null;
+
+        img.onerror = () => {
+            img.src = 'https://via.placeholder.com/400x300/333/999?text=🖼️+Ошибка+загрузки';
+            img.alt = "Ошибка загрузки фото";
+            applyZoomChat(); // ← даже для заглушки
+        };
+
+        img.onload = () => {
+            applyZoomChat(); // ← гарантирует применение сброса масштаба
+        };
+
+        img.src = url;
+        img.alt = "Фото из чата";
+    } catch (error) {
+        console.error("❌ loadChatPhoto error:", error);
+        const img = document.getElementById('chatModalPhoto');
+        if (img) {
+            img.src = 'https://via.placeholder.com/400x300/333/999?text=🖼️+Ошибка+загрузки';
+            img.alt = "Ошибка загрузки фото";
+            applyZoomChat();
+        }
     }
-    // 🔥 ДОБАВЛЕНО: Удаляем обработчик клавиш
-    document.removeEventListener('keydown', handleChatPhotoModalKeydown);
-    document.body.style.overflow = 'auto';
 }
-
-    // Общие функции
-    function closePhotoModal() {
-        const modal = document.getElementById('photoModal');
-        if (modal) modal.remove();
-        document.body.style.overflow = 'auto';
-        document.removeEventListener('keydown', handlePhotoModalKeydown);
-    }
-
     function handlePhotoModalKeydown(event) {
-    // Проверяем какое модальное окно активно
-    const photoModal = document.getElementById('photoModal');
-    const chatPhotoModal = document.getElementById('chatPhotoModal');
-
-    if (photoModal && photoModal.style.display === 'block') {
-        // Обработка для фото из заявок
-        if (event.key === 'Escape') {
-            closePhotoModal();
-        } else if (event.key === 'ArrowLeft') {
-            changePhoto(-1);
-        } else if (event.key === 'ArrowRight') {
-            changePhoto(1);
-        } else if (event.key === '+' || event.key === '=') {
-            event.preventDefault();
-            zoomIn();
-        } else if (event.key === '-' || event.key === '_') {
-            event.preventDefault();
-            zoomOut();
-        } else if (event.key === '0') {
-            event.preventDefault();
-            resetZoom();
-        }
-    } else if (chatPhotoModal && chatPhotoModal.style.display === 'block') {
-        // Обработка для фото из чата
-        if (event.key === 'Escape') {
-            closeChatPhotoModal();
-        } else if (event.key === '+' || event.key === '=') {
-            event.preventDefault();
-            zoomInChat();
-        } else if (event.key === '-' || event.key === '_') {
-            event.preventDefault();
-            zoomOutChat();
-        } else if (event.key === '0') {
-            event.preventDefault();
-            resetZoomChat();
+        const photoModal = document.getElementById('photoModal');
+        const chatPhotoModal = document.getElementById('chatPhotoModal');
+        if (photoModal && photoModal.style.display === 'block') {
+            if (event.key === 'Escape') {
+                closePhotoModal();
+            } else if (event.key === 'ArrowLeft') {
+                changePhoto(-1);
+            } else if (event.key === 'ArrowRight') {
+                changePhoto(1);
+            } else if (event.key === '+' || event.key === '=') {
+                event.preventDefault();
+                zoomIn();
+            } else if (event.key === '-' || event.key === '_') {
+                event.preventDefault();
+                zoomOut();
+            } else if (event.key === '0') {
+                event.preventDefault();
+                resetZoom();
+            }
+        } else if (chatPhotoModal && chatPhotoModal.style.display === 'block') {
+            if (event.key === 'Escape') {
+                closeChatPhotoModal();
+            } else if (event.key === '+' || event.key === '=') {
+                event.preventDefault();
+                zoomInChat();
+            } else if (event.key === '-' || event.key === '_') {
+                event.preventDefault();
+                zoomOutChat();
+            } else if (event.key === '0') {
+                event.preventDefault();
+                resetZoomChat();
+            }
         }
     }
-}
-
     function changePhoto(direction) {
         currentPhotoIndex += direction;
         if (currentPhotoIndex >= totalPhotos) currentPhotoIndex = 0;
@@ -1984,7 +2569,6 @@ function handleChatPhotoModalKeydown(event) {
         resetZoom();
         updateModalPhoto();
     }
-
     function updateModalPhoto() {
         const modalPhoto = document.getElementById('modalPhoto');
         const photoCounter = document.getElementById('photoCounter');
@@ -2007,12 +2591,16 @@ function handleChatPhotoModalKeydown(event) {
         }
     }
 
-    // Инициализация при загрузке
+    // ————————————————————————————————————————
+    // Запуск
+    // ————————————————————————————————————————
     document.addEventListener('DOMContentLoaded', () => {
         document.querySelectorAll('.chat-container.active').forEach(container => {
             const claimId = container.id.replace('chat-', '');
             startPolling(claimId);
         });
+        // Добавляем DnD для уже открытых чатов
+        initDragAndDropForChats();
     });
 </script>
 </body>

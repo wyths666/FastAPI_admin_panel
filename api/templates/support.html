@@ -1305,7 +1305,6 @@
     {% endif %}
 </div>
 
-    <!-- JavaScript остается таким же как в предыдущем ответе -->
     <script>
     let currentOpenSession = null;
     let lastKnownMessageCount = {};
@@ -1344,17 +1343,7 @@
     return sessionEl && sessionEl.classList.contains('resolved-session');
     }
 
-    // Показ flash-сообщения из куки
-(function() {
-    const match = document.cookie.match(/(^|;\s*)flash_message=([^;]*)/);
-    if (match) {
-        const message = decodeURIComponent(match[2]);
-        alert(message);
-        document.cookie = "flash_message=; Max-Age=0; path=/; samesite=lax";
-    }
-})();
-
-    // Преобразование текста в url, images
+   // Преобразование текста в url, images
     function linkify(htmlString) {
     if (!htmlString) return '';
 
@@ -1474,13 +1463,24 @@ function openInlinePhotoModal(imageUrl, imgId) {
 }
 
 // Функция скачивания встроенного фото
-function supportDownloadInlinePhoto(imageUrl) {
-    const link = document.createElement('a');
-    link.href = imageUrl;
-    link.download = `inline_image_${Date.now()}.jpg`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+async function supportDownloadInlinePhoto(imageUrl) {
+    try {
+        const response = await fetch(imageUrl);
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+        const blob = await response.blob();
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `claim_image_${Date.now()}.jpg`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url); // освобождаем память
+    } catch (err) {
+        console.error('❌ Ошибка скачивания фото:', err);
+        alert('Не удалось скачать изображение. Попробуйте ещё раз.');
+    }
 }
 
 
@@ -1562,7 +1562,7 @@ function initDragAndDropForChats() {
     });
 }
 
-// ✅ Отправка одного файла в сессию
+// Отправка одного файла в сессию
 async function sendFileToSession(sessionId, file) {
     const maxSize = 50 * 1024 * 1024;
     if (file.size > maxSize) {
@@ -2173,13 +2173,20 @@ function handleImageLoad() {
         }
 
     function supportDownloadPhoto(sessionId, photoFileId) {
-            const link = document.createElement('a');
-            link.href = `/support/session/${sessionId}/photo/${photoFileId}`;
-            link.download = `support_photo_${sessionId}_${photoFileId}.jpg`;
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-        }
+    const link = document.createElement('a');
+    link.href = `/support/session/${sessionId}/photo/${photoFileId}`;
+
+    let filename = `support_photo_${sessionId}_${photoFileId}`;
+    if (!filename.toLowerCase().endsWith('.jpg') &&
+        !filename.toLowerCase().endsWith('.jpeg')) {
+        filename += '.jpg';
+    }
+
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    }
 
         function closeSupportPhotoModal() {
             const modal = document.getElementById('supportPhotoModal');

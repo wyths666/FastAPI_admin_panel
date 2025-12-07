@@ -426,7 +426,11 @@ async def get_chat_photo_url(message_id: str):
             raise HTTPException(status_code=404, detail="Photo not found in message")
 
         # 2. Получаем file_path через Telegram API (лёгкий запрос, без скачивания!)
-        file = await bot.get_file(message.photo_file_id)  # ← это НЕ download_file, а мета-запрос
+        try:
+            file = await bot.get_file(message.photo_file_id)
+        except Exception as e:
+            logger.warning(f"Telegram get_file failed for {message.photo_file_id}: {e}")
+            raise HTTPException(400, "Invalid or expired file_id")
         if not file.file_path:
             raise HTTPException(status_code=500, detail="File path missing from Telegram")
 

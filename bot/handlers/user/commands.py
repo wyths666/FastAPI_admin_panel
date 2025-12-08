@@ -1,5 +1,6 @@
 from datetime import datetime
 import re
+from core.logger import bot_logger
 from asyncio import Lock
 from aiogram import Router, types, F
 from aiogram.filters import Command, StateFilter
@@ -17,6 +18,7 @@ from aiogram.types import FSInputFile
 
 router = Router()
 user_locks = {}
+logger = bot_logger
 
 async def ban_check_middleware(handler, event, data):
     if hasattr(event, 'from_user') and event.from_user:
@@ -309,7 +311,7 @@ async def process_screenshot(msg: Message, state: FSMContext):
                 )
             except Exception as e:
                 if "message is not modified" not in str(e):
-                    print(f"Ошибка редактирования: {e}")
+                    logger.error(f"Ошибка редактирования: {e}")
         else:
             sent_msg = await msg.answer(
                 text=new_text,
@@ -490,3 +492,82 @@ async def handle_support_message(msg: Message, state: FSMContext):
 
     )
 
+@router.message(F.chat.type == "private")
+async def handle_all_user_messages(message: Message):
+    try:
+        user_id = message.from_user.id
+
+        # Ищем сессию с САМЫМ ПОСЛЕДНИМ взаимодействием
+        chat_session = await ChatSession.find_one(
+            {"user_id": user_id, "is_active": True},
+            sort=[("last_interaction", -1)]  # самая свежая по взаимодействию
+        )
+
+        if not chat_session:
+            await message.answer("❌ У вас нет активных чатов с поддержкой.")
+            return
+
+        claim_id = chat_session.claim_id
+
+        # Проверяем поддерживаемые типы сообщений
+        if not message.text and not message.photo and not message.document:
+            await message.answer("❌ Поддерживаются только текстовые сообщения, фото и документы.")
+            return
+
+        # Получаем текст сообщения или подпись
+        if message.text:
+            text = message.text
+        elif message.caption:
+            text = message.caption
+        else:
+            text = ""
+
+        # Обрабатываем фото
+        photo_file_id = None
+        has_photo = False
+        if message.photo:
+            photo_file_id = message.photo[-1].file_id
+            has_photo = True
+
+        # Обрабатываем документы (has_photo=False, но photo_file_id заполнен)
+        document_file_id = None
+        document_name = None
+        document_size = None
+        if message.document:
+            document_file_id = message.document.file_id
+            document_name = message.document.file_name
+            document_size = message.document.file_size
+            # Для документов используем photo_file_id поле, но has_photo=False
+            photo_file_id = document_file_id
+            has_photo = False
+
+        # Сохраняем сообщение в chat_messages
+        chat_message = ChatMessage(
+            session_id=claim_id,
+            claim_id=claim_id,
+            user_id=user_id,
+            message=text,
+            is_bot=False,
+            has_photo=has_photo,
+            photo_file_id=photo_file_id,
+            photo_caption=text if (has_photo or message.document) else None,
+            timestamp=datetime.now()
+        )
+
+        await chat_message.insert()
+
+        if message.document:
+            if text:
+                chat_message.message = f"📎 {document_name}\n{text}"
+            else:
+                chat_message.message = f"📎 {document_name}"
+            await chat_message.save()
+
+        chat_session.last_interaction = datetime.now()
+        chat_session.has_unanswered = True
+        await chat_session.save()
+
+    except Exception as e:
+        logger.error(f"❌ Ошибка сохранения сообщения пользователя: {e}")
+        import traceback
+        traceback.print_exc()

@@ -32,7 +32,8 @@ router.message.middleware(ban_check_middleware)
 @router.message(Command("start"))
 async def start_new_user(msg: Message, state: FSMContext):
     current_state = await state.get_state()
-    if current_state == "SupportState:waiting_for_message":
+    states = ["RegState:waiting_for_code", "RegState:waiting_for_screenshot", "RegState:waiting_for_phone_or_card", "RegState:waiting_for_bank", "RegState:waiting_for_phone_number", "RegState:waiting_for_card_number", "SupportState:waiting_for_message"]
+    if current_state in states:
         return
     await state.clear()
 

@@ -721,7 +721,26 @@
             opacity: 0;
             transition: opacity 0.3s;
         }
+        .message {
+    max-width: 70%;
+    padding: 12px;
+    border-radius: 12px;
+    position: relative;
+    overflow-wrap: break-word;
+    word-break: break-word;
+}
 
+.message .inline-image-container {
+    max-width: 100%;
+    max-height: 250px;
+    margin: 8px 0;
+}
+
+.message .inline-image-container img {
+    max-height: 200px;
+    width: auto;
+    max-width: 100%;
+}
         /*.chat-modal-content.resizing .resize-indicator {*/
         /*    opacity: 1;*/
         /*}*/
@@ -872,7 +891,7 @@
             </div>
 
             <div class="chat-actions">
-                <button class="btn-open-chat" onclick="openChatModal({{ chat.user_id }}, '{{ chat.username }}')">
+                <button class="btn-open-chat" onclick="openChatModalWithDragDrop({{ chat.user_id }}, '{{ chat.username }}')">
                     💬 Открыть чат
                 </button>
 
@@ -1014,18 +1033,775 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
-// Делает ссылки кликабельными с защитой от XSS
-function linkify(text) {
-    if (!text) return '';
-    const escaped = escapeHtml(text);
-    // Поддержка https://, http://, www.
-    const urlRegex = /(\b(?:https?:\/\/|www\.)[^\s<>"{}|\\^`[\]]*\b)/gi;
-    return escaped.replace(urlRegex, (url) => {
-        const fullUrl = url.startsWith('http') ? url : 'http://' + url;
-        return `<a href="${fullUrl}" target="_blank" rel="noopener noreferrer"
-                   style="color: var(--primary); text-decoration: underline;">${url}</a>`;
+function linkify(htmlString) {
+    if (!htmlString) return '';
+    // Список расширений изображений
+    const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.tiff', '.ico'];
+    // Регулярное выражение для URL
+    const urlRegex = /(\bhttps?:\/\/[^\s<>"{}|\\^`\[\]]+|\bwww\.[^\s<>"{}|\\^`\[\]]+)/gi;
+
+    return htmlString.replace(urlRegex, match => {
+        if (/<\/?a\b|<img\b/i.test(match)) return match;
+
+        const lowerMatch = match.toLowerCase();
+        const isImage = imageExtensions.some(ext => lowerMatch.endsWith(ext));
+
+        if (isImage) {
+            const imgId = `inline-img-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+            // УБИРАЕМ ВСЕ ПЕРЕНОСЫ СТРОК внутри строки!
+            return `<div class="inline-image-container" style="margin: 8px 0; max-width: 100%; max-height: 250px; border-radius: 8px; overflow: hidden; border: 1px solid var(--border); background: #f8f9fa; text-align: center;"><img id="${imgId}" src="${match}" alt="Изображение" style="max-width: 100%; max-height: 200px; height: auto; object-fit: contain; cursor: zoom-in; display: block; margin: 0 auto;" onload="this.style.opacity='1'; this.style.transition='opacity 0.3s ease'" onerror="this.parentElement.innerHTML='<div style=&quot;padding:10px;color:var(--danger);&quot;>❌ Не удалось загрузить</div>'" onclick="openInlinePhotoModal('${match}', '${imgId}')"></div>`;
+        }
+
+        const url = match.startsWith('http') ? match : 'https://' + match;
+        return `<a href="${url}" target="_blank" rel="noopener noreferrer" style="font-weight: bold !important; color: #2563eb !important; text-decoration: none !important; word-break: break-all;" class="text-blue-600 hover:text-blue-800 no-underline">${match}</a>`;
     });
 }
+
+// Обработка успешной загрузки изображения в чатах
+function handleInlineImageLoad(imgId) {
+    const img = document.getElementById(imgId);
+    if (img) {
+        img.style.opacity = '1';
+        img.style.transition = 'opacity 0.3s ease';
+        img.style.cursor = 'zoom-in';
+    }
+}
+
+// Обработка ошибки загрузки изображения в чатах
+function handleInlineImageError(imgId) {
+    const img = document.getElementById(imgId);
+    if (img) {
+        img.parentElement.innerHTML = `
+            <div style="text-align: center; color: var(--danger); padding: 8px;
+                        background: #ffeaea; border-radius: 4px; font-size: 0.9rem;">
+                ❌ Не удалось загрузить изображение
+            </div>
+        `;
+    }
+}
+
+// Открытие модального окна для встроенного изображения в чатах
+function openInlinePhotoModal(imageUrl, imgId) {
+    // Удаляем предыдущий модальный окно, если есть
+    const oldModal = document.getElementById('chatsPhotoModal');
+    if (oldModal) oldModal.remove();
+
+    // Создаем модальное окно для чатов с правильной структурой
+    const modal = document.createElement('div');
+    modal.id = 'chatsPhotoModal';
+    modal.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0,0,0,0.95);
+        z-index: 10000;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        cursor: pointer; /* Курсор указывает, что можно кликнуть */
+    `;
+
+    // Создаем внутренний контейнер который НЕ будет закрывать при клике
+    const modalContent = document.createElement('div');
+    modalContent.style.cssText = `
+        position: relative;
+        width: 95%;
+        height: 95%;
+        max-width: 1200px;
+        max-height: 900px;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        cursor: default; /* Внутри контейнера курсор по умолчанию */
+    `;
+
+    // Параметры масштабирования
+    let scale = 1;
+    const minScale = 0.3;
+    const maxScale = 3;
+    const scaleStep = 0.2;
+    let isDragging = false;
+    let startX = 0, startY = 0, scrollLeft = 0, scrollTop = 0;
+
+    // Создаем HTML для модального окна
+    modalContent.innerHTML = `
+        <!-- Панель управления -->
+        <div style="position: absolute; top: 20px; right: 20px; display: flex; gap: 10px; z-index: 10001; cursor: default;">
+            <button id="chatsZoomIn"
+                    style="background: rgba(255,255,255,0.2); color: white; border: none;
+                           width: 40px; height: 40px; border-radius: 50%; font-size: 1.2rem;
+                           cursor: pointer; backdrop-filter: blur(10px); transition: all 0.2s;"
+                    onmouseover="this.style.background='rgba(255,255,255,0.3)'"
+                    onmouseout="this.style.background='rgba(255,255,255,0.2)'"
+                    title="Увеличить">
+                +
+            </button>
+
+            <span id="chatsScaleIndicator"
+                  style="color: white; font-size: 0.9rem; min-width: 50px; text-align: center;
+                         line-height: 40px; background: rgba(0,0,0,0.5); padding: 0 10px; border-radius: 20px;
+                         cursor: default;">
+                100%
+            </span>
+
+            <button id="chatsZoomOut"
+                    style="background: rgba(255,255,255,0.2); color: white; border: none;
+                           width: 40px; height: 40px; border-radius: 50%; font-size: 1.2rem;
+                           cursor: pointer; backdrop-filter: blur(10px); transition: all 0.2s;"
+                    onmouseover="this.style.background='rgba(255,255,255,0.3)'"
+                    onmouseout="this.style.background='rgba(255,255,255,0.2)'"
+                    title="Уменьшить">
+                −
+            </button>
+
+            <button id="chatsResetZoom"
+                    style="background: rgba(255,255,255,0.2); color: white; border: none;
+                           width: 40px; height: 40px; border-radius: 50%; font-size: 0.9rem;
+                           cursor: pointer; backdrop-filter: blur(10px); transition: all 0.2s;"
+                    onmouseover="this.style.background='rgba(255,255,255,0.3)'"
+                    onmouseout="this.style.background='rgba(255,255,255,0.2)'"
+                    title="Сбросить масштаб">
+                ⟲
+            </button>
+
+            <button id="chatsDownloadInline"
+                    style="background: rgba(255,255,255,0.2); color: white; border: none;
+                           width: 40px; height: 40px; border-radius: 50%; font-size: 1.2rem;
+                           cursor: pointer; backdrop-filter: blur(10px); transition: all 0.2s;"
+                    onmouseover="this.style.background='rgba(255,255,255,0.3)'"
+                    onmouseout="this.style.background='rgba(255,255,255,0.2)'"
+                    title="Скачать фото">
+                ⤓
+            </button>
+
+            <button id="chatsCloseModal"
+                    style="background: rgba(239, 68, 68, 0.2); color: #fecaca; border: none;
+                           width: 40px; height: 40px; border-radius: 50%; font-size: 1.2rem;
+                           cursor: pointer; backdrop-filter: blur(10px); transition: all 0.2s;"
+                    onmouseover="this.style.background='rgba(239, 68, 68, 0.3)'"
+                    onmouseout="this.style.background='rgba(239, 68, 68, 0.2)'"
+                    title="Закрыть">
+                ×
+            </button>
+        </div>
+
+        <!-- Контейнер для изображения с прокруткой -->
+        <div id="chatsPhotoContainer" style="position: relative; width: 100%; height: 100%; overflow: auto; cursor: default;">
+            <img id="chatsModalPhoto"
+                 src="${imageUrl}"
+                 alt="Встроенное изображение из чата"
+                 style="position: absolute;
+                        top: 50%;
+                        left: 50%;
+                        transform: translate(-50%, -50%) scale(1);
+                        max-width: 95%;
+                        max-height: 90vh;
+                        object-fit: contain;
+                        border-radius: 4px;
+                        box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+                        transition: transform 0.3s ease;
+                        cursor: move;"
+                 onerror="alert('Не удалось загрузить изображение из ссылки')">
+        </div>
+
+
+    `;
+
+    // Добавляем структуру
+    modal.appendChild(modalContent);
+    document.body.appendChild(modal);
+    document.body.style.overflow = 'hidden';
+
+    // Получаем элементы для управления
+    const modalPhoto = document.getElementById('chatsModalPhoto');
+    const scaleIndicator = document.getElementById('chatsScaleIndicator');
+    const photoContainer = document.getElementById('chatsPhotoContainer');
+
+    // Функция обновления масштаба
+    function updateScale() {
+        modalPhoto.style.transform = `translate(-50%, -50%) scale(${scale})`;
+        scaleIndicator.textContent = `${Math.round(scale * 100)}%`;
+
+        // Изменяем курсор при увеличении
+        modalPhoto.style.cursor = scale > 1 ? 'grab' : 'move';
+    }
+
+    // Функции масштабирования
+    document.getElementById('chatsZoomIn').onclick = function(e) {
+        e.stopPropagation(); // Предотвращаем всплытие
+        if (scale < maxScale) {
+            scale = Math.min(maxScale, scale + scaleStep);
+            updateScale();
+        }
+    };
+
+    document.getElementById('chatsZoomOut').onclick = function(e) {
+        e.stopPropagation();
+        if (scale > minScale) {
+            scale = Math.max(minScale, scale - scaleStep);
+            updateScale();
+        }
+    };
+
+    document.getElementById('chatsResetZoom').onclick = function(e) {
+        e.stopPropagation();
+        scale = 1;
+        updateScale();
+        // Сбрасываем позицию контейнера
+        photoContainer.scrollLeft = (photoContainer.scrollWidth - photoContainer.clientWidth) / 2;
+        photoContainer.scrollTop = (photoContainer.scrollHeight - photoContainer.clientHeight) / 2;
+    };
+
+    // Функция скачивания
+    document.getElementById('chatsDownloadInline').onclick = function(e) {
+        e.stopPropagation();
+        supportDownloadInlinePhoto(imageUrl);
+    };
+
+    // Функция закрытия
+    document.getElementById('chatsCloseModal').onclick = function(e) {
+        e.stopPropagation();
+        closeChatsPhotoModal();
+    };
+
+    // Drag to move (панорамирование)
+    modalPhoto.addEventListener('mousedown', (e) => {
+        if (scale > 1) {
+            isDragging = true;
+            startX = e.pageX - photoContainer.offsetLeft;
+            startY = e.pageY - photoContainer.offsetTop;
+            scrollLeft = photoContainer.scrollLeft;
+            scrollTop = photoContainer.scrollTop;
+            modalPhoto.style.cursor = 'grabbing';
+        }
+    });
+
+    // Обработчик движения мыши на самом модальном окне
+    modal.addEventListener('mousemove', (e) => {
+        if (!isDragging) return;
+        e.preventDefault();
+        const x = e.pageX - photoContainer.offsetLeft;
+        const y = e.pageY - photoContainer.offsetTop;
+        const walkX = (x - startX) * 2;
+        const walkY = (y - startY) * 2;
+        photoContainer.scrollLeft = scrollLeft - walkX;
+        photoContainer.scrollTop = scrollTop - walkY;
+    });
+
+    modal.addEventListener('mouseup', () => {
+        isDragging = false;
+        modalPhoto.style.cursor = scale > 1 ? 'grab' : 'move';
+    });
+
+    // Масштабирование колесом мыши
+    modal.addEventListener('wheel', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (e.deltaY < 0) {
+            // Колесо вверх - увеличиваем
+            if (scale < maxScale) {
+                scale = Math.min(maxScale, scale + scaleStep);
+                updateScale();
+            }
+        } else {
+            // Колесо вниз - уменьшаем
+            if (scale > minScale) {
+                scale = Math.max(minScale, scale - scaleStep);
+                updateScale();
+            }
+        }
+    });
+
+    // САМОЕ ВАЖНОЕ: Закрытие по клику на фон
+    modal.addEventListener('click', function(e) {
+        // Закрываем только если кликнули непосредственно на modal (фон)
+        // а не на modalContent или его дочерние элементы
+        if (e.target === modal) {
+            closeChatsPhotoModal();
+        }
+    });
+
+    // Предотвращаем закрытие при клике на содержимое
+    modalContent.addEventListener('click', function(e) {
+        e.stopPropagation();
+    });
+
+    // Закрытие по Escape
+    const escapeHandler = function(e) {
+        if (e.key === 'Escape') {
+            closeChatsPhotoModal();
+        }
+    };
+    document.addEventListener('keydown', escapeHandler);
+
+    // Сохраняем ссылку на обработчик для удаления позже
+    modal._escapeHandler = escapeHandler;
+
+    // Автоматическое скрытие подсказки
+    setTimeout(() => {
+        const hint = modalContent.querySelector('div[style*="bottom: 20px"]');
+        if (hint) {
+            hint.style.opacity = '0';
+            setTimeout(() => hint.style.display = 'none', 1000);
+        }
+    }, 3000);
+
+    // Инициализация
+    updateScale();
+}
+
+// Закрытие модального окна с фото в чатах
+function closeChatsPhotoModal() {
+    const modal = document.getElementById('chatsPhotoModal');
+    if (modal) {
+        // Удаляем обработчик Escape
+        if (modal._escapeHandler) {
+            document.removeEventListener('keydown', modal._escapeHandler);
+        }
+        modal.remove();
+        document.body.style.overflow = '';
+    }
+}
+
+// Функция скачивания встроенного фото в чатах
+async function supportDownloadInlinePhoto(imageUrl) {
+    try {
+        const response = await fetch(imageUrl);
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+
+        const blob = await response.blob();
+        const url = URL.createObjectURL(blob);
+
+        // Извлекаем имя файла из URL или используем временное имя
+        let filename = 'chat_image.jpg';
+        try {
+            const urlObj = new URL(imageUrl);
+            const pathname = urlObj.pathname;
+            const lastSegment = pathname.split('/').pop();
+            if (lastSegment && lastSegment.includes('.')) {
+                filename = lastSegment;
+            }
+        } catch (e) {
+            // Используем дефолтное имя, если URL некорректен
+            filename = `chat_image_${Date.now()}.jpg`;
+        }
+
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+
+        // Освобождаем память
+        setTimeout(() => {
+            URL.revokeObjectURL(url);
+        }, 100);
+
+    } catch (err) {
+        console.error('❌ Ошибка скачивания фото из чата:', err);
+        alert(`Не удалось скачать изображение: ${err.message || 'Проверьте ссылку'}`);
+    }
+}
+
+
+////////////////////////////////////////////////////////////
+//////////////// начало секции drag'n'drop для чатов
+
+// Функция инициализации drag'n'drop для модального окна чата
+function initDragAndDropForChatModal() {
+    const modal = document.getElementById('chatModal');
+    const chatContainer = document.querySelector('.chat-modal-content');
+
+    if (!modal || !chatContainer) return;
+
+    // Проверяем, уже ли инициализирован
+    if (chatContainer.dataset.dragInitialized) return;
+    chatContainer.dataset.dragInitialized = "true";
+
+    let dragCounter = 0;
+    let overlay = null;
+
+    // Функция создания оверлея
+    function createOverlay() {
+        if (overlay) return;
+
+        overlay = document.createElement('div');
+        overlay.className = 'drag-overlay-chats';
+        overlay.innerHTML = `
+            <div style="
+                position: absolute;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background: rgba(67, 97, 238, 0.9);
+                color: white;
+                display: flex;
+                flex-direction: column;
+                justify-content: center;
+                align-items: center;
+                z-index: 1000;
+                border-radius: var(--radius);
+                pointer-events: none;
+                opacity: 0;
+                transition: opacity 0.3s ease;
+            ">
+                <div style="
+                    text-align: center;
+                    padding: 2rem;
+                    background: rgba(255, 255, 255, 0.1);
+                    border-radius: 12px;
+                    backdrop-filter: blur(10px);
+                    border: 3px dashed white;
+                ">
+                    <span style="font-size: 4rem;">📁</span>
+                    <p style="font-size: 1.2rem; font-weight: 600; margin: 0.5rem 0;">
+                        Перетащите файлы сюда
+                    </p>
+                    <p style="font-size: 0.9rem; opacity: 0.8;">
+                        Максимальный размер: 50 МБ
+                    </p>
+                </div>
+            </div>
+        `;
+
+        chatContainer.appendChild(overlay);
+    }
+
+    function showOverlay() {
+        createOverlay();
+        overlay.style.opacity = '1';
+        overlay.style.pointerEvents = 'auto';
+    }
+
+    function hideOverlay() {
+        if (overlay) {
+            overlay.style.opacity = '0';
+            overlay.style.pointerEvents = 'none';
+        }
+    }
+
+    // Предотвращаем стандартное поведение браузера
+    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(evt => {
+        chatContainer.addEventListener(evt, e => {
+            e.preventDefault();
+            e.stopPropagation();
+        }, false);
+    });
+
+    // Обработчики событий
+    chatContainer.addEventListener('dragenter', e => {
+        dragCounter++;
+        if (dragCounter === 1) showOverlay();
+    });
+
+    chatContainer.addEventListener('dragover', e => {
+        // Можно добавить визуальный фидбек при перемещении
+        if (overlay) {
+            const rect = chatContainer.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            overlay.style.setProperty('--mouse-x', `${x}px`);
+            overlay.style.setProperty('--mouse-y', `${y}px`);
+        }
+    });
+
+    chatContainer.addEventListener('dragleave', e => {
+        // Проверяем, что мы действительно вышли из контейнера
+        const rect = chatContainer.getBoundingClientRect();
+        const x = e.clientX;
+        const y = e.clientY;
+
+        // Если курсор за пределами контейнера
+        if (x <= rect.left || x >= rect.right || y <= rect.top || y >= rect.bottom) {
+            dragCounter--;
+            if (dragCounter <= 0) {
+                dragCounter = 0;
+                hideOverlay();
+            }
+        }
+    });
+
+    chatContainer.addEventListener('drop', async e => {
+        e.stopPropagation();
+        dragCounter = 0;
+        hideOverlay();
+
+        const files = e.dataTransfer?.files;
+        if (!files || files.length === 0) return;
+
+        // Проверяем, что чат открыт
+        if (!currentChatUserId) {
+            alert('❌ Сначала откройте чат с пользователем');
+            return;
+        }
+
+        // Отправляем файлы
+        for (let file of files) {
+            await sendFileToChat(currentChatUserId, file);
+        }
+    });
+
+    if (!document.getElementById('drag-drop-styles')) {
+        const style = document.createElement('style');
+        style.id = 'drag-drop-styles';
+        style.textContent = `
+            .drag-overlay-chats {
+                position: absolute;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background: rgba(67, 97, 238, 0.9);
+                color: white;
+                display: flex;
+                flex-direction: column;
+                justify-content: center;
+                align-items: center;
+                z-index: 1000;
+                border-radius: var(--radius);
+                pointer-events: none;
+                opacity: 0;
+                transition: opacity 0.3s ease;
+            }
+
+            .drag-overlay-chats.active {
+                opacity: 1;
+                pointer-events: auto;
+            }
+
+            .drag-overlay-chats > div {
+                text-align: center;
+                padding: 2rem;
+                background: rgba(255, 255, 255, 0.1);
+                border-radius: 12px;
+                backdrop-filter: blur(10px);
+                border: 3px dashed white;
+                animation: pulse 1.5s infinite;
+            }
+
+            @keyframes pulse {
+                0% { transform: scale(1); }
+                50% { transform: scale(1.02); }
+                100% { transform: scale(1); }
+            }
+        `;
+        document.head.appendChild(style);
+    }
+}
+
+// Функция отправки файла в чат
+async function sendFileToChat(userId, file) {
+    const maxSize = 50 * 1024 * 1024; // 50 МБ
+    if (file.size > maxSize) {
+        alert(`❌ Файл "${file.name}" слишком большой (максимальный размер: 50 МБ)`);
+        return;
+    }
+
+    // Визуальный фидбек: добавляем временное сообщение
+    const tempId = `temp-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
+    const messagesContainer = document.getElementById('chatModalMessages');
+
+    if (!messagesContainer) {
+        console.error('Контейнер сообщений не найден');
+        return;
+    }
+
+    const isImage = file.type.startsWith('image/');
+    let preview = '';
+
+    if (isImage) {
+        const blobUrl = URL.createObjectURL(file);
+        preview = `<img src="${blobUrl}" style="max-width: 200px; max-height: 150px; border-radius: 6px; opacity: 0.6; display: block; margin: 0 auto;">`;
+        // Освобождаем URL после использования
+        setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+    } else {
+        const fileName = escapeHtml(file.name);
+        const fileSize = formatFileSize(file.size);
+        preview = `
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <span style="font-size: 1.5rem;">📁</span>
+                <div style="overflow: hidden; text-overflow: ellipsis;">
+                    <strong style="display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${fileName}</strong>
+                    <small style="color: #666;">${fileSize}</small>
+                </div>
+            </div>
+        `;
+    }
+
+    const tempMsg = document.createElement('div');
+    tempMsg.id = tempId;
+    tempMsg.className = `message operator message-sending`;
+    tempMsg.style.cssText = `
+        max-width: 300px !important;
+        min-width: 0;
+        align-self: flex-end;
+        margin-left: auto;
+    `;
+
+    tempMsg.innerHTML = `
+        <div style="
+            background: #e3f2fd;
+            padding: 10px 15px;
+            border-radius: 12px;
+            max-width: 100%;
+            overflow: hidden;
+            box-sizing: border-box;
+        ">
+            ${preview}
+            <div style="font-size: 0.8rem; color: #0c5460; margin-top: 5px; text-align: center;">
+                <div class="sending-indicator" style="display: inline-flex; align-items: center; gap: 5px;">
+                    <span class="dots" style="display: inline-flex; gap: 2px;">
+                        <span style="animation: dot1 1.5s infinite;">.</span>
+                        <span style="animation: dot2 1.5s infinite;">.</span>
+                        <span style="animation: dot3 1.5s infinite;">.</span>
+                    </span>
+                    Отправка файла
+                </div>
+            </div>
+        </div>
+        <div class="message-time">${formatMoscowTime(Date.now())}</div>
+    `;
+
+    // Добавляем анимацию точек
+    const style = document.createElement('style');
+    style.textContent = `
+        @keyframes dot1 {
+            0%, 20% { opacity: 0.2; }
+            40% { opacity: 1; }
+            60%, 100% { opacity: 0.2; }
+        }
+        @keyframes dot2 {
+            0%, 40% { opacity: 0.2; }
+            60% { opacity: 1; }
+            80%, 100% { opacity: 0.2; }
+        }
+        @keyframes dot3 {
+            0%, 60% { opacity: 0.2; }
+            80% { opacity: 1; }
+            100% { opacity: 0.2; }
+        }
+    `;
+    document.head.appendChild(style);
+
+    messagesContainer.appendChild(tempMsg);
+    messagesContainer.scrollTop = messagesContainer.scrollHeight;
+
+    try {
+        const formData = new FormData();
+        formData.append('user_id', userId);
+        formData.append('file', file);
+
+        // Добавляем caption из поля ввода
+        const caption = document.getElementById('chatMessageInput')?.value.trim();
+        if (caption) {
+            formData.append('caption', caption);
+        }
+
+        const response = await fetch('/chats/send/file/', {
+            method: 'POST',
+            body: formData
+        });
+
+        const result = await response.json();
+
+        if (!response.ok) {
+            throw new Error(result.detail || result.error || 'Неизвестная ошибка');
+        }
+
+        // Удаляем временное сообщение
+        tempMsg.remove();
+
+        // Очищаем поле ввода
+        const input = document.getElementById('chatMessageInput');
+        if (input && caption) {
+            input.value = '';
+            input.style.height = 'auto';
+        }
+
+        // Обновляем историю чата
+        await loadChatHistory(userId, messagesContainer);
+
+        // Удаляем анимацию
+        if (style.parentNode) {
+            style.remove();
+        }
+
+    } catch (error) {
+        console.error('❌ Ошибка отправки файла:', error);
+
+        // Обновляем временное сообщение с ошибкой
+        const errorDiv = tempMsg.querySelector('.sending-indicator');
+        if (errorDiv) {
+            errorDiv.innerHTML = `<span style="color: #e63946;">❌ Ошибка отправки</span>`;
+        }
+
+        // Удаляем анимацию
+        if (style.parentNode) {
+            style.remove();
+        }
+
+        // Удаляем через 3 секунды
+        setTimeout(() => {
+            if (document.getElementById(tempId)) {
+                tempMsg.remove();
+            }
+        }, 3000);
+
+        alert(`❌ Не удалось отправить файл: ${error.message}`);
+    }
+}
+
+// Вызываем инициализацию при открытии модального окна
+function initChatModalDragAndDrop() {
+    // Ждем немного, чтобы DOM обновился
+    setTimeout(() => {
+        initDragAndDropForChatModal();
+    }, 100);
+}
+
+function openChatModalWithDragDrop(userId, username) {
+    currentChatUserId = userId;
+    const modal = document.getElementById('chatModal');
+    const title = document.getElementById('chatModalTitle');
+    const messagesContainer = document.getElementById('chatModalMessages');
+    const modalContent = document.getElementById('chatModalContent');
+
+    title.textContent = `Чат с ${username} (ID: ${userId})`;
+    modal.style.display = 'flex';
+
+    setModalMaximized();
+
+    loadChatHistory(userId, messagesContainer);
+
+    startChatPolling(userId, messagesContainer);
+
+    initChatModalDragAndDrop();
+}
+
+// Обновляем обработчик кнопки открытия чата
+function updateChatOpenButtons() {
+    document.querySelectorAll('.btn-open-chat').forEach(button => {
+        button.onclick = function() {
+            const userId = this.closest('.chat-item').dataset.userId;
+            const username = this.closest('.chat-item').querySelector('.chat-username').textContent.trim();
+            openChatModalWithDragDrop(userId, username);
+        };
+    });
+}
+
+//////////////// конец секции drag'n'drop для чатов
+////////////////////////////////////////////////////////////
+
+
+
+
+
 
 function formatMoscowTime(timestamp, includeDate = false) {
     try {
@@ -1112,21 +1888,19 @@ function closeChatModal() {
 
 function setModalMaximized() {
     const modalContent = document.getElementById('chatModalContent');
-    // Сохраняем начальный размер как "оригинальный"
-    originalSize = {
-        width: modalContent.offsetWidth,
-        height: modalContent.offsetHeight
-    };
-    originalPosition = {
-        left: modalContent.style.left || 'calc(50% - 400px)',
-        top: modalContent.style.top || 'calc(50% - 300px)'
-    };
-    // Максимизируем
+    // Устанавливаем фиксированный размер с учетом скроллбаров
     modalContent.style.width = '95vw';
     modalContent.style.height = '95vh';
     modalContent.style.left = '2.5vw';
     modalContent.style.top = '2.5vh';
+    modalContent.style.overflow = 'hidden';
 
+    // Гарантируем, что внутренний контент не выходит за пределы
+    const messages = document.getElementById('chatModalMessages');
+    if (messages) {
+        messages.style.maxWidth = '100%';
+        messages.style.overflowX = 'hidden';
+    }
 }
 
 async function loadChatHistory(userId, container) {
@@ -1195,8 +1969,14 @@ async function loadChatHistory(userId, container) {
 
             // 7. Обычное текстовое сообщение
             else {
-                content = `<div style="${textStyles}">${linkify(msg.message || '(пустое сообщение)')}</div>`;
-            }
+    content = `<div style="
+        ${textStyles}
+        max-width: 100%;
+        word-wrap: break-word;
+        word-break: break-word;
+        overflow-wrap: break-word;
+    ">${linkify(msg.message || '(пустое сообщение)')}</div>`;
+}
 
             content += `<div class="message-time">${messageTime}</div>`;
             messageDiv.innerHTML = content;

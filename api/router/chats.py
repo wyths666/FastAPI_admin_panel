@@ -634,7 +634,10 @@ async def send_operator_file(
         next_id = last_message["id"] + 1 if last_message else 1
 
         # 5. Подготовка данных — как в send/
-        message_text = caption or f"📎 {filename}"
+        if file_type == "photo":
+            message_text = caption or ""
+        else:
+            message_text = caption or f"📎 {filename}"
         if msg is None:  # Telegram не отправился
             message_text += " (не доставлено)"
 

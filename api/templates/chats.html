@@ -1921,7 +1921,7 @@ async function loadChatHistory(userId, container) {
             const messageDiv = document.createElement('div');
             messageDiv.className = `message ${msg.from_operator ? 'operator' : 'user'}`;
 
-            const messageTime = formatMoscowTime(msg.date);
+            const messageTime = formatMoscowTime(msg.date, true);
             let content = '';
 
             // Оборачиваем текст (или caption) в linkify

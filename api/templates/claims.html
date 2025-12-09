@@ -1027,46 +1027,54 @@
         <p class="summary">Всего заявок: {{ claims|length }}</p>
     </header>
 
-    <div class="filters">
-        <form id="filter-form" method="GET">
-            <div class="filter-row">
-                {% if request.query_params.get('user_id') %}
-                <input type="hidden" name="user_id" value="{{ request.query_params.get('user_id') }}">
-                {% endif %}
+   <div class="filters">
+    <form id="filter-form" method="GET">
+        <div class="filter-row" style="flex-wrap: nowrap; overflow-x: auto; padding-bottom: 10px;">
+            {% if request.query_params.get('user_id') %}
+            <input type="hidden" name="user_id" value="{{ request.query_params.get('user_id') }}">
+            {% endif %}
 
-                <div class="filter-group">
-                    <label for="date_from">Дата от:</label>
-                    <input type="date" id="date_from" name="date_from"
-                           value="{{ date_from or '' }}">
-                </div>
-
-                <div class="filter-group">
-                    <label for="date_to">Дата до:</label>
-                    <input type="date" id="date_to" name="date_to"
-                           value="{{ date_to or '' }}">
-                </div>
-
-                <div class="filter-group">
-                    <label for="number">Номер заявки:</label>
-                    <input type="number" id="number" name="number"
-                           value="{{ number or '' }}">
-                </div>
-
-                <div class="filter-group">
-                    <label for="status">Статус:</label>
-                    <select id="status" name="status">
-                        <option value="">Все статусы</option>
-                        {% for s in statuses %}
-                        <option value="{{ s.id }}" {% if status == s.id %}selected{% endif %}>{{ s.name }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-
-                <button type="submit" class="filter-button">🔍 Фильтр</button>
-                <a href="/claims/" class="filter-button" style="text-decoration:none; background-color: #8f8f8f;">❌ Сброс</a>
+            <div class="filter-group" style="min-width: 150px;">
+                <label for="date_from">Дата от:</label>
+                <input type="date" id="date_from" name="date_from"
+                       value="{{ date_from or '' }}">
             </div>
-        </form>
-    </div>
+
+            <div class="filter-group" style="min-width: 150px;">
+                <label for="date_to">Дата до:</label>
+                <input type="date" id="date_to" name="date_to"
+                       value="{{ date_to or '' }}">
+            </div>
+
+            <div class="filter-group" style="min-width: 120px;">
+                <label for="number">Номер:</label>
+                <input type="number" id="number" name="number"
+                       value="{{ number or '' }}" style="width: 100%;">
+            </div>
+
+
+
+            <div class="filter-group" style="min-width: 170px;">
+                <label for="status">Статус:</label>
+                <select id="status" name="status" style="width: 100%;">
+                    <option value="">Все статусы</option>
+                    {% for s in statuses %}
+                    <option value="{{ s.id }}" {% if status == s.id %}selected{% endif %}>{{ s.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="filter-group" style="min-width: auto; margin-top: 5px;">
+                <label for="has_unanswered" style="display: flex; align-items: center; gap: 8px;">
+                    <input type="checkbox" id="has_unanswered" name="has_unanswered"
+                           {% if has_unanswered %}checked{% endif %}>
+                    📩 Ждет ответа
+                </label>
+            </div>
+            <button type="submit" class="filter-button" style="width: auto; min-width: 100px; white-space: nowrap;">🔍 Фильтр</button>
+            <a href="/claims/" class="filter-button" style="width: auto; min-width: 100px; text-decoration:none; background-color: #8f8f8f; white-space: nowrap;">❌ Сброс</a>
+        </div>
+    </form>
+</div>
 
     {% for claim in claims %}
     <div class="claim" data-claim-id="{{ claim.claim_id }}" data-user-id="{{ claim.user_id }}">

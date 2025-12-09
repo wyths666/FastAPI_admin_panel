@@ -793,45 +793,45 @@
     </header>
 
     <div class="filters">
-        <form id="filter-form" method="GET">
-            <div class="filter-row">
-                <div class="filter-group">
-                    <label for="username">Имя пользователя:</label>
-                    <input type="text" id="username" name="username" value="{{ username or '' }}"
-                           placeholder="Введите имя пользователя...">
-                </div>
-
-                <div class="filter-group">
-    <label for="user_id">ID пользователя:</label>
-    <input type="number" id="user_id" name="user_id" value="{{ user_id or '' }}"
-           placeholder="Введите ID пользователя...">
-</div>
-
-                <div class="filter-group">
-                    <label for="date_from">Дата от:</label>
-                    <input type="date" id="date_from" name="date_from" value="{{ date_from or '' }}">
-                </div>
-
-                <div class="filter-group">
-                    <label for="date_to">Дата до:</label>
-                    <input type="date" id="date_to" name="date_to" value="{{ date_to or '' }}">
-                </div>
-
-                <div class="filter-group">
-                    <label for="has_unread" style="display: flex; align-items: center; gap: 8px;">
-                        <input type="checkbox" id="has_unread" name="has_unread"
-                               {% if has_unread %}checked{% endif %}>
-                        Только с непрочитанными
-                    </label>
-                </div>
-
-                <input type="hidden" name="page" value="1">
-
-                <button type="submit" class="filter-button">🔍 Фильтр</button>
-                <button type="button" class="filter-button" onclick="resetFilters()" style="background-color: #8f8f8f;">❌ Сброс</button>
+    <form id="filter-form" method="GET">
+        <div class="filter-row" style="display: flex; flex-wrap: nowrap; gap: 15px; align-items: end; overflow-x: auto; padding-bottom: 10px;">
+            <div class="filter-group" style="min-width: 200px;">
+                <label for="username">Имя пользователя:</label>
+                <input type="text" id="username" name="username" value="{{ username or '' }}"
+                       placeholder="Введите имя пользователя..." style="width: 100%;">
             </div>
-        </form>
-    </div>
+
+            <div class="filter-group" style="min-width: 150px;">
+                <label for="user_id">ID пользователя:</label>
+                <input type="number" id="user_id" name="user_id" value="{{ user_id or '' }}"
+                       placeholder="Введите ID..." style="width: 100%;">
+            </div>
+
+            <div class="filter-group" style="min-width: 140px;">
+                <label for="date_from">Дата от:</label>
+                <input type="date" id="date_from" name="date_from" value="{{ date_from or '' }}" style="width: 100%;">
+            </div>
+
+            <div class="filter-group" style="min-width: 140px;">
+                <label for="date_to">Дата до:</label>
+                <input type="date" id="date_to" name="date_to" value="{{ date_to or '' }}" style="width: 100%;">
+            </div>
+
+            <div class="filter-group" style="min-width: auto; margin-top: 5px;">
+                <label for="has_unread" style="display: flex; align-items: center; gap: 8px; white-space: nowrap;">
+                    <input type="checkbox" id="has_unread" name="has_unread"
+                           {% if has_unread %}checked{% endif %}>
+                    📩 Ждет ответа
+                </label>
+            </div>
+
+            <input type="hidden" name="page" value="1">
+
+            <button type="submit" class="filter-button" style="width: auto; min-width: 100px; white-space: nowrap;">🔍 Фильтр</button>
+            <button type="button" class="filter-button" onclick="resetFilters()" style="width: auto; min-width: 100px; background-color: #8f8f8f; white-space: nowrap;">❌ Сброс</button>
+        </div>
+    </form>
+</div>
 
     <!-- Информация о пагинации -->
     {% if total_chats > 0 %}

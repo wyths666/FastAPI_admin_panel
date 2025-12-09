@@ -81,6 +81,7 @@ async def claims_page(
         date_to: Optional[str] = Query(None),
         status: Optional[str] = Query(None),
         number: Optional[str] = Query(None),
+        has_unanswered: Optional[bool] = Query(None),  # Новый параметр фильтрации
         admin=Depends(get_current_admin)
 ):
     if not admin:
@@ -119,7 +120,29 @@ async def claims_page(
         except ValueError:
             pass
 
+    # Получаем все заявки
     claims = await claims_query.sort("-created_at").to_list()
+
+    # Фильтрация по has_unanswered
+    if has_unanswered is not None:
+        filtered_claims = []
+        for claim in claims:
+            # Находим активную сессию чата для заявки
+            chat_session = await ChatSession.find_one(
+                {"claim_id": claim.claim_id, "is_active": True}
+            )
+
+            # Фильтруем в зависимости от значения has_unanswered
+            if has_unanswered:
+                # Показываем только заявки с неотвеченными сообщениями
+                if chat_session and chat_session.has_unanswered:
+                    filtered_claims.append(claim)
+            else:
+                # Показываем только заявки без неотвеченных сообщений
+                if not chat_session or not chat_session.has_unanswered:
+                    filtered_claims.append(claim)
+
+        claims = filtered_claims
 
     user_ids = list(set([claim.user_id for claim in claims]))
     user_claims_count = {}
@@ -165,7 +188,7 @@ async def claims_page(
             "is_chat_active": chat_session is not None,
             "has_unanswered": chat_session.has_unanswered if chat_session else False,
             "old_claims": total_claims,
-            "has_active_support_session": has_active_support_session,  # ← новое поле
+            "has_active_support_session": has_active_support_session,
         })
 
     banks = load_banks()
@@ -179,6 +202,7 @@ async def claims_page(
         "date_to": date_to,
         "status": status,
         "number": number,
+        "has_unanswered": has_unanswered,  # Передаем значение в шаблон
         "statuses": [
             {"id": "pending", "name": "✅ Подтверждёно"},
             {"id": "process", "name": "🆕 Не обработано"},

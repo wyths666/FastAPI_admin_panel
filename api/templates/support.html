@@ -1005,6 +1005,62 @@
     color: #3b82f6;
     margin-bottom: 1rem;
 }
+        /* === СТИЛИ ДЛЯ ПРЕДПРОСМОТРА ИЗ БУФЕРА === */
+#clipboard-preview-modal {
+    animation: fadeInClipboard 0.3s ease;
+}
+
+@keyframes fadeInClipboard {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+@keyframes slideInClipboard {
+    from {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+@keyframes slideOutClipboard {
+    from {
+        transform: translateX(0);
+        opacity: 1;
+    }
+    to {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+}
+
+.sending-indicator {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.sending-indicator:after {
+    content: '';
+    width: 16px;
+    height: 16px;
+    border: 2px solid #ffffff;
+    border-top-color: transparent;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+/* Стили для уведомлений */
+.clipboard-notification {
+    z-index: 10000;
+}
     </style>
 </head>
 <body>
@@ -1308,7 +1364,9 @@
     <script>
     let currentOpenSession = null;
     let lastKnownMessageCount = {};
-
+    let clipboardPreview = null;
+    let pendingImageFile = null;
+    let currentSessionIdForImage = null;
     // Константы для масштабирования фото
         const MIN_ZOOM = 0.1;
         const MAX_ZOOM = 10;
@@ -1317,9 +1375,6 @@
         let isDragging = false;
         let startX, startY, translateX = 0, translateY = 0;
 
-    // ————————————————————————————————————————
-    // Вспомогательные функции
-    // ————————————————————————————————————————
     function autoResizeTextarea(textarea) {
         if (!textarea) return;
         textarea.style.height = 'auto';
@@ -1487,10 +1542,8 @@ async function supportDownloadInlinePhoto(imageUrl) {
 function isScrolledToBottom(el) {
     return el.scrollHeight - el.scrollTop <= el.clientHeight + 5;
 }
-////////////////////////////////////////////////////////////
-    ////////////// начало секции drag'n'drop
+// начало секции drag'n'drop
 function initDragAndDropForChats() {
-    // Находим все контейнеры чатов (именно .chat-container, внутри которых messages и форма)
     document.querySelectorAll('.chat-container').forEach(chatEl => {
         if (chatEl.dataset.dragInitialized) return; // защита от двойной инициализации
         chatEl.dataset.dragInitialized = "true";
@@ -1498,7 +1551,6 @@ function initDragAndDropForChats() {
         let dragCounter = 0;
         let overlay = null;
 
-        // Функция создания оверлея (внутри конкретного chatEl)
         function createOverlay() {
             if (overlay) return;
             overlay = document.createElement('div');
@@ -1521,7 +1573,6 @@ function initDragAndDropForChats() {
             if (overlay) overlay.classList.remove('active');
         }
 
-        // Привязываем события к конкретному .chat-container
         ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(evt => {
             chatEl.addEventListener(evt, e => e.preventDefault(), false);
         });
@@ -1546,7 +1597,6 @@ function initDragAndDropForChats() {
             const files = e.dataTransfer?.files;
             if (!files || files.length === 0) return;
 
-            // Извлекаем session_id из data-атрибута родителя
             const sessionEl = chatEl.closest('.session');
             const sessionId = sessionEl?.dataset.sessionId;
             if (!sessionId) {
@@ -1554,7 +1604,6 @@ function initDragAndDropForChats() {
                 return;
             }
 
-            // Отправляем файлы
             for (let file of files) {
                 await sendFileToSession(sessionId, file);
             }
@@ -1562,7 +1611,6 @@ function initDragAndDropForChats() {
     });
 }
 
-// Отправка одного файла в сессию
 async function sendFileToSession(sessionId, file) {
     const maxSize = 50 * 1024 * 1024;
     if (file.size > maxSize) {
@@ -1570,14 +1618,13 @@ async function sendFileToSession(sessionId, file) {
         return;
     }
 
-    // Визуальный фидбек: добавляем "отправку..." в чат
     const tempId = `temp-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
     const messagesEl = document.getElementById(`messages-${sessionId}`);
     if (!messagesEl) return;
 
     const isImage = file.type.startsWith('image/');
     const preview = isImage
-        ? `<img src="${URL.createObjectURL(file)}" class="max-w-32 max-h-32 rounded opacity-60">`
+        ? `<img src="${URL.createObjectURL(file)}" style="max-width: 128px; max-height: 128px; border-radius: 6px; opacity: 0.6;">`
         : `📁 <span class="font-medium">${escapeHtml(file.name)}</span>`;
 
     const tempMsg = document.createElement('div');
@@ -1605,14 +1652,14 @@ async function sendFileToSession(sessionId, file) {
 
         if (!res.ok) throw await res.json();
 
-        // Удаляем временный элемент
         tempMsg.remove();
 
-        // Сбрасываем поле ввода
         const input = document.getElementById(`message-input-${sessionId}`);
-        if (input) input.value = '';
+        if (input) {
+            input.value = '';
+            autoResizeTextarea(input);
+        }
 
-        // Обновляем чат
         await loadSessionMessages(sessionId, true);
 
     } catch (err) {
@@ -1800,42 +1847,51 @@ async function loadAvailableRollbackStates(sessionId) {
     // Отправка файла
     // ————————————————————————————————————————
     async function handleFileSelect(sessionId, input) {
-        if (isSessionResolved(sessionId)) {
+    if (isSessionResolved(sessionId)) {
         alert('Сессия уже завершена.');
         input.value = ''; // очищаем инпут
         return;
     }
-        const file = input?.files?.[0];
-        if (!file) return;
 
-        const status = document.getElementById(`fileStatus-${sessionId}`);
-        status.textContent = `📤 ${file.name}…`;
-        status.style.color = '#6b7280';
+    const file = input?.files?.[0];
+    if (!file) return;
 
-        try {
-            const fd = new FormData();
-            fd.append('file', file);
-            const caption = document.getElementById(`message-input-${sessionId}`)?.value.trim();
-            if (caption) fd.append('caption', caption);
+    const status = document.getElementById(`fileStatus-${sessionId}`);
+    status.textContent = `📤 ${file.name}…`;
+    status.style.color = '#6b7280';
 
-            const res = await fetch(`/support/session/${sessionId}/send_file`, {
-                method: 'POST', body: fd
-            });
-            if (!res.ok) throw await res.json();
+    try {
+        const fd = new FormData();
+        fd.append('file', file);
+        const caption = document.getElementById(`message-input-${sessionId}`)?.value.trim();
+        if (caption) fd.append('caption', caption);
 
-            status.textContent = `✅ ${file.name}`;
-            status.style.color = '#10b981';
-            input.value = '';
-            document.getElementById(`message-input-${sessionId}`).value = '';
-            await loadSessionMessages(sessionId, true);
-            setTimeout(() => status.textContent = '', 2500);
+        const res = await fetch(`/support/session/${sessionId}/send_file`, {
+            method: 'POST', body: fd
+        });
 
-        } catch (err) {
-            console.error(err);
-            status.textContent = `❌ ${file.name}: ${err.detail || 'ошибка'}`;
-            status.style.color = '#ef4444';
+        if (!res.ok) throw await res.json();
+
+        status.textContent = `✅ ${file.name}`;
+        status.style.color = '#10b981';
+
+        // Очищаем поле ввода и сбрасываем высоту textarea
+        const textarea = document.getElementById(`message-input-${sessionId}`);
+        if (textarea) {
+            textarea.value = '';
+            textarea.style.height = 'auto';
         }
+
+        input.value = '';
+        await loadSessionMessages(sessionId, true);
+        setTimeout(() => status.textContent = '', 2500);
+
+    } catch (err) {
+        console.error(err);
+        status.textContent = `❌ ${file.name}: ${err.detail || 'ошибка'}`;
+        status.style.color = '#ef4444';
     }
+}
 
     // ————————————————————————————————————————
     // Загрузка и отображение сообщений
@@ -2022,7 +2078,6 @@ function handleImageLoad() {
         prev?.classList.remove('open');
         prevIcon?.classList.remove('open');
         stopSmartRefresh(currentOpenSession);
-
     }
 
     details.classList.toggle('open');
@@ -2031,9 +2086,13 @@ function handleImageLoad() {
     if (details.classList.contains('open')) {
         currentOpenSession = sessionId;
         loadSessionMessages(sessionId);
-        loadAvailableRollbackStates(sessionId);  // ← Загружаем состояния при открытии
+        loadAvailableRollbackStates(sessionId);
         startSmartRefresh(sessionId);
         initDragAndDropForChats();
+
+        // Инициализация обработчика вставки из буфера обмена
+        initClipboardPasteForSession(sessionId);
+
     } else {
         currentOpenSession = null;
         stopSmartRefresh(sessionId);
@@ -2225,7 +2284,471 @@ function handleImageLoad() {
                 applySupportZoom();
             }
         }
+// === ФУНКЦИИ ДЛЯ ВСТАВКИ ИЗОБРАЖЕНИЙ ИЗ БУФЕРА ===
 
+// Функция для создания окна предпросмотра
+function createPreviewModal(file, sessionId) {
+    // Удаляем старое окно предпросмотра, если есть
+    if (clipboardPreview) {
+        document.body.removeChild(clipboardPreview);
+    }
+
+    const preview = document.createElement('div');
+    preview.id = 'clipboard-preview-modal';
+    preview.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0,0,0,0.8);
+        z-index: 10001;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        backdrop-filter: blur(5px);
+    `;
+
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        const imageUrl = e.target.result;
+
+        // ВЫЗЫВАЕМ ФУНКЦИЮ КОРРЕКТНО
+        const fileSize = formatFileSizeForPreview(file.size);
+
+        preview.innerHTML = `
+            <div style="
+                background: white;
+                border-radius: 12px;
+                padding: 25px;
+                max-width: 90%;
+                max-height: 90vh;
+                display: flex;
+                flex-direction: column;
+                gap: 20px;
+                box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            ">
+                <h3 style="margin: 0; color: #1f2937; font-size: 1.3rem;">
+                    📋 Изображение из буфера обмена
+                </h3>
+
+                <div style="
+                    max-width: 600px;
+                    max-height: 400px;
+                    overflow: auto;
+                    border-radius: 8px;
+                    border: 2px solid #e5e7eb;
+                    background: #f8f9fa;
+                    display: flex;
+                    justify-content: center;
+                    align-items: center;
+                ">
+                    <img id="previewImage"
+                         src="${imageUrl}"
+                         alt="Предпросмотр"
+                         style="
+                            max-width: 100%;
+                            max-height: 100%;
+                            object-fit: contain;
+                            border-radius: 6px;
+                         "
+                         onload="this.style.opacity='1'"
+                         onerror="document.getElementById('previewError').style.display='block'">
+                </div>
+
+                <div id="previewError" style="
+                    display: none;
+                    color: #ef4444;
+                    background: #ffeaea;
+                    padding: 10px;
+                    border-radius: 6px;
+                    text-align: center;
+                ">
+                    ❌ Не удалось загрузить изображение
+                </div>
+
+                <div style="
+                    display: flex;
+                    flex-direction: column;
+                    gap: 10px;
+                    font-size: 0.9rem;
+                    color: #6b7280;
+                ">
+                    <div>📄 Имя файла: <strong>${file.name || 'clipboard_image.png'}</strong></div>
+                    <div>📏 Размер: <strong>${fileSize}</strong></div> <!-- ИСПРАВЛЕНО -->
+                    <div>🖼️ Размеры: <span id="imageDimensions">Загрузка...</span></div>
+                    <div>📝 Формат: <strong>${file.type || 'image/png'}</strong></div>
+                </div>
+
+                <div style="
+                    display: flex;
+                    gap: 15px;
+                    justify-content: center;
+                    margin-top: 10px;
+                    flex-wrap: wrap;
+                ">
+                    <button id="sendPreviewBtn"
+                            style="
+                                padding: 12px 30px;
+                                background: #3b82f6;
+                                color: white;
+                                border: none;
+                                border-radius: 6px;
+                                font-weight: 600;
+                                font-size: 1rem;
+                                cursor: pointer;
+                                display: flex;
+                                align-items: center;
+                                gap: 8px;
+                                transition: all 0.2s;
+                                min-width: 140px;
+                            "
+                            onmouseover="this.style.backgroundColor='#2563eb'"
+                            onmouseout="this.style.backgroundColor='#3b82f6'">
+                        📤 Отправить
+                    </button>
+
+                    <button id="cancelPreviewBtn"
+                            style="
+                                padding: 12px 30px;
+                                background: #6b7280;
+                                color: white;
+                                border: none;
+                                border-radius: 6px;
+                                font-weight: 600;
+                                font-size: 1rem;
+                                cursor: pointer;
+                                display: flex;
+                                align-items: center;
+                                gap: 8px;
+                                transition: all 0.2s;
+                                min-width: 140px;
+                            "
+                            onmouseover="this.style.backgroundColor='#4b5563'"
+                            onmouseout="this.style.backgroundColor='#6b7280'">
+                        ❌ Отмена
+                    </button>
+
+                    <button id="addCaptionBtn"
+                            style="
+                                padding: 12px 30px;
+                                background: #06b6d4;
+                                color: white;
+                                border: none;
+                                border-radius: 6px;
+                                font-weight: 600;
+                                font-size: 1rem;
+                                cursor: pointer;
+                                display: flex;
+                                align-items: center;
+                                gap: 8px;
+                                transition: all 0.2s;
+                                min-width: 180px;
+                            "
+                            onmouseover="this.style.backgroundColor='#0891b2'"
+                            onmouseout="this.style.backgroundColor='#06b6d4'">
+                        📝 Добавить описание
+                    </button>
+                </div>
+
+                <div id="captionContainer" style="display: none; margin-top: 10px;">
+                    <textarea id="captionInput"
+                              placeholder="Введите описание к изображению..."
+                              rows="3"
+                              style="
+                                width: 100%;
+                                padding: 12px;
+                                border: 1px solid #d1d5db;
+                                border-radius: 6px;
+                                font-family: inherit;
+                                resize: vertical;
+                                font-size: 0.95rem;
+                              "></textarea>
+                </div>
+
+                <div style="
+                    text-align: center;
+                    font-size: 0.8rem;
+                    color: #6b7280;
+                    margin-top: 15px;
+                    opacity: 0.7;
+                ">
+                    Нажмите Esc для отмены
+                </div>
+            </div>
+        `;
+
+        // Получаем размеры изображения после загрузки
+        const img = preview.querySelector('#previewImage');
+        img.onload = function() {
+            const dimensions = preview.querySelector('#imageDimensions');
+            dimensions.innerHTML = `<strong>${this.naturalWidth} × ${this.naturalHeight} px</strong>`;
+        };
+
+        // Обработчики кнопок
+        preview.querySelector('#sendPreviewBtn').addEventListener('click', async () => {
+            const captionInput = preview.querySelector('#captionInput');
+            const caption = captionInput ? captionInput.value.trim() : '';
+
+            if (caption) {
+                // Добавляем описание в поле ввода чата
+                const chatInput = document.getElementById(`message-input-${sessionId}`);
+                if (chatInput) {
+                    chatInput.value = caption;
+                    autoResizeTextarea(chatInput);
+                }
+            }
+
+            await sendImageFromPreview(sessionId);
+        });
+
+        preview.querySelector('#cancelPreviewBtn').addEventListener('click', () => {
+            closePreviewModal();
+        });
+
+        preview.querySelector('#addCaptionBtn').addEventListener('click', () => {
+            const captionContainer = preview.querySelector('#captionContainer');
+            const captionBtn = preview.querySelector('#addCaptionBtn');
+
+            if (captionContainer.style.display === 'none') {
+                captionContainer.style.display = 'block';
+                captionBtn.innerHTML = '📝 Скрыть описание';
+                captionBtn.style.background = '#f59e0b';
+                captionBtn.onmouseover = function() {
+                    this.style.backgroundColor = '#d97706';
+                };
+                captionBtn.onmouseout = function() {
+                    this.style.backgroundColor = '#f59e0b';
+                };
+
+                // Фокусируемся на поле ввода
+                setTimeout(() => {
+                    const captionInput = preview.querySelector('#captionInput');
+                    if (captionInput) captionInput.focus();
+                }, 100);
+            } else {
+                captionContainer.style.display = 'none';
+                captionBtn.innerHTML = '📝 Добавить описание';
+                captionBtn.style.background = '#06b6d4';
+                captionBtn.onmouseover = function() {
+                    this.style.backgroundColor = '#0891b2';
+                };
+                captionBtn.onmouseout = function() {
+                    this.style.backgroundColor = '#06b6d4';
+                };
+            }
+        });
+
+        // Закрытие по клику на фон
+        preview.addEventListener('click', (e) => {
+            if (e.target === preview) {
+                closePreviewModal();
+            }
+        });
+
+        // Закрытие по Escape
+        const escapeHandler = (e) => {
+            if (e.key === 'Escape') {
+                closePreviewModal();
+            }
+        };
+        document.addEventListener('keydown', escapeHandler);
+        preview._escapeHandler = escapeHandler;
+    };
+
+    reader.readAsDataURL(file);
+
+    document.body.appendChild(preview);
+    clipboardPreview = preview;
+    pendingImageFile = file;
+    currentSessionIdForImage = sessionId;
+
+    return preview;
+}
+
+// Функция отправки изображения из предпросмотра
+async function sendImageFromPreview(sessionId) {
+    if (!pendingImageFile || !sessionId) return;
+
+    const previewModal = document.getElementById('clipboard-preview-modal');
+    if (previewModal) {
+        // Показываем индикатор отправки
+        const sendBtn = previewModal.querySelector('#sendPreviewBtn');
+        const originalText = sendBtn.innerHTML;
+        sendBtn.innerHTML = '<div class="sending-indicator">📤 Отправка...</div>';
+        sendBtn.disabled = true;
+
+        // Добавляем CSS для индикатора, если еще нет
+        if (!document.querySelector('#preview-sending-styles')) {
+            const style = document.createElement('style');
+            style.id = 'preview-sending-styles';
+            style.textContent = `
+                .sending-indicator {
+                    display: flex;
+                    align-items: center;
+                    gap: 8px;
+                }
+
+                .sending-indicator:after {
+                    content: '';
+                    width: 16px;
+                    height: 16px;
+                    border: 2px solid #ffffff;
+                    border-top-color: transparent;
+                    border-radius: 50%;
+                    animation: spin 1s linear infinite;
+                }
+
+                @keyframes spin {
+                    to { transform: rotate(360deg); }
+                }
+            `;
+            document.head.appendChild(style);
+        }
+    }
+
+    try {
+        // Отправляем файл через существующую функцию sendFileToSession
+        await sendFileToSession(sessionId, pendingImageFile);
+
+        // Закрываем модальное окно
+        closePreviewModal();
+
+        // Показываем уведомление об успехе
+        showClipboardNotification('✅ Изображение отправлено', 'success');
+
+    } catch (error) {
+        console.error('Ошибка отправки изображения из буфера:', error);
+
+        // Восстанавливаем кнопку
+        if (previewModal) {
+            const sendBtn = previewModal.querySelector('#sendPreviewBtn');
+            sendBtn.innerHTML = originalText;
+            sendBtn.disabled = false;
+        }
+
+        showClipboardNotification(`❌ Ошибка отправки: ${error.message || 'Неизвестная ошибка'}`, 'error');
+    }
+}
+
+// Функция закрытия окна предпросмотра
+function closePreviewModal() {
+    if (clipboardPreview) {
+        // Удаляем обработчик Escape
+        if (clipboardPreview._escapeHandler) {
+            document.removeEventListener('keydown', clipboardPreview._escapeHandler);
+        }
+
+        document.body.removeChild(clipboardPreview);
+        clipboardPreview = null;
+        pendingImageFile = null;
+        currentSessionIdForImage = null;
+    }
+}
+
+// Функция инициализации обработчика вставки из буфера для конкретной сессии
+function initClipboardPasteForSession(sessionId) {
+    const chatInput = document.getElementById(`message-input-${sessionId}`);
+
+    if (!chatInput) return;
+
+    chatInput.addEventListener('paste', function(e) {
+        const items = e.clipboardData?.items;
+        if (!items) return;
+
+        let foundImage = false;
+
+        // Ищем изображения в буфере обмена
+        for (const item of items) {
+            // Проверяем, является ли элемент изображением
+            if (item.type.indexOf('image') !== -1) {
+                e.preventDefault(); // Предотвращаем вставку текста
+                foundImage = true;
+
+                const file = item.getAsFile();
+                if (!file) continue;
+
+                // Проверяем размер файла (максимум 20 МБ)
+                const maxSize = 20 * 1024 * 1024; // 20 МБ
+                if (file.size > maxSize) {
+                    showClipboardNotification(`❌ Изображение слишком большое (${formatFileSizeForPreview(file.size)}). Максимум 20 МБ`, 'error');
+                    return;
+                }
+
+                // Проверяем, не завершена ли сессия
+                if (isSessionResolved(sessionId)) {
+                    showClipboardNotification('❌ Сессия уже завершена. Отправка недоступна.', 'error');
+                    return;
+                }
+
+                // Показываем окно предпросмотра вместо немедленной отправки
+                createPreviewModal(file, sessionId);
+
+                break; // Обрабатываем только первое изображение
+            }
+        }
+
+        // Если изображение не найдено, разрешаем стандартную вставку текста
+        if (!foundImage) {
+            // Автоматически подгоняем высоту textarea
+            setTimeout(() => {
+                autoResizeTextarea(chatInput);
+            }, 0);
+        }
+    });
+}
+
+// Функция для показа уведомлений
+function showClipboardNotification(message, type = 'info') {
+    // Удаляем старое уведомление, если есть
+    const oldNotification = document.getElementById('clipboard-notification');
+    if (oldNotification) oldNotification.remove();
+
+    const notification = document.createElement('div');
+    notification.id = 'clipboard-notification';
+    notification.className = 'clipboard-notification';
+    notification.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        padding: 12px 20px;
+        background: ${type === 'info' ? '#3b82f6' : type === 'success' ? '#10b981' : '#ef4444'};
+        color: white;
+        border-radius: 8px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        z-index: 10000;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        animation: slideInClipboard 0.3s ease;
+        max-width: 400px;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        font-size: 0.9rem;
+    `;
+
+    notification.innerHTML = `
+        <span style="font-size: 1.2rem;">${type === 'info' ? '🖼️' : type === 'success' ? '✅' : '❌'}</span>
+        <span style="flex: 1;">${message}</span>
+    `;
+
+    document.body.appendChild(notification);
+
+    // Автоматически скрываем через 3 секунды
+    setTimeout(() => {
+        notification.style.animation = 'slideOutClipboard 0.3s ease';
+        setTimeout(() => notification.remove(), 300);
+    }, 3000);
+}
+
+// Вспомогательная функция форматирования размера файла для предпросмотра
+function formatFileSizeForPreview(bytes) {
+    if (!bytes || bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+}
 </script>
 </body>
 </html>

@@ -2449,33 +2449,11 @@ function handleChatPhotoModalKeydown(event) {
         textarea.style.height = newHeight + 'px';
     }
 
-    // ————————————————————————————————————————
-    // Функции для встроенных изображений (drag в модалке)
-    // ————————————————————————————————————————
+
     let isDraggingChat = false;
     let startXChat, startYChat;
     let translateXChat = 0, translateYChat = 0;
 
-    function startDragChat(event) {
-        if (event.button !== 0) return;
-        isDraggingChat = true;
-        startXChat = event.clientX - translateXChat;
-        startYChat = event.clientY - translateYChat;
-        const img = document.getElementById('chatModalPhoto');
-        if (img) img.style.cursor = 'grabbing';
-        event.preventDefault();
-    }
-    function dragChat(event) {
-        if (!isDraggingChat) return;
-        translateXChat = event.clientX - startXChat;
-        translateYChat = event.clientY - startYChat;
-        applyZoomChat();
-    }
-    function endDragChat() {
-        isDraggingChat = false;
-        const img = document.getElementById('chatModalPhoto');
-        if (img) img.style.cursor = 'grab';
-    }
 
     // ————————————————————————————————————————
     // Функции масштабирования для встроенных изображений
@@ -2798,33 +2776,73 @@ function handleChatPhotoModalKeydown(event) {
     setTimeout(() => { container.scrollTop = container.scrollHeight; }, 100);
 }
 
-    async function sendMessage(event, claimId, userId) {
-        event.preventDefault();
-        const input = document.getElementById(`message-input-${claimId}`);
-        const text = input.value.trim();
-        if (!text) return;
-        try {
-            const res = await fetch('/claims/chat/send', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({claim_id: claimId, text, is_bot: true})
-            });
-            if (res.ok) {
-                input.value = '';
-                resetTextareaHeight(input);
-                await loadChatHistory(claimId);
-                setTimeout(() => {
-                    const container = document.getElementById(`messages-${claimId}`);
-                    if (container) container.scrollTop = container.scrollHeight;
-                }, 100);
-            } else {
-                alert('❌ Ошибка отправки');
-            }
-        } catch (e) {
-            console.error('Send message:', e);
-            alert('Ошибка подключения');
+    let isSendingMessage = {};
+
+async function sendMessage(event, claimId, userId) {
+    event.preventDefault();
+
+    if (isSendingMessage[claimId]) {
+        console.log('Сообщение уже отправляется, игнорируем...');
+        return;
+    }
+
+    const input = document.getElementById(`message-input-${claimId}`);
+    const text = input.value.trim();
+
+    if (!text) return;
+
+    isSendingMessage[claimId] = true;
+
+    const sendBtn = event.target.querySelector('button[type="submit"]') ||
+                   document.querySelector(`#chat-${claimId} .chat-send`);
+    const originalBtnText = sendBtn?.innerHTML;
+    if (sendBtn) {
+        sendBtn.innerHTML = '<span class="sending-spinner">⏳</span> Отправка...';
+        sendBtn.disabled = true;
+    }
+
+    if (input) {
+        input.disabled = true;
+    }
+
+    try {
+        const res = await fetch('/claims/chat/send', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({claim_id: claimId, text, is_bot: true})
+        });
+
+        if (res.ok) {
+            input.value = '';
+            resetTextareaHeight(input);
+            await loadChatHistory(claimId);
+
+            setTimeout(() => {
+                const container = document.getElementById(`messages-${claimId}`);
+                if (container) container.scrollTop = container.scrollHeight;
+            }, 100);
+
+        } else {
+            const error = await res.json();
+            alert('❌ Ошибка отправки: ' + (error.detail || 'Неизвестная ошибка'));
+        }
+    } catch (e) {
+        console.error('Send message error:', e);
+        alert('Ошибка подключения');
+    } finally {
+        isSendingMessage[claimId] = false;
+
+        if (sendBtn) {
+            sendBtn.innerHTML = originalBtnText;
+            sendBtn.disabled = false;
+        }
+
+        if (input) {
+            input.disabled = false;
+            input.focus();
         }
     }
+}
 
     function initializeChatScroll(claimId) {
         const container = document.getElementById(`messages-${claimId}`);
@@ -2974,17 +2992,21 @@ function handleChatPhotoModalKeydown(event) {
     }
 
     function incrementUnreadCount(claimId) {
-        unreadCounters[claimId] = (unreadCounters[claimId] || 0) + 1;
-        const badge = document.getElementById(`unread-badge-${claimId}`);
+    unreadCounters[claimId] = (unreadCounters[claimId] || 0) + 1;
+    const badge = document.getElementById(`unread-badge-${claimId}`);
+    if (badge) {
         badge.textContent = unreadCounters[claimId];
         badge.style.display = 'inline-flex';
     }
+}
 
     function resetUnreadCount(claimId) {
-        unreadCounters[claimId] = 0;
-        const badge = document.getElementById(`unread-badge-${claimId}`);
+    unreadCounters[claimId] = 0;
+    const badge = document.getElementById(`unread-badge-${claimId}`);
+    if (badge) {
         badge.style.display = 'none';
     }
+}
 
     async function updateStatus(claimId, newStatus) {
         if (!confirm(`Изменить статус заявки №${claimId} на "${newStatus}"?`)) return;

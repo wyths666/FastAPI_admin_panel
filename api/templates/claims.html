@@ -1103,6 +1103,11 @@
                        value="{{ number or '' }}" style="width: 100%;">
             </div>
 
+            <div class="filter-group" style="min-width: 120px;">
+                <label for="username">Username:</label>
+                <input type="text" id="username" name="username"
+                       value="{{ username or '' }}" style="width: 100%;">
+            </div>
 
 
             <div class="filter-group" style="min-width: 170px;">
@@ -1134,7 +1139,7 @@
                 {% if claim.has_unanswered %}
                 <span style="color: red; font-weight: bold;">📩 </span>
                 {% endif %}
-                Заявка №{{ claim.claim_id }} от {{ claim.created_at.strftime('%d.%m.%Y') }}
+                Заявка №{{ claim.claim_id }} от {{ claim.created_at.strftime('%d.%m.%Y') }} {{ claim.username }}
             </div>
             <div>
                 <div class="claim-status status-{{ claim.claim_status }}">

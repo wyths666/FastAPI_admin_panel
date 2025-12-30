@@ -77,11 +77,12 @@ async def update_claim_bank(data: dict):
 async def claims_page(
         request: Request,
         user_id: Optional[int] = Query(None),
+        username: Optional[str] = Query(None),  # Новый параметр для фильтрации по username
         date_from: Optional[str] = Query(None),
         date_to: Optional[str] = Query(None),
         status: Optional[str] = Query(None),
         number: Optional[str] = Query(None),
-        has_unanswered: Optional[bool] = Query(None),  # Новый параметр фильтрации
+        has_unanswered: Optional[bool] = Query(None),
         admin=Depends(get_current_admin)
 ):
     if not admin:
@@ -89,8 +90,62 @@ async def claims_page(
 
     query = {"process_status": "complete"}
 
+    # Фильтрация по user_id
     if user_id:
         query["user_id"] = user_id
+
+    # Фильтрация по username
+    user_ids_from_username = []
+    if username and username.strip():
+        username_clean = username.strip().lstrip('@')
+
+        users = await User.find(
+            User.username == username_clean  # Точное совпадение
+        ).to_list()
+
+        if users:
+            user_ids_from_username = [user.tg_id for user in users]
+            if "user_id" in query:
+                if query["user_id"] not in user_ids_from_username:
+                    return templates.TemplateResponse("claims.html", {
+                        "request": request,
+                        "claims": [],
+                        "banks": load_banks(),
+                        "user_id": user_id,
+                        "username": username,
+                        "date_from": date_from,
+                        "date_to": date_to,
+                        "status": status,
+                        "number": number,
+                        "has_unanswered": has_unanswered,
+                        "statuses": [
+                            {"id": "pending", "name": "✅ Подтверждёно"},
+                            {"id": "process", "name": "🆕 Не обработано"},
+                            {"id": "cancelled", "name": "❌ Отменёно"},
+                        ]
+                    })
+            else:
+                if user_ids_from_username:
+                    query["user_id"] = {"$in": user_ids_from_username}
+                else:
+                    return templates.TemplateResponse("claims.html", {
+                        "request": request,
+                        "claims": [],
+                        "banks": load_banks(),
+                        "user_id": user_id,
+                        "username": username,
+                        "date_from": date_from,
+                        "date_to": date_to,
+                        "status": status,
+                        "number": number,
+                        "has_unanswered": has_unanswered,
+                        "statuses": [
+                            {"id": "pending", "name": "✅ Подтверждёно"},
+                            {"id": "process", "name": "🆕 Не обработано"},
+                            {"id": "cancelled", "name": "❌ Отменёно"},
+                        ]
+                    })
+
     if status:
         query["claim_status"] = status
 
@@ -120,28 +175,31 @@ async def claims_page(
         except ValueError:
             pass
 
-    # Получаем все заявки
     claims = await claims_query.sort("-created_at").to_list()
 
-    # Фильтрация по has_unanswered
     if has_unanswered is not None:
         filtered_claims = []
         for claim in claims:
-            # Находим активную сессию чата для заявки
             chat_session = await ChatSession.find_one(
                 {"claim_id": claim.claim_id, "is_active": True}
             )
 
-            # Фильтруем в зависимости от значения has_unanswered
             if has_unanswered:
-                # Показываем только заявки с неотвеченными сообщениями
                 if chat_session and chat_session.has_unanswered:
                     filtered_claims.append(claim)
             else:
-                # Показываем только заявки без неотвеченных сообщений
                 if not chat_session or not chat_session.has_unanswered:
                     filtered_claims.append(claim)
 
+        claims = filtered_claims
+
+    if username and username.strip() and not user_ids_from_username:
+        username_clean = username.strip().lstrip('@')
+        filtered_claims = []
+        for claim in claims:
+            user = await get_user_safe(claim.user_id)
+            if user and user.username and username_clean.lower() in user.username.lower():
+                filtered_claims.append(claim)
         claims = filtered_claims
 
     user_ids = list(set([claim.user_id for claim in claims]))
@@ -156,7 +214,6 @@ async def claims_page(
         total_claims = user_claims_count.get(user_id_str, 1)
         user = await get_user_safe(claim.user_id)
 
-        # 🔍 Проверка активной сессии поддержки
         active_support = await SupportSession.find_one(
             SupportSession.user_id == claim.user_id,
             SupportSession.resolved == False
@@ -171,16 +228,16 @@ async def claims_page(
             "id": str(claim.id),
             "claim_id": claim.claim_id,
             "user_id": claim.user_id,
-            "banned": user.banned,
+            "banned": user.banned if user else False,
             "username": user.username if user else f"@id{claim.user_id}",
-            "code": claim.code.upper(),
+            "code": claim.code.upper() if claim.code else "",
             "payment_method": claim.payment_method,
             "phone": claim.phone,
             "bank": claim.bank,
             "card": claim.card,
             "bank_member_id": claim.bank_member_id,
             "review_text": claim.review_text,
-            "photo_count": len(claim.photo_file_ids),
+            "photo_count": len(claim.photo_file_ids) if claim.photo_file_ids else 0,
             "photo_file_ids": claim.photo_file_ids,
             "claim_status": claim.claim_status,
             "process_status": claim.process_status,
@@ -198,11 +255,12 @@ async def claims_page(
         "claims": claims_data,
         "banks": banks,
         "user_id": user_id,
+        "username": username,  # Передаем username в шаблон
         "date_from": date_from,
         "date_to": date_to,
         "status": status,
         "number": number,
-        "has_unanswered": has_unanswered,  # Передаем значение в шаблон
+        "has_unanswered": has_unanswered,
         "statuses": [
             {"id": "pending", "name": "✅ Подтверждёно"},
             {"id": "process", "name": "🆕 Не обработано"},

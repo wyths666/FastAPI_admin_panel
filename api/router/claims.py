@@ -7,7 +7,7 @@ from aiogram.types import BufferedInputFile
 from beanie import PydanticObjectId
 from core.logger import api_logger as logger
 from datetime import datetime, timezone
-from typing import List, Optional
+from typing import List, Optional, Tuple, Dict, Any
 from fastapi import APIRouter, Request, Depends, HTTPException, Query
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
@@ -72,80 +72,57 @@ async def update_claim_bank(data: dict):
         logger.error(f"❌ Ошибка обновления банка: {e}")
         return {"ok": False, "error": str(e)}
 
-# --- 1. Страница списка заявок ---
-@router.get("/", response_class=HTMLResponse)
-async def claims_page(
-        request: Request,
-        user_id: Optional[int] = Query(None),
-        username: Optional[str] = Query(None),  # Новый параметр для фильтрации по username
-        date_from: Optional[str] = Query(None),
-        date_to: Optional[str] = Query(None),
-        status: Optional[str] = Query(None),
-        number: Optional[str] = Query(None),
-        has_unanswered: Optional[bool] = Query(None),
-        admin=Depends(get_current_admin)
-):
-    if not admin:
-        return RedirectResponse("/auth/login")
+# ————————————————————————————————————————
+# ВСПОМОГАТЕЛЬНАЯ ФУНКЦИЯ: получение данных заявок с пагинацией и фильтрами
+# ————————————————————————————————————————
+async def get_claims_data(
+    *,
+    user_id: Optional[int] = None,
+    tg_id: Optional[str] = None,  # ← новый параметр, строкой для гибкости
+    username: Optional[str] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    status: Optional[str] = None,
+    number: Optional[str] = None,
+    has_unanswered: Optional[bool] = None,
+    offset: int = 0,
+    limit: int = 20,
+) -> Tuple[List[Dict[str, Any]], int]:
+    # 1. Базовый фильтр
+    query: Dict[str, Any] = {"process_status": "complete"}
 
-    query = {"process_status": "complete"}
-
-    # Фильтрация по user_id
-    if user_id:
+    # 2. user_id (уже был)
+    if user_id is not None:
         query["user_id"] = user_id
 
-    # Фильтрация по username
-    user_ids_from_username = []
+    # 3. tg_id (новый параметр) — совместимость: это то же user_id
+    if tg_id and tg_id.strip():
+        try:
+            parsed_tg_id = int(tg_id.strip())
+            if "user_id" in query and query["user_id"] != parsed_tg_id:
+                return [], 0  # конфликт → пустой результат
+            query["user_id"] = parsed_tg_id
+        except (ValueError, TypeError):
+            return [], 0  # некорректный tg_id
+
+    # 4. username — точное совпадение (через User collection)
+    user_ids_from_username: List[int] = []
     if username and username.strip():
         username_clean = username.strip().lstrip('@')
+        users = await User.find(User.username == username_clean).to_list()
+        user_ids_from_username = [user.tg_id for user in users if hasattr(user, 'tg_id') and user.tg_id]
 
-        users = await User.find(
-            User.username == username_clean  # Точное совпадение
-        ).to_list()
-
-        if users:
-            user_ids_from_username = [user.tg_id for user in users]
+        if user_ids_from_username:
             if "user_id" in query:
                 if query["user_id"] not in user_ids_from_username:
-                    return templates.TemplateResponse("claims.html", {
-                        "request": request,
-                        "claims": [],
-                        "banks": load_banks(),
-                        "user_id": user_id,
-                        "username": username,
-                        "date_from": date_from,
-                        "date_to": date_to,
-                        "status": status,
-                        "number": number,
-                        "has_unanswered": has_unanswered,
-                        "statuses": [
-                            {"id": "pending", "name": "✅ Подтверждёно"},
-                            {"id": "process", "name": "🆕 Не обработано"},
-                            {"id": "cancelled", "name": "❌ Отменёно"},
-                        ]
-                    })
+                    return [], 0
             else:
-                if user_ids_from_username:
-                    query["user_id"] = {"$in": user_ids_from_username}
-                else:
-                    return templates.TemplateResponse("claims.html", {
-                        "request": request,
-                        "claims": [],
-                        "banks": load_banks(),
-                        "user_id": user_id,
-                        "username": username,
-                        "date_from": date_from,
-                        "date_to": date_to,
-                        "status": status,
-                        "number": number,
-                        "has_unanswered": has_unanswered,
-                        "statuses": [
-                            {"id": "pending", "name": "✅ Подтверждёно"},
-                            {"id": "process", "name": "🆕 Не обработано"},
-                            {"id": "cancelled", "name": "❌ Отменёно"},
-                        ]
-                    })
+                query["user_id"] = {"$in": user_ids_from_username}
+        else:
+            # Если не нашли — пропускаем, сделаем soft-match позже (на Python)
+            pass
 
+    # 5. status, number
     if status:
         query["claim_status"] = status
 
@@ -157,12 +134,14 @@ async def claims_page(
         except ValueError:
             pass
 
-    claims_query = Claim.find(query)
+    # 6. Базовый запрос
+    base_query = Claim.find(query)
 
+    # 7. Дата
     if date_from:
         try:
             dt = datetime.fromisoformat(date_from).replace(tzinfo=timezone.utc)
-            claims_query = claims_query.find(Claim.created_at >= dt)
+            base_query = base_query.find(Claim.created_at >= dt)
         except ValueError:
             pass
 
@@ -171,48 +150,61 @@ async def claims_page(
             dt = datetime.fromisoformat(date_to).replace(
                 hour=23, minute=59, second=59, tzinfo=timezone.utc
             )
-            claims_query = claims_query.find(Claim.created_at <= dt)
+            base_query = base_query.find(Claim.created_at <= dt)
         except ValueError:
             pass
 
-    claims = await claims_query.sort("-created_at").to_list()
+    # 8. Общее количество (до has_unanswered!)
+    total = await base_query.count()
 
+    # 9. Получаем claims с пагинацией
+    claims = await base_query.sort("-created_at").skip(offset).limit(limit).to_list()
+
+    # 10. Оптимизированный has_unanswered: pre-fetch всех чатов за один запрос
+    claim_ids = [c.claim_id for c in claims]
+    chat_sessions_map = {}
+    if claim_ids:
+        chat_sessions = await ChatSession.find(
+            {"claim_id": {"$in": claim_ids}, "is_active": True}
+        ).to_list()
+        chat_sessions_map = {cs.claim_id: cs for cs in chat_sessions}
+
+    # 11. Фильтр has_unanswered (на Python)
     if has_unanswered is not None:
-        filtered_claims = []
+        filtered = []
         for claim in claims:
-            chat_session = await ChatSession.find_one(
-                {"claim_id": claim.claim_id, "is_active": True}
-            )
+            cs = chat_sessions_map.get(claim.claim_id)
+            has_unansw = cs and cs.has_unanswered
+            if has_unanswered == has_unansw:
+                filtered.append(claim)
+        claims = filtered
 
-            if has_unanswered:
-                if chat_session and chat_session.has_unanswered:
-                    filtered_claims.append(claim)
-            else:
-                if not chat_session or not chat_session.has_unanswered:
-                    filtered_claims.append(claim)
-
-        claims = filtered_claims
-
+    # 12. Soft-match по username (если точное совпадение не дало результатов)
     if username and username.strip() and not user_ids_from_username:
-        username_clean = username.strip().lstrip('@')
-        filtered_claims = []
+        username_clean = username.strip().lstrip('@').lower()
+        final_filtered = []
         for claim in claims:
             user = await get_user_safe(claim.user_id)
-            if user and user.username and username_clean.lower() in user.username.lower():
-                filtered_claims.append(claim)
-        claims = filtered_claims
+            if user and user.username and username_clean in user.username.lower():
+                final_filtered.append(claim)
+        claims = final_filtered
 
-    user_ids = list(set([claim.user_id for claim in claims]))
+    # 13. Enrich: old_claims, user, support, chat_session
+    user_ids = list({c.user_id for c in claims})
     user_claims_count = {}
-    for uid in user_ids:
-        count = await Claim.find({"user_id": uid, "process_status": "complete"}).count()
-        user_claims_count[str(uid)] = count
+    if user_ids:
+        pipeline = [
+            {"$match": {"user_id": {"$in": user_ids}, "process_status": "complete"}},
+            {"$group": {"_id": "$user_id", "count": {"$sum": 1}}}
+        ]
+        counts = await Claim.aggregate(pipeline).to_list()
+        user_claims_count = {str(item["_id"]): item["count"] for item in counts}
 
+    # 14. Формируем claims_data
     claims_data = []
     for claim in claims:
-        user_id_str = str(claim.user_id)
-        total_claims = user_claims_count.get(user_id_str, 1)
         user = await get_user_safe(claim.user_id)
+        old_claims = user_claims_count.get(str(claim.user_id), 0)
 
         active_support = await SupportSession.find_one(
             SupportSession.user_id == claim.user_id,
@@ -220,9 +212,7 @@ async def claims_page(
         )
         has_active_support_session = active_support is not None
 
-        chat_session = await ChatSession.find_one(
-            {"claim_id": claim.claim_id, "is_active": True}
-        )
+        chat_session = chat_sessions_map.get(claim.claim_id)
 
         claims_data.append({
             "id": str(claim.id),
@@ -238,15 +228,47 @@ async def claims_page(
             "bank_member_id": claim.bank_member_id,
             "review_text": claim.review_text,
             "photo_count": len(claim.photo_file_ids) if claim.photo_file_ids else 0,
-            "photo_file_ids": claim.photo_file_ids,
+            "photo_file_ids": claim.photo_file_ids or [],
             "claim_status": claim.claim_status,
             "process_status": claim.process_status,
             "created_at": claim.created_at,
             "is_chat_active": chat_session is not None,
             "has_unanswered": chat_session.has_unanswered if chat_session else False,
-            "old_claims": total_claims,
+            "old_claims": old_claims,
             "has_active_support_session": has_active_support_session,
         })
+
+    return claims_data, total
+
+@router.get("/", response_class=HTMLResponse)
+async def claims_page(
+    request: Request,
+    user_id: Optional[int] = Query(None),
+    tg_id: Optional[str] = Query(None),  # ← добавлен
+    username: Optional[str] = Query(None),
+    date_from: Optional[str] = Query(None),
+    date_to: Optional[str] = Query(None),
+    status: Optional[str] = Query(None),
+    number: Optional[str] = Query(None),
+    has_unanswered: Optional[bool] = Query(None),
+    admin = Depends(get_current_admin),
+):
+    if not admin:
+        return RedirectResponse("/auth/login")
+
+    # Получаем первую порцию
+    claims_data, total = await get_claims_data(
+        user_id=user_id,
+        tg_id=tg_id,
+        username=username,
+        date_from=date_from,
+        date_to=date_to,
+        status=status,
+        number=number,
+        has_unanswered=has_unanswered,
+        offset=0,
+        limit=20,
+    )
 
     banks = load_banks()
 
@@ -255,7 +277,8 @@ async def claims_page(
         "claims": claims_data,
         "banks": banks,
         "user_id": user_id,
-        "username": username,  # Передаем username в шаблон
+        "tg_id": tg_id,          # ← пробрасываем в шаблон
+        "username": username,
         "date_from": date_from,
         "date_to": date_to,
         "status": status,
@@ -265,8 +288,48 @@ async def claims_page(
             {"id": "pending", "name": "✅ Подтверждёно"},
             {"id": "process", "name": "🆕 Не обработано"},
             {"id": "cancelled", "name": "❌ Отменёно"},
-        ]
+        ],
+        "total_claims": total,
+        "has_more": len(claims_data) > 0 and total > 20,
     })
+
+
+# ————————————————————————————————————————
+# ЭНДПОИНТ 2: API ДЛЯ LAZY-LOADING — JSON
+# ————————————————————————————————————————
+@router.get("/api/claims")
+async def api_claims(
+    user_id: Optional[int] = Query(None),
+    tg_id: Optional[str] = Query(None),  # ← добавлен
+    username: Optional[str] = Query(None),
+    date_from: Optional[str] = Query(None),
+    date_to: Optional[str] = Query(None),
+    status: Optional[str] = Query(None),
+    number: Optional[str] = Query(None),
+    has_unanswered: Optional[bool] = Query(None),
+    offset: int = Query(0, ge=0),
+    limit: int = Query(20, ge=1, le=100),
+):
+    claims_data, total = await get_claims_data(
+        user_id=user_id,
+        tg_id=tg_id,
+        username=username,
+        date_from=date_from,
+        date_to=date_to,
+        status=status,
+        number=number,
+        has_unanswered=has_unanswered,
+        offset=offset,
+        limit=limit,
+    )
+
+    return {
+        "claims": claims_data,
+        "total": total,
+        "offset": offset,
+        "limit": limit,
+        "has_more": (offset + len(claims_data)) < total,
+    }
 
 # --- 2. API: создать чат-сессию ---
 @router.post("/chat/start")

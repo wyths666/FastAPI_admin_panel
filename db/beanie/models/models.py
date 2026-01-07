@@ -157,6 +157,12 @@ class Claim(ModelAdmin):
     class Settings:
         name = "claims"
         use_state_management = True
+        indexes = [
+            "claim_id",
+            "user_id",
+            "process_status",
+            [("created_at", -1)]
+        ]
 
     def update_status(self, claim_status: str, process_status: str):
         """Метод для обновления статусов"""

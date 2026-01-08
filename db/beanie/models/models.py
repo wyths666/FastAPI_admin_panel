@@ -126,6 +126,9 @@ class User(ModelAdmin):
 
     class Settings:
         name = "users"
+        indexes = ["tg_id",
+                   "username",
+                   "banned"]
 
 
 class Claim(ModelAdmin):

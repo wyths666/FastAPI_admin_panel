@@ -1,5 +1,7 @@
+import asyncio
+
 from motor.motor_asyncio import AsyncIOMotorClient
-from beanie import init_beanie
+from beanie import init_beanie, Document
 from config import cnf
 from db.beanie.models import Administrators
 from db.beanie.models import document_models
@@ -12,8 +14,33 @@ _is_initialized_main = False
 _is_initialized_bot1 = False
 
 
+async def ensure_indexes_for_model(model: Document):
+    try:
+        collection = model.get_motor_collection()
+        current_indexes = await collection.index_information()
+        model_settings = model.get_settings()
+
+        if hasattr(model_settings, 'indexes') and model_settings.indexes:
+            for index_field in model_settings.indexes:
+                if hasattr(index_field, 'index_spec'):
+                    index_spec = index_field.index_spec
+                    index_args = getattr(index_field, 'index_args', {})
+
+                    index_name = index_args.get('name', '')
+                    if not any(name == index_name for name in current_indexes.keys() if index_name):
+                        if not any(index['key'] == index_spec for index in current_indexes.values()):
+                            await collection.create_index(index_spec, **index_args)
+
+                        else:
+                            print(f"   ✓ Индекс уже существует: {index_spec}")
+                    else:
+                        print(f"   ✓ Индекс уже существует: {index_name}")
+    except Exception as e:
+        print(f"⚠️ Предупреждение для {model.__name__}: {str(e)[:100]}...")
+
+
 async def init_database():
-    """Инициализация основной БД"""
+    """Инициализация основной БД с проверкой индексов"""
     global _client_main, _is_initialized_main
 
     if _is_initialized_main:
@@ -27,6 +54,10 @@ async def init_database():
         document_models=document_models
     )
 
+    tasks = [ensure_indexes_for_model(model) for model in document_models]
+    await asyncio.gather(*tasks, return_exceptions=True)
+
+    print("✅ Проверка индексов завершена")
     _is_initialized_main = True
     print("✅ Основная база данных инициализирована")
     return database

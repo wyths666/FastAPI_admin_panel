@@ -52,12 +52,10 @@ async def update_claim_bank(data: dict):
         if not claim_id:
             raise HTTPException(status_code=400, detail="claim_id required")
 
-        # Находим заявку
         claim = await Claim.find_one({"claim_id": claim_id})
         if not claim:
             raise HTTPException(status_code=404, detail="Claim not found")
 
-        # Обновляем bank_member_id
         await claim.update(bank_member_id=bank_member_id)
 
         logger.info(f"✅ Bank updated for claim {claim_id}: {bank_member_id}")
@@ -72,13 +70,10 @@ async def update_claim_bank(data: dict):
         logger.error(f"❌ Ошибка обновления банка: {e}")
         return {"ok": False, "error": str(e)}
 
-# ————————————————————————————————————————
-# ВСПОМОГАТЕЛЬНАЯ ФУНКЦИЯ: получение данных заявок с пагинацией и фильтрами
-# ————————————————————————————————————————
 async def get_claims_data(
     *,
     user_id: Optional[int] = None,
-    tg_id: Optional[str] = None,  # ← новый параметр, строкой для гибкости
+    tg_id: Optional[str] = None,
     username: Optional[str] = None,
     date_from: Optional[str] = None,
     date_to: Optional[str] = None,
@@ -88,138 +83,137 @@ async def get_claims_data(
     offset: int = 0,
     limit: int = 20,
 ) -> Tuple[List[Dict[str, Any]], int]:
-    # 1. Базовый фильтр
-    query: Dict[str, Any] = {"process_status": "complete"}
 
-    # 2. user_id (уже был)
+    query: Dict[str, Any] = {
+        "process_status": "complete"
+    }
+
+    resolved_user_id: Optional[int] = None
+
     if user_id is not None:
-        query["user_id"] = user_id
+        resolved_user_id = user_id
 
-    # 3. tg_id (новый параметр) — совместимость: это то же user_id
     if tg_id and tg_id.strip():
         try:
-            parsed_tg_id = int(tg_id.strip())
-            if "user_id" in query and query["user_id"] != parsed_tg_id:
-                return [], 0  # конфликт → пустой результат
-            query["user_id"] = parsed_tg_id
-        except (ValueError, TypeError):
-            return [], 0  # некорректный tg_id
+            parsed = int(tg_id.strip())
+            if resolved_user_id is not None and resolved_user_id != parsed:
+                return [], 0
+            resolved_user_id = parsed
+        except ValueError:
+            return [], 0
 
-    # 4. username — точное совпадение (через User collection)
-    user_ids_from_username: List[int] = []
+    if resolved_user_id is not None:
+        query["user_id"] = resolved_user_id
+
     if username and username.strip():
-        username_clean = username.strip().lstrip('@')
-        users = await User.find(User.username == username_clean).to_list()
-        user_ids_from_username = [user.tg_id for user in users if hasattr(user, 'tg_id') and user.tg_id]
+        uname = username.strip().lstrip("@")
+        users = await User.find(User.username == uname).to_list()
+        ids = [u.tg_id for u in users if u.tg_id]
 
-        if user_ids_from_username:
-            if "user_id" in query:
-                if query["user_id"] not in user_ids_from_username:
-                    return [], 0
-            else:
-                query["user_id"] = {"$in": user_ids_from_username}
+        if not ids:
+            return [], 0
+
+        user_ids_from_username = ids
+
+        if "user_id" in query:
+            if query["user_id"] not in ids:
+                return [], 0
         else:
-            # Если не нашли — пропускаем, сделаем soft-match позже (на Python)
-            pass
+            query["user_id"] = {"$in": ids}
 
-    # 5. status, number
     if status:
         query["claim_status"] = status
 
     if number and number.strip():
         try:
-            number_int = int(number.strip())
-            claim_id_str = f"{number_int:06d}"
+            claim_id_str = f"{int(number.strip()):06d}"
             query["claim_id"] = {"$regex": f"^{claim_id_str}$"}
         except ValueError:
             pass
 
-    # 6. Базовый запрос
-    base_query = Claim.find(query)
+    if has_unanswered is not None:
+        chat_filter = {
+            "is_active": True,
+            "has_unanswered": has_unanswered
+        }
 
-    # 7. Дата
+        chat_sessions = await ChatSession.find(chat_filter).to_list()
+        claim_ids = [cs.claim_id for cs in chat_sessions]
+
+        if not claim_ids:
+            return [], 0
+
+        query["claim_id"] = {"$in": claim_ids}
+
+    date_filter = {}
+
     if date_from:
         try:
-            dt = datetime.fromisoformat(date_from).replace(tzinfo=timezone.utc)
-            base_query = base_query.find(Claim.created_at >= dt)
+            date_filter["$gte"] = datetime.fromisoformat(date_from).replace(tzinfo=timezone.utc)
         except ValueError:
             pass
 
     if date_to:
         try:
-            dt = datetime.fromisoformat(date_to).replace(
+            date_filter["$lte"] = datetime.fromisoformat(date_to).replace(
                 hour=23, minute=59, second=59, tzinfo=timezone.utc
             )
-            base_query = base_query.find(Claim.created_at <= dt)
         except ValueError:
             pass
 
-    # 8. Общее количество (до has_unanswered!)
+    if date_filter:
+        query["created_at"] = date_filter
+
+    base_query = Claim.find(query)
+
     total = await base_query.count()
 
-    # 9. Получаем claims с пагинацией
-    claims = await base_query.sort("-created_at").skip(offset).limit(limit).to_list()
+    claims = await (
+        base_query
+        .sort("-created_at")
+        .skip(offset)
+        .limit(limit)
+        .to_list()
+    )
 
-    # 10. Оптимизированный has_unanswered: pre-fetch всех чатов за один запрос
-    claim_ids = [c.claim_id for c in claims]
-    chat_sessions_map = {}
-    if claim_ids:
-        chat_sessions = await ChatSession.find(
-            {"claim_id": {"$in": claim_ids}, "is_active": True}
-        ).to_list()
-        chat_sessions_map = {cs.claim_id: cs for cs in chat_sessions}
+    if not claims:
+        return [], total
 
-    # 11. Фильтр has_unanswered (на Python)
-    if has_unanswered is not None:
-        filtered = []
-        for claim in claims:
-            cs = chat_sessions_map.get(claim.claim_id)
-            has_unansw = cs and cs.has_unanswered
-            if has_unanswered == has_unansw:
-                filtered.append(claim)
-        claims = filtered
-
-    # 12. Soft-match по username (если точное совпадение не дало результатов)
-    if username and username.strip() and not user_ids_from_username:
-        username_clean = username.strip().lstrip('@').lower()
-        final_filtered = []
-        for claim in claims:
-            user = await get_user_safe(claim.user_id)
-            if user and user.username and username_clean in user.username.lower():
-                final_filtered.append(claim)
-        claims = final_filtered
-
-    # 13. Enrich: old_claims, user, support, chat_session
     user_ids = list({c.user_id for c in claims})
-    user_claims_count = {}
-    if user_ids:
-        pipeline = [
-            {"$match": {"user_id": {"$in": user_ids}, "process_status": "complete"}},
-            {"$group": {"_id": "$user_id", "count": {"$sum": 1}}}
-        ]
-        counts = await Claim.aggregate(pipeline).to_list()
-        user_claims_count = {str(item["_id"]): item["count"] for item in counts}
+    claim_ids = [c.claim_id for c in claims]
 
-    # 14. Формируем claims_data
-    claims_data = []
+    users = await User.find({"tg_id": {"$in": user_ids}}).to_list()
+    users_map = {u.tg_id: u for u in users}
+
+    chat_sessions = await ChatSession.find(
+        {"claim_id": {"$in": claim_ids}, "is_active": True}
+    ).to_list()
+    chats_map = {c.claim_id: c for c in chat_sessions}
+
+    supports = await SupportSession.find(
+        {"user_id": {"$in": user_ids}, "resolved": False}
+    ).to_list()
+    support_users = {s.user_id for s in supports}
+
+    pipeline = [
+        {"$match": {"user_id": {"$in": user_ids}, "process_status": "complete"}},
+        {"$group": {"_id": "$user_id", "count": {"$sum": 1}}}
+    ]
+    counts = await Claim.aggregate(pipeline).to_list()
+    old_claims_map = {item["_id"]: item["count"] for item in counts}
+
+    claims_data: List[Dict[str, Any]] = []
+
     for claim in claims:
-        user = await get_user_safe(claim.user_id)
-        old_claims = user_claims_count.get(str(claim.user_id), 0)
-
-        active_support = await SupportSession.find_one(
-            SupportSession.user_id == claim.user_id,
-            SupportSession.resolved == False
-        )
-        has_active_support_session = active_support is not None
-
-        chat_session = chat_sessions_map.get(claim.claim_id)
+        user = users_map.get(claim.user_id)
+        chat = chats_map.get(claim.claim_id)
 
         claims_data.append({
             "id": str(claim.id),
             "claim_id": claim.claim_id,
             "user_id": claim.user_id,
+            "username": user.username if user and user.username else None,
             "banned": user.banned if user else False,
-            "username": user.username if user else f"@id{claim.user_id}",
             "code": claim.code.upper() if claim.code else "",
             "payment_method": claim.payment_method,
             "phone": claim.phone,
@@ -227,18 +221,19 @@ async def get_claims_data(
             "card": claim.card,
             "bank_member_id": claim.bank_member_id,
             "review_text": claim.review_text,
-            "photo_count": len(claim.photo_file_ids) if claim.photo_file_ids else 0,
             "photo_file_ids": claim.photo_file_ids or [],
+            "photo_count": len(claim.photo_file_ids or []),
             "claim_status": claim.claim_status,
             "process_status": claim.process_status,
             "created_at": claim.created_at,
-            "is_chat_active": chat_session is not None,
-            "has_unanswered": chat_session.has_unanswered if chat_session else False,
-            "old_claims": old_claims,
-            "has_active_support_session": has_active_support_session,
+            "is_chat_active": chat is not None,
+            "has_unanswered": chat.has_unanswered if chat else False,
+            "has_active_support_session": claim.user_id in support_users,
+            "old_claims": old_claims_map.get(claim.user_id, 0),
         })
 
     return claims_data, total
+
 
 @router.get("/", response_class=HTMLResponse)
 async def claims_page(
@@ -256,7 +251,6 @@ async def claims_page(
     if not admin:
         return RedirectResponse("/auth/login")
 
-    # Получаем первую порцию
     claims_data, total = await get_claims_data(
         user_id=user_id,
         tg_id=tg_id,
@@ -294,9 +288,6 @@ async def claims_page(
     })
 
 
-# ————————————————————————————————————————
-# ЭНДПОИНТ 2: API ДЛЯ LAZY-LOADING — JSON
-# ————————————————————————————————————————
 @router.get("/api/claims")
 async def api_claims(
     user_id: Optional[int] = Query(None),
@@ -331,19 +322,16 @@ async def api_claims(
         "has_more": (offset + len(claims_data)) < total,
     }
 
-# --- 2. API: создать чат-сессию ---
 @router.post("/chat/start")
 async def start_chat_session(data: dict):
     claim_id = data.get("claim_id")
     if not claim_id:
         raise HTTPException(status_code=400, detail="claim_id required")
 
-    # ПРАВИЛЬНЫЙ СИНТАКСИС
     claim = await Claim.find_one({"claim_id": claim_id})  # ← словарь
     if not claim:
         raise HTTPException(status_code=404, detail="Claim not found")
 
-    # Создаём или активируем сессию - ПРАВИЛЬНЫЙ СИНТАКСИС
     session = await ChatSession.find_one(
         {"claim_id": claim_id, "is_active": True}  # ← словарь
     )
@@ -362,12 +350,10 @@ async def start_chat_session(data: dict):
     return {"ok": True, "session_id": str(session.id)}
 
 
-# --- 3. API: получить историю чата по заявке ---
 @router.get("/chat/history")
 async def chat_history_endpoint(claim_id: str):
-    # ПРАВИЛЬНЫЙ СИНТАКСИС ДЛЯ BEANIE
     messages = await ChatMessage.find(
-        {"claim_id": claim_id}  # ← используем словарь вместо точечной нотации
+        {"claim_id": claim_id}
     ).sort("timestamp").to_list()
 
     result = [
@@ -387,7 +373,6 @@ async def chat_history_endpoint(claim_id: str):
     return result
 
 
-# --- 4. API: отправить сообщение (админ → пользователь) ---
 @router.post("/chat/send")
 async def send_chat_message_endpoint(data: dict):
     claim_id = data.get("claim_id")
@@ -403,14 +388,12 @@ async def send_chat_message_endpoint(data: dict):
         raise HTTPException(status_code=400, detail=error_msg)
 
     try:
-        # Ищем заявку
         claim = await Claim.find_one({"claim_id": claim_id})
         if not claim:
             error_msg = f"Claim {claim_id} not found"
             logger.error(f"❌ [ChatSend] {error_msg}")
             raise HTTPException(status_code=404, detail=error_msg)
 
-        # 🔍 Проверяем, есть ли у пользователя ОТКРЫТАЯ support-сессия
         active_support_session = await SupportSession.find_one(
             SupportSession.user_id == claim.user_id,
             SupportSession.resolved == False
@@ -426,7 +409,6 @@ async def send_chat_message_endpoint(data: dict):
             )
             raise HTTPException(status_code=409, detail=warning_msg)  # 409 Conflict
 
-        # ✅ Продолжаем отправку — активной сессии нет
         if has_photo and photo_file_id:
             logger.info(f"📸 [ChatSend] Отправка фото: file_id={photo_file_id}")
             await bot.send_photo(
@@ -438,7 +420,6 @@ async def send_chat_message_endpoint(data: dict):
             logger.info(f"💬 [ChatSend] Отправка текста: '{text}'")
             await bot.send_message(chat_id=claim.user_id, text=text)
 
-        # Сохраняем в БД
         msg = ChatMessage(
             session_id=claim_id,
             claim_id=claim_id,
@@ -452,7 +433,6 @@ async def send_chat_message_endpoint(data: dict):
         )
         await msg.insert()
 
-        # Обновляем сессию чата
         session = await ChatSession.find_one({"claim_id": claim_id})
         if session:
             session.last_interaction = datetime.now()
@@ -527,9 +507,6 @@ async def send_chat_file_endpoint(
         logger.error(f"❌ Telegram send failed: {e}")
         caption += " (не доставлено)"
 
-    # 5. 🔥 Сохраняем в СУЩЕСТВУЮЩУЮ модель ChatMessage:
-    #    - фото → has_photo=True, photo_file_id=file_id
-    #    - документ → has_photo=False, photo_file_id=file_id (да, так!)
     chat_msg = ChatMessage(
         session_id=claim_id,
         claim_id=claim_id,
@@ -938,7 +915,6 @@ async def notify_user_about_chat_close(user_id: int, claim_id: str):
     except Exception as e:
         logger.error(f"⚠️ Не удалось отправить уведомление пользователю {user_id}: {e}")
 
-# Исправляем эндпоинт get_chat_photo
 
 
 

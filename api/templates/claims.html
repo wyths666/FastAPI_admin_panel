@@ -1341,9 +1341,11 @@ function claimToHtml(claim) {
 <div class="claim" data-claim-id="${esc(claim.claim_id)}" data-user-id="${esc(claim.user_id)}">
   <div class="claim-header">
     <div class="claim-number">
-      ${claim.has_unanswered ? '<span style="color: red; font-weight: bold;">📩 </span>' : ''}
-      Заявка №${esc(claim.claim_id)} от ${dateStr} ${esc(claim.username)}
-    </div>
+  ${claim.has_unanswered ? '<span style="color: red; font-weight: bold;">📩 </span>' : ''}
+  Заявка №${esc(claim.claim_id)} от ${dateStr}
+  ${claim.username ? ` Username: ${esc(claim.username)}` : ''}
+  ID: ${esc(claim.user_id)}
+</div>
     <div>
       <div class="claim-status status-${esc(statusClass)}">${statusText}</div>
       <span class="toggle-icon">▼</span>

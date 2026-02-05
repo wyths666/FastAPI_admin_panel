@@ -8,8 +8,6 @@ import httpx
 from fastapi.responses import StreamingResponse
 from bson import ObjectId
 from bson.errors import InvalidId
-import tempfile
-import os
 import mimetypes
 from fastapi import HTTPException
 from bot.templates.user import reg as treg
@@ -26,7 +24,6 @@ router = APIRouter(prefix="/support", tags=["support"])
 templates = Jinja2Templates(directory="api/templates")
 
 
-# Словарь состояний с русскими названиями
 STATE_TRANSLATIONS = {
     "RegState:waiting_for_code": "⏳ Ожидание кода",
     "RegState:waiting_for_screenshot": "📸 Ожидание скриншота",
@@ -37,7 +34,6 @@ STATE_TRANSLATIONS = {
     "SupportState:waiting_for_message": "💬 Ожидание сообщения поддержки"
 }
 
-# Сообщения для каждого состояния (как в боте)
 STATE_MESSAGES = {
     "RegState:waiting_for_code": "👋 Привет! Это бот компании Pure. Введите секретный код, указанный на голограмме.",
     "RegState:waiting_for_screenshot": treg.screenshot_request_text,
@@ -92,24 +88,54 @@ def translate_state_value(key: str, value: any) -> str:
 
 
 @router.get("/", response_class=HTMLResponse)
-async def support_dashboard(request: Request, resolved: bool = False, admin=Depends(get_current_admin)):
+async def support_dashboard(
+    request: Request,
+    resolved: bool = False,
+    search: Optional[str] = None,
+    admin=Depends(get_current_admin)
+):
     """Главная страница техподдержки со списком сессий"""
     if not admin:
         return RedirectResponse("/auth/login")
 
-    # Базовый запрос
     query = {"resolved": resolved}
 
-    # Получаем ВСЕ сессии без пагинации
-    sessions = await SupportSession.find(query).sort("-created_at").to_list()
+    sessions = []
 
-    # Получаем общее количество
+    #  ПОИСК
+    if search:
+        search = search.strip()
+
+        # --- Поиск по ID ---
+        if not sessions and search.isdigit():
+            tg_id = int(search)
+
+            sessions = await SupportSession.find({
+                "resolved": resolved,
+                "user_id": tg_id
+            }).sort("-created_at").to_list()
+
+        # --- Поиск по username ---
+        if not sessions:
+            users = await User.find(
+                {"username": {"$regex": search, "$options": "i"}}
+            ).to_list()
+
+            user_ids = [u.tg_id for u in users]
+
+            if user_ids:
+                sessions = await SupportSession.find({
+                    "resolved": resolved,
+                    "user_id": {"$in": user_ids}
+                }).sort("-created_at").to_list()
+
+    else:
+        sessions = await SupportSession.find(query).sort("-created_at").to_list()
+
     total_sessions = len(sessions)
 
-    # Собираем ID пользователей для запроса
     user_ids = [session.user_id for session in sessions]
 
-    # Получаем информацию о пользователях
     users = await User.find({"tg_id": {"$in": user_ids}}).to_list()
     users_map = {user.tg_id: user for user in users}
 
@@ -128,13 +154,11 @@ async def support_dashboard(request: Request, resolved: bool = False, admin=Depe
         "original_state": "Исходное состояние",
         "original_data": "Исходные данные"
     }
-    # Форматируем данные для шаблона
     sessions_with_users = []
     for session in sessions:
         session_dict = session.dict()
         session_dict["id"] = str(session.id)
 
-        # Получаем данные пользователя
         user = users_map.get(session.user_id)
         if user:
             session_dict["username"] = user.username or f"user_{user.tg_id}"
@@ -143,14 +167,12 @@ async def support_dashboard(request: Request, resolved: bool = False, admin=Depe
             session_dict["banned"] = user.banned
             session_dict["user_created_at"] = user.created_at
         else:
-            # Если пользователь не найден в базе
             session_dict["username"] = f"user_{session.user_id}"
             session_dict["first_name"] = None
             session_dict["last_name"] = None
             session_dict["banned"] = False
             session_dict["user_created_at"] = None
 
-        # Форматируем state для отображения
         if session.state:
             session_dict["state_display"] = STATE_TRANSLATIONS.get(
                 session.state,
@@ -186,6 +208,7 @@ async def support_dashboard(request: Request, resolved: bool = False, admin=Depe
     return templates.TemplateResponse(
         "support.html",
         {
+            "search": search,
             "request": request,
             "sessions": sessions_with_users,
             "active_tab": "resolved" if resolved else "active",
@@ -221,12 +244,10 @@ async def support_session_detail(request: Request, session_id: str):
     if not session:
         return RedirectResponse("/support/")
 
-    # Получаем сообщения сессии
     messages = await SupportMessage.find(
         {"session_id": session.id}
     ).sort("timestamp").to_list()
 
-    # Словарь для перевода ключей state_data
     STATE_DATA_TRANSLATIONS = {
         "claim_id": "ID заявки",
         "entered_code": "Введенный код",
@@ -242,11 +263,9 @@ async def support_session_detail(request: Request, session_id: str):
         "original_data": "Исходные данные"
     }
 
-    # Форматируем данные для шаблона
     session_data = session.dict()
     session_data["id"] = str(session.id)
 
-    # Переводим состояние
     if session_data["state"]:
         session_data["state_display"] = STATE_TRANSLATIONS.get(
             session_data["state"],
@@ -255,15 +274,11 @@ async def support_session_detail(request: Request, session_id: str):
     else:
         session_data["state_display"] = "Не указано"
 
-    # Переводим предыдущее состояние если есть
-
     if session_data.get("previous_state"):
         session_data["previous_state_display"] = STATE_TRANSLATIONS.get(
             session_data["previous_state"],
             session_data["previous_state"].replace('_', ' ').title()
         )
-
-    # Форматируем state_data с переводами
 
     if session_data.get("state_data"):
         translated_state_data = {}
@@ -310,7 +325,6 @@ async def send_text_message(
 ):
     """Отправка текстового сообщения пользователю через бота"""
     try:
-        # Получаем сессию поддержки
         session = await SupportSession.get(session_id)
         if not session:
             raise HTTPException(status_code=404, detail="Сессия не найдена")
@@ -318,7 +332,6 @@ async def send_text_message(
         if session.resolved:
             raise HTTPException(status_code=400, detail="Сессия уже закрыта")
 
-        # Получаем информацию о пользователе
         user = await User.find_one({"tg_id": session.user_id})
         if not user:
             raise HTTPException(status_code=404, detail="Пользователь не найден")
@@ -331,7 +344,6 @@ async def send_text_message(
         if not text:
             raise HTTPException(status_code=400, detail="Сообщение не может быть пустым")
 
-        # Отправляем текстовое сообщение
         try:
             await bot.send_message(
                 chat_id=session.user_id,
@@ -342,7 +354,6 @@ async def send_text_message(
             logger.error(f"❌ Ошибка отправки текста: {str(e)}")
             raise HTTPException(status_code=500, detail=f"Ошибка отправки текста: {str(e)}")
 
-        # Сохраняем сообщение в базу - ВАЖНО: is_bot=True для сообщений от админа
         support_message = SupportMessage(
             session_id=session.id,
             user_id=session.user_id,
@@ -471,12 +482,10 @@ async def send_support_file(
 async def get_support_photo(session_id: str, photo_file_id: str):
     """Получение фото из чата поддержки"""
     try:
-        # Проверяем существование сессии
         session = await SupportSession.get(session_id)
         if not session:
             raise HTTPException(status_code=404, detail="Сессия не найдена")
 
-        # Проверяем существование сообщения с фото
         message = await SupportMessage.find_one({
             "session_id": session.id,
             "photo_file_id": photo_file_id,
@@ -486,12 +495,10 @@ async def get_support_photo(session_id: str, photo_file_id: str):
         if not message:
             raise HTTPException(status_code=404, detail="Фото не найдено")
 
-        # Получаем файл от Telegram
         try:
             file = await bot.get_file(photo_file_id)
             file_url = f"https://api.telegram.org/file/bot{bot.token}/{file.file_path}"
 
-            # Перенаправляем на файл Telegram
             return RedirectResponse(file_url)
 
         except Exception as e:
@@ -514,7 +521,6 @@ async def download_support_document(
 ):
     """Скачивание документа из чата поддержки (Streaming, безопасно, как в download_chat_file)"""
     try:
-        # 1. Валидация и получение сессии
         try:
             session_oid = ObjectId(session_id)
         except (InvalidId, TypeError):
@@ -524,7 +530,6 @@ async def download_support_document(
         if not session:
             raise HTTPException(status_code=404, detail="Сессия не найдена")
 
-        # 2. Получаем сообщение с документом
         message = await SupportMessage.find_one({
             "session_id": session_oid,
             "document_file_id": document_file_id,
@@ -533,7 +538,6 @@ async def download_support_document(
         if not message:
             raise HTTPException(status_code=404, detail="Документ не найден")
 
-        # 3. Получаем file_info от Telegram
         try:
             file_info = await bot.get_file(document_file_id)
         except Exception as e:
@@ -545,17 +549,14 @@ async def download_support_document(
 
         file_url = f"https://api.telegram.org/file/bot{bot.token}/{file_info.file_path}"
 
-        # 4. Скачиваем через httpx (асинхронно + streaming)
         async with httpx.AsyncClient(timeout=30.0) as client:
             resp = await client.get(file_url)
             if resp.status_code != 200:
                 logger.error(f"HTTP {resp.status_code} при скачивании {file_url}")
                 raise HTTPException(status_code=502, detail="Не удалось загрузить файл с сервера Telegram")
 
-            # 5. Определяем имя файла
             filename = message.document_name or "document"
 
-            # Если имя "без расширения", но известен MIME — добавим
             content_type = resp.headers.get("content-type", "application/octet-stream").split(";")[0].strip()
 
             ext_map = {
@@ -578,7 +579,6 @@ async def download_support_document(
                 "video/mp4": ".mp4",
             }
 
-            # Добавляем расширение, если его нет и мы можем определить по MIME
             ext = ext_map.get(content_type, "")
             clean_name = "".join(c if c.isalnum() or c in "._- " else "_" for c in filename).strip()
             if not clean_name:
@@ -587,14 +587,12 @@ async def download_support_document(
             if ext and not clean_name.lower().endswith(tuple(ext_map.values())):
                 clean_name += ext
 
-            # 6. Формируем заголовки
             headers = {
                 "Content-Type": content_type,
                 "Content-Disposition": f'attachment; filename="{quote(clean_name)}"',
                 "Cache-Control": "private, max-age=300",
             }
 
-            # 7. StreamingResponse (потоковая отдача — память не растёт)
             async def file_stream():
                 async for chunk in resp.aiter_bytes(65536):
                     yield chunk
@@ -615,7 +613,6 @@ async def resolve_session(
 ):
     """Закрытие обращения с отправкой уведомления пользователю и сброс состояния"""
     try:
-        # Для Beanie
         session = await SupportSession.find_one(SupportSession.id == PydanticObjectId(session_id))
 
         if not session:
@@ -624,30 +621,24 @@ async def resolve_session(
         if session.resolved:
             return HTMLResponse(content=html_content, status_code=200)
 
-        # Получаем информацию о пользователе
         user = await User.find_one(User.tg_id == session.user_id)
         if not user:
             raise HTTPException(status_code=404, detail="Пользователь не найден")
 
-        # Сбрасываем состояние пользователя в FSM
         mongo_db = get_database()
         fsm_key = f"fsm:{session.user_id}:{session.user_id}"
 
-        # Получаем текущее состояние для сохранения в истории
         current_fsm_data = await mongo_db.aiogram_fsm_states.find_one({"_id": fsm_key})
 
         if current_fsm_data:
-            # Сохраняем предыдущее состояние в сессии поддержки
             session.previous_state = current_fsm_data.get("state")
             session.previous_state_data = current_fsm_data.get("data", {})
 
-            # Полностью очищаем состояние пользователя
             await mongo_db.aiogram_fsm_states.delete_one({"_id": fsm_key})
             logger.info(f"🔄 [SupportClose] Состояние пользователя {session.user_id} сброшено")
         else:
             logger.warning(f"⚠️ [SupportClose] Не найдено FSM состояние для пользователя {session.user_id}")
 
-        # Отправляем сообщение пользователю о закрытии обращения
         try:
             await bot.send_message(
                 chat_id=session.user_id,
@@ -658,7 +649,6 @@ async def resolve_session(
         except Exception as e:
             logger.error(f"❌ Ошибка отправки уведомления о закрытии: {str(e)}")
 
-        # Закрываем сессию
         session.resolved = True
         session.resolved_by_admin_id = 1
         await session.save()
@@ -681,17 +671,14 @@ async def clean_and_set_state(user_id: int, target_state: str, session_data: dic
     mongo_db = get_database()
     fsm_key = f"fsm:{user_id}:{user_id}"
 
-    # Базовые данные для нового состояния
     base_data = {
         "clean_start": True,
         "session_timestamp": datetime.now().isoformat()
     }
 
-    # Добавляем данные сессии если есть
     if session_data:
         base_data.update(session_data)
 
-    # Устанавливаем новое состояние с очищенными данными
     await mongo_db.aiogram_fsm_states.update_one(
         {"_id": fsm_key},
         {
@@ -720,7 +707,6 @@ async def rollback_session_state(
     try:
         logger.info(f"🔍 [Rollback] Начало отката сессии {session_id} для target_state={target_state}")
 
-        # Получаем сессию
         session = await SupportSession.find_one({"_id": PydanticObjectId(session_id)})
         if not session:
             raise HTTPException(status_code=404, detail="Сессия не найдена")
@@ -728,32 +714,26 @@ async def rollback_session_state(
         if session.resolved:
             return HTMLResponse(content=html_content, status_code=200)
 
-        # Получаем пользователя
         user = await User.find_one({"tg_id": session.user_id})
         if not user:
             raise HTTPException(status_code=404, detail="Пользователь не найден")
 
-        # Используем глобальную get_database()
         mongo_db = get_database()
 
-        # Получаем текущее FSM состояние пользователя из MongoDB
         fsm_key = f"fsm:{session.user_id}:{session.user_id}"
         logger.info(f"🔍 [Rollback] Поиск FSM данных по ключу: {fsm_key}")
         fsm_data = await mongo_db.aiogram_fsm_states.find_one({"_id": fsm_key})
 
-        # Данные из сессии поддержки (это snapshot на момент входа в поддержку)
         session_state = session.state
         session_data = session.state_data or {}
 
         logger.info(f"🔍 [Rollback] State из сессии: {session_state}")
         logger.info(f"🔍 [Rollback] Data из сессии: {session_data}")
 
-        # Получаем доступные для отката состояния
         available_states_dict = get_available_rollback_states_from_session(session_state)
 
         logger.info(f"🔍 [Rollback] Доступные состояния: {available_states_dict}")
 
-        # Проверяем, что целевое состояние доступно
         if target_state not in available_states_dict:
             raise HTTPException(
                 status_code=400,
@@ -762,8 +742,6 @@ async def rollback_session_state(
 
         logger.info(f"🔍 [Rollback] Целевое состояние подтверждено: {target_state}")
 
-        # Подготавливаем новые данные для целевого состояния
-        # Основные данные берем из session_data (это original_data из хендлера)
         new_fsm_data = {}
 
         if target_state == "RegState:waiting_for_code":
@@ -830,7 +808,6 @@ async def rollback_session_state(
 
         logger.info(f"🔍 [Rollback] Новые данные FSM: {new_fsm_data}")
 
-        # Обновляем FSM в MongoDB (СБРАСЫВАЕМ состояние и устанавливаем новое)
         update_result = await mongo_db.aiogram_fsm_states.update_one(
             {"_id": fsm_key},
             {
@@ -844,7 +821,6 @@ async def rollback_session_state(
 
         logger.info(f"✅ [Rollback] FSM обновлен. Изменено документов: {update_result.modified_count}")
 
-        # Отправляем сообщение пользователю
         message_text = STATE_MESSAGES.get(target_state, "🔄 Состояние обновлено. Продолжайте оформление заявки.")
 
         try:
@@ -863,7 +839,6 @@ async def rollback_session_state(
         except Exception as e:
             logger.error(f"⚠️ [Rollback] Ошибка отправки сообщения: {str(e)}")
 
-        # Закрываем сессию поддержки
         session.resolved = True
         session.resolved_by_admin_id = 1
         session.previous_state = session.state
@@ -891,7 +866,6 @@ async def get_available_rollback_states_api(session_id: str):
         if not session:
             raise HTTPException(status_code=404, detail="Сессия не найдена")
 
-        # Используем состояние из сессии поддержки
         current_state = session.state
         logger.info(f"🔍 [AvailableStates] Текущее состояние из сессии: {current_state}")
 
@@ -909,7 +883,6 @@ def get_available_rollback_states_from_session(current_state: str) -> dict:
     """
     logger.info(f"🔍 [RollbackFromSession] Текущее состояние: {current_state}")
 
-    # Явное определение доступных состояний для каждого текущего состояния
     AVAILABLE_FOR_STATE = {
         # Начальные состояния
         "RegState:waiting_for_code": {
@@ -952,7 +925,6 @@ def get_available_rollback_states_from_session(current_state: str) -> dict:
 async def block_user(request: Request, session_id: str):
     """Блокировка/разблокировка пользователя из сессии поддержки"""
     try:
-        # Получаем сессию поддержки
         session = await SupportSession.find_one(SupportSession.id == PydanticObjectId(session_id))
         if not session:
             raise HTTPException(status_code=404, detail="Сессия не найдена")
@@ -960,12 +932,10 @@ async def block_user(request: Request, session_id: str):
         if session.resolved:
             return HTMLResponse(content=html_content, status_code=200)
 
-        # Получаем пользователя
         user = await User.find_one(User.tg_id == session.user_id)
         if not user:
             raise HTTPException(status_code=404, detail="Пользователь не найден")
 
-        # Определяем новое состояние
         new_banned_status = not user.banned
 
         await user.update(banned=new_banned_status)

@@ -118,26 +118,31 @@
 .filter-button {
     display: inline-flex;
     align-items: center;
+    justify-content: center;
+    gap: 6px;
+
     height: 40px;
-    line-height: 40px;
-    text-align: center;
     padding: 0 20px;
+
     border: none;
     border-radius: 4px;
     font-weight: 500;
     font-family: inherit;
+    font-size: 14px;
+
     cursor: pointer;
     width: 120px;
-    height: 40px;
-    min-height: 40px !important;
-    line-height: normal !important;
+
     box-sizing: border-box;
     background-color: #3a69e0;
     color: white;
     text-decoration: none;
+    top: 2px;
+    position: relative;
     transition: background-color 0.2s ease, transform 0.05s ease;
-    vertical-align: middle;
 }
+
+
 .filter-button:hover {
     filter: brightness(0.9);
 }
@@ -1160,7 +1165,7 @@
            box-sizing: border-box;
        ">
 
-    <button type="submit" class="filter-button" style="width: auto; min-width: 100px; white-space: nowrap;">🔍 Фильтр</button>
+    <button type="submit" class="filter-button" style="width: auto; min-width: 100px; white-space: nowrap;">Фильтр</button>
 
     {% if search %}
         <a href="/support/?resolved={{ 'true' if active_tab == 'resolved' else 'false' }}" class="filter-button" style="width: auto; min-width: 120px; white-space: nowrap; background-color: #b3b5ba;">
@@ -1181,6 +1186,9 @@
                 </a>
                 <a href="/support/?resolved=true" class="tab {% if active_tab == 'resolved' %}active{% endif %}">
                     Завершенные
+                    {% if active_tab == 'resolved' %}
+                    <span class="badge">{{ total_sessions }}</span>
+                    {% endif %}
                 </a>
             </div>
         </div>

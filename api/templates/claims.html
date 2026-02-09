@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>{% if request.query_params.get('user_id') or request.query_params.get('tg_id') %}
   {% if request.query_params.get('tg_id') %}
-    Заявки пользователя (tg{{ request.query_params.get('tg_id') }})
+    Заявки пользователя (tg<span class="tg-id">{{ request.query_params.get('tg_id') }}</span>)
   {% else %}
-    Заявки пользователя №{{ request.query_params.get('user_id') }}
+    Заявки пользователя (tg<span class="tg-id">{{ request.query_params.get('user_id') }}</span>)
   {% endif %}
 {% else %}Управление заявками{% endif %}</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🎫</text></svg>">
@@ -45,6 +45,9 @@ display: flex;
 justify-content: space-between;
 align-items: center;
 margin-bottom: 20px;
+}
+.tg-id {
+    word-break: break-all;
 }
 .btn-logout, .btn-back {
 display: inline-block;
@@ -120,19 +123,22 @@ border-radius: 4px;
 font-family: inherit;
 }
 .filter-button {
-height: 40px;
-line-height: 40px;
-text-align: center;
-padding: 0 20px;
-border: none;
-border-radius: 4px;
-font-weight: 500;
-font-family: inherit;
-cursor: pointer;
-width: 120px;
-box-sizing: border-box;
-background-color: var(--primary);
-color: white;
+    height: 40px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+
+    padding: 0 20px;
+    border: none;
+    border-radius: 4px;
+    font-weight: 500;
+    font-family: inherit;
+    cursor: pointer;
+    width: 120px;
+    box-sizing: border-box;
+    background-color: var(--primary);
+    color: white;
 }
 .filter-button:hover {
 background-color: #3a56e4;
@@ -1199,8 +1205,16 @@ value="{{ date_to or '' }}">
 </div>
 <div class="filter-group" style="min-width: 120px;">
 <label for="number">Номер:</label>
-<input type="number" id="number" name="number"
-value="{{ number or '' }}" style="width: 100%;">
+<input
+    type="number"
+    id="number"
+    name="number"
+    min="0"
+    step="1"
+    inputmode="numeric"
+    pattern="\d*"
+    oninput="this.value = this.value.replace(/[^0-9]/g, '')"
+    style="width: 100%;">
 </div>
 <div class="filter-group" style="min-width: 120px;">
 <label for="username">Username:</label>
@@ -1209,8 +1223,14 @@ value="{{ username or '' }}" style="width: 100%;">
 </div>
 <div class="filter-group" style="min-width: 150px;">
 <label for="tg_id">Telegram ID:</label>
-<input type="text" id="tg_id" name="tg_id"
-value="{{ tg_id or '' }}" placeholder="" style="width: 100%;">
+<input
+    type="text"
+    name="tg_id"
+    maxlength="19"
+    inputmode="numeric"
+    pattern="\d{1,19}"
+    oninput="this.value = this.value.replace(/[^0-9]/g, '')"
+>
 </div>
 <div class="filter-group" style="min-width: 170px;">
 <label for="status">Статус:</label>
@@ -1249,12 +1269,6 @@ value="{{ tg_id or '' }}" placeholder="" style="width: 100%;">
 <div id="no-more-claims" class="no-more-claims" style="display: none;">
   ✅ Все заявки загружены
 </div>
-
-<!-- ————————————————————————————————————————
-     JINJA-МАКРОС: HTML одной заявки
-     ———————————————————————————————————————— -->
-
-
 </div>
 
 <script>
@@ -1521,13 +1535,7 @@ window.addEventListener('scroll', () => {
   }
 });
 
-// 🔹 Подключаем остальной JS (как в оригинале)
-// 👇 ВСТАВЬ СЮДА ВЕСЬ ТЕКУЩИЙ JS ИЗ ТВОЕГО ШАБЛОНА, НАЧИНАЯ С:
-// `// ————————————————————————————————————————`
-// `// Drag & Drop для чатов (как в support)`
-// `// ————————————————————————————————————————`
-// И до конца.
-// ОН УЖЕ СОВМЕСТИМ — ничего менять не нужно.
+
 
 
     const chatIntervals = {};

@@ -70,6 +70,21 @@ async def start_new_user(msg: Message, state: FSMContext):
 @router.message(Command("help"))
 async def help_save_state(msg: Message, state: FSMContext):
     user_id = msg.from_user.id
+    username = msg.from_user.username
+
+    # === Находим или создаём пользователя ===
+    user = await User.get(tg_id=user_id)
+    if not user:
+        # === Создаём нового пользователя ===
+        role = "admin" if user_id in bot_config.ADMINS else "user"
+        user = await User.create(
+            tg_id=user_id,
+            username=username,
+            role=role
+        )
+    if user.banned:
+        return
+
     active_session = await SupportSession.find(
     SupportSession.user_id == user_id,
     SupportSession.resolved == False
@@ -115,6 +130,20 @@ async def help_save_state(msg: Message, state: FSMContext):
 @router.callback_query(F.data == "send_help_text")
 async def help_save(callback: CallbackQuery, state: FSMContext):
     user_id = callback.from_user.id
+    username = callback.from_user.username
+
+    # === Находим или создаём пользователя ===
+    user = await User.get(tg_id=user_id)
+    if not user:
+        # === Создаём нового пользователя ===
+        role = "admin" if user_id in bot_config.ADMINS else "user"
+        user = await User.create(
+            tg_id=user_id,
+            username=username,
+            role=role
+        )
+    if user.banned:
+        return
     await callback.answer()
 
     active_session = await SupportSession.find(

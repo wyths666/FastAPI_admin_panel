@@ -1,3 +1,5 @@
+import re
+
 from aiogram.types import BufferedInputFile, InputFile
 from beanie import PydanticObjectId
 from fastapi import APIRouter, Request, Depends, Form, UploadFile, File
@@ -105,9 +107,8 @@ async def support_dashboard(
     #  ПОИСК
     if search:
         search = search.strip()
-
         # --- Поиск по ID ---
-        if not sessions and search.isdigit():
+        if not sessions and re.fullmatch(r"\d{1,19}", search):
             tg_id = int(search)
 
             sessions = await SupportSession.find({
@@ -117,9 +118,16 @@ async def support_dashboard(
 
         # --- Поиск по username ---
         if not sessions:
-            users = await User.find(
-                {"username": {"$regex": search, "$options": "i"}}
-            ).to_list()
+            try:
+                safe_search = re.escape(search)
+                pattern = f".*{safe_search}.*"
+
+                users = await User.find(
+                    {"username": {"$regex": pattern, "$options": "i"}}
+                ).to_list()
+            except Exception as e:
+                logger.error(f"Regex error: {e}")
+                users = []
 
             user_ids = [u.tg_id for u in users]
 
@@ -129,11 +137,11 @@ async def support_dashboard(
                     "user_id": {"$in": user_ids}
                 }).sort("-created_at").to_list()
 
+
     else:
         sessions = await SupportSession.find(query).sort("-created_at").to_list()
 
     total_sessions = len(sessions)
-
     user_ids = [session.user_id for session in sessions]
 
     users = await User.find({"tg_id": {"$in": user_ids}}).to_list()
@@ -161,13 +169,13 @@ async def support_dashboard(
 
         user = users_map.get(session.user_id)
         if user:
-            session_dict["username"] = user.username or f"user_{user.tg_id}"
+            session_dict["username"] = user.username or f""
             session_dict["first_name"] = getattr(user, 'first_name', None)
             session_dict["last_name"] = getattr(user, 'last_name', None)
             session_dict["banned"] = user.banned
             session_dict["user_created_at"] = user.created_at
         else:
-            session_dict["username"] = f"user_{session.user_id}"
+            session_dict["username"] = user.username or f""
             session_dict["first_name"] = None
             session_dict["last_name"] = None
             session_dict["banned"] = False
@@ -954,15 +962,29 @@ async def block_user(request: Request, session_id: str):
 
 @router.get("/api/sessions")
 async def get_sessions_api(resolved: bool = False):
-    """API для получения списка сессий"""
-    sessions = await SupportSession.find({"resolved": resolved}).sort("-created_at").to_list()
-    return [
-        {
+    sessions = await SupportSession.find(
+        {"resolved": resolved}
+    ).sort("-created_at").to_list()
+
+    user_ids = [session.user_id for session in sessions]
+
+    users = await User.find(
+        {"tg_id": {"$in": user_ids}}
+    ).to_list()
+
+    users_map = {user.tg_id: user for user in users}
+
+    result = []
+
+    for session in sessions:
+        user = users_map.get(session.user_id)
+
+        result.append({
             **session.dict(),
             "id": str(session.id),
-            "username": f"user_{session.user_id}"  # Заменить на реальный username
-        }
-        for session in sessions
-    ]
+            "username": user.username if user and user.username else ""
+        })
+
+    return result
 
 

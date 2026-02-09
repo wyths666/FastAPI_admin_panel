@@ -1,9 +1,9 @@
 import json
+import re
 from pathlib import Path
 from urllib.parse import quote
 from fastapi.responses import StreamingResponse
 import httpx
-from aiogram.types import BufferedInputFile
 from beanie import PydanticObjectId
 from core.logger import api_logger as logger
 from datetime import datetime, timezone
@@ -15,7 +15,6 @@ from fastapi.responses import Response, RedirectResponse
 from api.router.auth import get_current_admin
 from api.schemas.response import ClaimResponse, ChatMessageSchema, CloseChatRequest
 from fastapi import Form, UploadFile, File
-from config import cnf
 from core.bot import bot
 from db.beanie.models import Claim, UserMessage, ChatSession, User, AdminMessage
 from db.beanie.models.models import ChatMessage, KonsolPayment, SupportSession
@@ -24,11 +23,9 @@ from utils.konsol_client import konsol_client
 router = APIRouter(prefix="/claims", tags=["Claims"])
 templates = Jinja2Templates(directory="api/templates")
 
-# --- Помощь: получить пользователя по tg_id ---
 async def get_user_safe(tg_id: int) -> Optional[User]:
     try:
-        # ПРАВИЛЬНЫЙ СИНТАКСИС
-        user = await User.find_one({"tg_id": tg_id})  # ← словарь
+        user = await User.find_one({"tg_id": tg_id})
         return user
     except Exception:
         return None
@@ -95,9 +92,16 @@ async def get_claims_data(
 
     if tg_id and tg_id.strip():
         try:
-            parsed = int(tg_id.strip())
+            tg_id_clean = tg_id.strip()
+
+            if not re.fullmatch(r"\d{1,19}", tg_id_clean):
+                return [], 0
+
+            parsed = int(tg_id_clean)
+
             if resolved_user_id is not None and resolved_user_id != parsed:
                 return [], 0
+
             resolved_user_id = parsed
         except ValueError:
             return [], 0
@@ -126,7 +130,17 @@ async def get_claims_data(
 
     if number and number.strip():
         try:
-            claim_id_str = f"{int(number.strip()):06d}"
+            num_clean = number.strip()
+
+            if not num_clean.isdigit():
+                return [], 0
+
+            parsed_number = int(num_clean)
+
+            if parsed_number < 0:
+                return [], 0
+
+            claim_id_str = f"{parsed_number:06d}"
             query["claim_id"] = {"$regex": f"^{claim_id_str}$"}
         except ValueError:
             pass
@@ -271,7 +285,7 @@ async def claims_page(
         "claims": claims_data,
         "banks": banks,
         "user_id": user_id,
-        "tg_id": tg_id,          # ← пробрасываем в шаблон
+        "tg_id": tg_id,
         "username": username,
         "date_from": date_from,
         "date_to": date_to,
@@ -291,7 +305,7 @@ async def claims_page(
 @router.get("/api/claims")
 async def api_claims(
     user_id: Optional[int] = Query(None),
-    tg_id: Optional[str] = Query(None),  # ← добавлен
+    tg_id: Optional[str] = Query(None),
     username: Optional[str] = Query(None),
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
@@ -442,7 +456,7 @@ async def send_chat_message_endpoint(data: dict):
         return {"ok": True, "message_id": str(msg.id)}
 
     except HTTPException:
-        raise  # прокидываем HTTP-ошибки выше
+        raise
     except Exception as e:
         error_msg = f"Ошибка отправки сообщения: {str(e)}"
         logger.error(f"❌ [ChatSend] {error_msg}")
@@ -461,12 +475,10 @@ async def send_chat_file_endpoint(
     caption: str = Form(""),
     admin=Depends(get_current_admin)
 ):
-    # 1. Проверка заявки
     claim = await Claim.find_one({"claim_id": claim_id})
     if not claim:
         raise HTTPException(404, "Claim not found")
 
-    # 2. Проверка support-сессии
     active_support = await SupportSession.find_one(
         SupportSession.user_id == claim.user_id,
         SupportSession.resolved == False
@@ -474,7 +486,6 @@ async def send_chat_file_endpoint(
     if active_support:
         raise HTTPException(409, "У пользователя есть открытая сессия в техподдержке")
 
-    # 3. Чтение файла
     contents = await file.read()
     if len(contents) > 50 * 1024 * 1024:
         raise HTTPException(400, "Файл слишком большой (макс. 50 МБ)")
@@ -483,7 +494,6 @@ async def send_chat_file_endpoint(
     mime_type = file.content_type or mimetypes.guess_type(filename)[0] or "application/octet-stream"
     input_file = BufferedInputFile(contents, filename=filename)
 
-    # 4. Отправка в Telegram
     file_id = ""
     is_photo = False
     msg = None
@@ -520,7 +530,6 @@ async def send_chat_file_endpoint(
     )
     await chat_msg.insert()
 
-    # 6. Обновляем сессию
     session = await ChatSession.find_one({"claim_id": claim_id})
     if session:
         session.last_interaction = datetime.now()
@@ -540,14 +549,12 @@ async def get_chat_photo_url(message_id: str):
     Без скачивания, быстро и безопасно.
     """
     try:
-        # 1. Валидация и получение сообщения
         obj_id = PydanticObjectId(message_id)
         message = await ChatMessage.get(obj_id)
 
         if not message or not message.has_photo or not message.photo_file_id:
             raise HTTPException(status_code=404, detail="Photo not found in message")
 
-        # 2. Получаем file_path через Telegram API (лёгкий запрос, без скачивания!)
         try:
             file = await bot.get_file(message.photo_file_id)
         except Exception as e:
@@ -572,43 +579,35 @@ async def download_chat_file(message_id: str, admin=Depends(get_current_admin)):
     Универсальный эндпоинт для скачивания файлов (фото и документов) из ChatMessage.
     """
     try:
-        # 1. Получаем сообщение
         obj_id = PydanticObjectId(message_id)
         msg = await ChatMessage.get(obj_id)
         if not msg or not msg.photo_file_id:
             raise HTTPException(404, "Файл не найден")
 
-        # 2. Получаем file_path из Telegram
         file_info = await bot.get_file(msg.photo_file_id)
         if not file_info.file_path:
             raise HTTPException(500, "File path missing from Telegram")
 
         file_url = f"https://api.telegram.org/file/bot{bot.token}/{file_info.file_path}"
 
-        # 3. Скачиваем через httpx
         async with httpx.AsyncClient(timeout=30.0) as client:
             resp = await client.get(file_url)
             if resp.status_code != 200:
                 raise HTTPException(502, "Не удалось получить файл из Telegram")
 
-            # 4. Определяем имя файла
             filename = "file"
 
-            # Если есть сообщение, используем первую строку как имя файла
             if msg.message and msg.message.strip():
                 first_line = msg.message.strip().split('\n')[0].strip()
                 if first_line and len(first_line) <= 60:
                     filename = first_line
 
-            # Убираем недопустимые символы
             filename = "".join(c if c.isalnum() or c in "._- " else "_" for c in filename)
             if not filename.strip():
                 filename = "file"
 
-            # 5. Определяем Content-Type и расширение
             content_type = resp.headers.get("content-type", "application/octet-stream").split(";")[0].strip()
 
-            # Расширения для разных типов файлов
             ext_map = {
                 "image/jpeg": ".jpg",
                 "image/jpg": ".jpg",
@@ -632,12 +631,10 @@ async def download_chat_file(message_id: str, admin=Depends(get_current_admin)):
                 "video/quicktime": ".mov",
             }
 
-            # Добавляем расширение, если его нет в имени файла
             ext = ext_map.get(content_type, "")
             if ext and not filename.lower().endswith(tuple(ext_map.values())):
                 filename += ext
 
-            # 6. Заголовки и поток
             headers = {
                 "Content-Type": content_type,
                 "Content-Disposition": f'attachment; filename="{quote(filename)}"',
@@ -656,7 +653,6 @@ async def download_chat_file(message_id: str, admin=Depends(get_current_admin)):
         logger.error(f"❌ download_chat_file({message_id}): {e}", exc_info=True)
         raise HTTPException(500, "Внутренняя ошибка сервера")
 
-# --- 5. API: изменить статус заявки ---
 @router.post("/status/update")
 async def update_claim_status(data: dict):
     try:
@@ -667,7 +663,6 @@ async def update_claim_status(data: dict):
         if not claim_id or not new_status:
             raise HTTPException(status_code=400, detail="claim_id and new_status required")
 
-        # Находим заявку
         claim = await Claim.find_one({"claim_id": claim_id})
         if not claim:
             raise HTTPException(status_code=404, detail="Claim not found")
@@ -676,9 +671,7 @@ async def update_claim_status(data: dict):
         if new_status not in valid_statuses:
             raise HTTPException(status_code=400, detail="Invalid status")
 
-        # === ОСОБАЯ ЛОГИКА ДЛЯ СТАТУСА PENDING ===
         if new_status == "pending":
-            # Проверяем, не был ли уже создан платеж
             if claim.konsol_payment_id:
                 return {
                     "ok": False,
@@ -686,7 +679,6 @@ async def update_claim_status(data: dict):
                     "claim_id": claim_id
                 }
 
-            # Выполняем логику подтверждения заявки
             success = await process_claim_approval_admin(claim)
             if not success:
                 return {
@@ -696,15 +688,13 @@ async def update_claim_status(data: dict):
                 }
 
         else:
-            # Для других статусов просто обновляем
             await claim.update(
                 claim_status=new_status,
                 process_status="complete" if new_status != "pending" else "process"
             )
 
-        # Закрываем чат-сессию если нужно
         if close_chat:
-            await close_chat_session(claim_id, claim.user_id)  # Передаем user_id
+            await close_chat_session(claim_id, claim.user_id)
 
         logger.info(f"✅ Статус заявки {claim_id} обновлен на {new_status}")
 
@@ -725,13 +715,11 @@ async def process_claim_approval_admin(claim: Claim):
     try:
         logger.info(f"🔍 [ADMIN] Подтверждение заявки: {claim.claim_id}")
 
-        # === Получаем пользователя ===
         user = await User.get(tg_id=claim.user_id)
         if not user:
             logger.error(f"❌ [ADMIN] Пользователь не найден: {claim.user_id}")
             return False
 
-        # === 1. Создаём НОВОГО contract_id в Konsol API ===
         contractor_phone = claim.phone if claim.phone else "+79000" + claim.claim_id
 
         contractor_data = {
@@ -745,7 +733,6 @@ async def process_claim_approval_admin(claim: Claim):
             contractor_result = await konsol_client.create_contractor(contractor_data)
             contractor_id = contractor_result["id"]
 
-            # Сохраняем contractor_id в заявке
             await claim.update(contractor_id=contractor_id)
             logger.info(f"✅ [ADMIN] Contract_id создан: {contractor_id}")
 
@@ -753,7 +740,6 @@ async def process_claim_approval_admin(claim: Claim):
             logger.error(f"❌ [ADMIN] Ошибка создания contract_id: {e}")
             return False
 
-        # === 2. Подготавливаем данные для платежа ===
         bank_details_kind = "fps" if claim.phone else "card"
 
         if bank_details_kind == "fps":
@@ -783,7 +769,6 @@ async def process_claim_approval_admin(claim: Claim):
             "amount": str(claim.amount)
         }
 
-        # === 3. Создаём платёж в Konsol API ===
         try:
             result = await konsol_client.create_payment(payment_data)
             payment_id = result.get("id")
@@ -791,7 +776,6 @@ async def process_claim_approval_admin(claim: Claim):
 
             logger.info(f"✅ [ADMIN] Платёж создан: {payment_id}")
 
-            # === 4. Сохраняем платёж в БД ===
             await KonsolPayment.create(
                 konsol_id=payment_id,
                 contractor_id=contractor_id,
@@ -807,15 +791,13 @@ async def process_claim_approval_admin(claim: Claim):
                 user_id=claim.user_id
             )
 
-            # === 5. Обновляем статусы в заявке ===
             await claim.update(
-                claim_status="pending",  # оставляем как pending для админ-панели
+                claim_status="pending",
                 process_status="complete",
                 konsol_payment_id=payment_id,
                 updated_at=datetime.utcnow()
             )
 
-            # === 6. Уведомляем пользователя ===
             try:
                 await bot.send_message(
                     chat_id=claim.user_id,
@@ -842,17 +824,14 @@ async def process_claim_approval_admin(claim: Claim):
 async def close_chat_session_api(request: CloseChatRequest):
     """API endpoint для закрытия чат-сессии"""
     try:
-        # Получаем user_id из базы данных по claim_id
         from db.beanie.models.models import ChatSession, Claim
 
-        # Находим заявку чтобы получить user_id
         claim = await Claim.find_one({"claim_id": request.claim_id})
         if not claim:
             raise HTTPException(status_code=404, detail="Заявка не найдена")
 
         user_id = claim.user_id
 
-        # Закрываем чат-сессию
         await close_chat_session(request.claim_id, user_id)
         return {"success": True, "message": "Чат успешно завершен"}
 
@@ -862,14 +841,12 @@ async def close_chat_session_api(request: CloseChatRequest):
 async def close_chat_session(claim_id: str, user_id: int = None):
     """Закрытие чат-сессии для заявки с отправкой уведомления пользователю"""
     try:
-        # Находим активную сессию
         chat_session = await ChatSession.find_one({
             "claim_id": claim_id,
             "is_active": True
         })
 
         if chat_session:
-            # Закрываем сессию
             chat_session.is_active = False
             chat_session.has_unanswered = False
             chat_session.closed_at = datetime.now()
@@ -877,7 +854,6 @@ async def close_chat_session(claim_id: str, user_id: int = None):
 
             logger.info(f"✅ Чат-сессия закрыта для заявки {claim_id}")
 
-            # Отправляем уведомление пользователю в Telegram
             if user_id:
                 try:
                     await bot.send_message(
@@ -935,11 +911,9 @@ async def get_claim_photo(
     photo_file_id = claim.photo_file_ids[photo_index]
 
     try:
-        # Получаем файл из Telegram
         file = await bot.get_file(photo_file_id)
         file_path = file.file_path
 
-        # Скачиваем файл
         file_bytes = await bot.download_file(file_path)
 
         return Response(
@@ -961,7 +935,6 @@ async def ban_user(data: dict):
         if not user_id:
             return {"ok": False, "error": "user_id required"}
 
-        # Находим пользователя
         user = await User.get(tg_id=user_id)
         if not user:
             return {"ok": False, "error": "Пользователь не найден"}
@@ -969,7 +942,6 @@ async def ban_user(data: dict):
         if user.banned:
             return {"ok": False, "error": "Пользователь уже заблокирован"}
 
-        # Блокируем пользователя
         await user.update(banned=True)
 
         logger.warning(f"🚫 Пользователь заблокирован {user_id} через админ-панель")
@@ -996,7 +968,6 @@ async def unban_user(data: dict):
         if not user_id:
             return {"ok": False, "error": "user_id required"}
 
-        # Находим пользователя
         user = await User.get(tg_id=user_id)
         if not user:
             return {"ok": False, "error": "Пользователь не найден"}
@@ -1004,7 +975,6 @@ async def unban_user(data: dict):
         if not user.banned:
             return {"ok": False, "error": "Пользователь не заблокирован"}
 
-        # Разблокируем пользователя
         await user.update(banned=False)
 
         logger.warning(f"✅ Пользователь разблокирован {user_id} через админ-панель")

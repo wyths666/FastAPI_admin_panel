@@ -11,6 +11,41 @@
 - MongoDB — отдельная база данных для каждого бота
 - Каждый бот изолирован и работает со своей MongoDB.
 
+### 🗂 Структура проекта:
+
+```commandline
+pure_bot_351/
+│
+├── bot/                 # Telegram-бот (лотерея)
+│   ├── handlers/
+│   ├── filters/
+│   └── templates/
+│
+├── bot1/                # Telegram-бот (выкупы)
+│   ├── handlers/
+│   ├── filters/
+│   └── templates/
+│
+├── api/                 # Web admin (FastAPI)
+│   ├── router/
+│   ├── schemas/
+│   └── templates/
+│
+├── db/
+│   ├── beanie/          # Mongo (бот лотерея)
+│   ├── beanie_bot1/     # Mongo (бот выкупы)
+│   └── mysql/
+│
+├── core/                # Общая логика (mongo, logger, инициализация)
+├── utils/               # Вспомогательные утилиты
+│
+├── compose.yml
+├── requirements.txt
+└── README.md
+
+```
+
+
 ### ⚙️ Основной функционал
 #### 🤖 Telegram-боты
 - Регистрация пользователей и сбор реквизитов

@@ -34,27 +34,12 @@ def build_pagination_url(page: int):
 templates.env.globals["build_pagination_url"] = build_pagination_url
 
 
-# In-memory кэш
-chat_cache = {}
-CACHE_TTL = 15
-
-
-def get_cache_key(username, user_id, date_from, date_to, has_unread, page):
-    """Создает уникальный ключ кэша на основе параметров"""
-    params_str = f"{username}_{user_id}_{date_from}_{date_to}_{has_unread}_{page}"
-    return hashlib.md5(params_str.encode()).hexdigest()
-
-
-
-
 
 @router.get("/chats/", response_class=HTMLResponse)
 async def chats_page(
         request: Request,
         username: Optional[str] = Query(None),
         user_id: Union[str, None] = Query(None),
-        date_from: Optional[str] = Query(None),
-        date_to: Optional[str] = Query(None),
         has_unread: Optional[bool] = Query(None),
         page: int = Query(1, ge=1),
         admin=Depends(get_current_admin)
@@ -62,197 +47,69 @@ async def chats_page(
     if not admin:
         return RedirectResponse("/auth/login")
 
-    # Создаем ключ кэша
-    cache_key = get_cache_key(username, user_id, date_from, date_to, has_unread, page)
 
-    # Проверяем кэш
-    current_time = time.time()
-    if cache_key in chat_cache:
-        cached_data, timestamp = chat_cache[cache_key]
-        if current_time - timestamp < CACHE_TTL:
-            logger.info(f"✅ Используем кэш для страницы {page}")
-            return templates.TemplateResponse("chats.html", {
-                "request": request,
-                "chats": cached_data["chats"],
-                "username": username,
-                "user_id": cached_data["user_id"],
-                "date_from": date_from,
-                "date_to": date_to,
-                "has_unread": has_unread,
-                "current_page": page,
-                "total_pages": cached_data["total_pages"],
-                "total_chats": cached_data["total_chats"],
-                "start_chat": cached_data["start_chat"],
-                "end_chat": cached_data["end_chat"]
-            })
-
-    # Если кэша нет или устарел, загружаем данные
     db = get_database_bot1()
-    messages_collection = db["messages"]
+    dialogs = db["chat_dialogs"]
 
     page_size = 50
     skip = (page - 1) * page_size
 
-    # === 1. Фильтр по user_id (строка -> int) ===
-    filter_user_id: Optional[int] = None
-    if user_id is not None and user_id.strip() != "":
+    # === ФИЛЬТРЫ ===
+    query = {}
+
+    if user_id:
         try:
-            filter_user_id = int(user_id.strip())
-        except (ValueError, TypeError):
-            pass  # игнорируем некорректный ID
+            query["user_id"] = int(user_id)
+        except:
+            pass
 
-    # === 2. Формируем базовый $match для messages ===
-    match_filters = {}
+    if username:
+        query["username"] = {"$regex": username.strip(), "$options": "i"}
 
-    if filter_user_id is not None:
-        match_filters["from_id"] = filter_user_id
+    if has_unread:
+        query["unread_count"] = {"$gt": 0}
 
-    # Дата
-    if date_from or date_to:
-        date_filter = {}
-        if date_from:
-            try:
-                date_filter["$gte"] = datetime.fromisoformat(date_from).replace(tzinfo=timezone.utc)
-            except ValueError:
-                pass
-        if date_to:
-            try:
-                dt_to = datetime.fromisoformat(date_to).replace(hour=23, minute=59, second=59, tzinfo=timezone.utc)
-                date_filter["$lte"] = dt_to
-            except ValueError:
-                pass
-        if date_filter:
-            match_filters["date"] = date_filter
-
-    # === 3. Построение агрегационного pipeline с $lookup ===
-    pipeline = []
-
-    # Базовый фильтр по messages (user_id, дата)
-    if match_filters:
-        pipeline.append({"$match": match_filters})
-
-    # Джойним users
-    pipeline.append({
-        "$lookup": {
-            "from": "users",
-            "localField": "from_id",
-            "foreignField": "id",
-            "as": "user_doc"
-        }
-    })
-    pipeline.append({"$unwind": {"path": "$user_doc", "preserveNullAndEmptyArrays": True}})
-
-    # Ранний фильтр по username — до группировки!
-    if username and username.strip():
-        pipeline.append({
-            "$match": {
-                "user_doc.username": {"$regex": username.strip(), "$options": "i"}
-            }
-        })
-
-    # Группируем по пользователю
-    pipeline.extend([
-        {"$group": {
-            "_id": "$from_id",
-            "last_message_date": {"$max": "$date"},
-            "message_count": {"$sum": 1},
-            "unread_count": {
-                "$sum": {
-                    "$cond": [
-                        {
-                            "$and": [
-                                {"$eq": ["$checked", "0"]},
-                                {"$eq": ["$from_operator", "0"]}
-                            ]
-                        },
-                        1,
-                        0
-                    ]
-                }
-            },
-            # Сохраняем данные пользователя — экономим 1 запрос
-            "username": {"$first": {"$ifNull": ["$user_doc.username", {"$concat": ["id", {"$toString": "$from_id"}]}]}},
-            "full_name": {"$first": {"$ifNull": ["$user_doc.full_name", "Неизвестный пользователь"]}},
-            "banned": {"$first": {"$ifNull": ["$user_doc.banned", "0"]}},
-        }},
-        {"$sort": {"last_message_date": -1}}
-    ])
-
-    # Фильтр по непрочитанным — после группировки
-    if has_unread is True:
-        pipeline.append({"$match": {"unread_count": {"$gt": 0}}})
-
-    # Подсчёт total
-    count_pipeline = pipeline + [{"$count": "total"}]
-    total_chats_result = await messages_collection.aggregate(count_pipeline).to_list(length=None)
-    total_chats = total_chats_result[0]["total"] if total_chats_result else 0
+    # === ПОДСЧЁТ ===
+    total_chats = await dialogs.count_documents(query)
     total_pages = (total_chats + page_size - 1) // page_size
-
-    # Коррекция текущей страницы
     page = max(1, min(page, total_pages or 1))
     skip = (page - 1) * page_size
 
-    # Пагинация
-    pipeline.extend([
-        {"$skip": skip},
-        {"$limit": page_size}
-    ])
+    # === ОСНОВНОЙ ЗАПРОС (БЫСТРЫЙ) ===
+    chats = await dialogs.find(query)\
+        .sort("last_message_date", -1)\
+        .skip(skip)\
+        .limit(page_size)\
+        .to_list(length=None)
 
-    # Выполнение
-    chats_aggregation = await messages_collection.aggregate(pipeline).to_list(length=None)
-
-    # === 4. Формирование данных ===
+    # === ФОРМАТ ДЛЯ ШАБЛОНА ===
     chats_data = []
-    for chat in chats_aggregation:
-        # Последнее сообщение для превью
-        last_message = await messages_collection.find_one(
-            {"from_id": chat["_id"]},
-            sort=[("date", -1)]
-        )
-
-        last_message_text = ""
-        has_photo = False
-        if last_message:
-            msg_obj = last_message.get("message_object", "")
-            last_message_text = (msg_obj[:100] + "..." if len(msg_obj) > 100 else msg_obj) or "(без текста)"
-            has_photo = last_message.get("file_type") == "photo"
+    for chat in chats:
+        text = chat.get("last_message_text", "") or ""
+        preview = (text[:100] + "..." if len(text) > 100 else text) or "(без текста)"
 
         chats_data.append({
-            "user_id": chat["_id"],
-            "username": chat["username"],
-            "full_name": chat["full_name"],
-            "banned": chat["banned"],
-            "last_message_date": chat["last_message_date"],
-            "message_count": chat["message_count"],
-            "unread_count": chat["unread_count"],
-            "last_message_preview": last_message_text,
-            "has_photo": has_photo
+            "user_id": chat["user_id"],
+            "username": chat.get("username", ""),
+            "full_name": chat.get("full_name", ""),
+            "banned": chat.get("banned", "0"),
+            "last_message_date": chat.get("last_message_date"),
+            "message_count": chat.get("message_count", 0),
+            "unread_count": chat.get("unread_count", 0),
+            "last_message_preview": preview,
+            "has_photo": chat.get("last_message_type") == "photo"
         })
 
-    # Диапазон отображения
     start_chat = skip + 1 if total_chats > 0 else 0
     end_chat = min(skip + len(chats_data), total_chats)
-
-    # Сохраняем в кэш
-    cache_data = {
-        "chats": chats_data,
-        "user_id": filter_user_id,
-        "total_pages": total_pages,
-        "total_chats": total_chats,
-        "start_chat": start_chat,
-        "end_chat": end_chat
-    }
-    chat_cache[cache_key] = (cache_data, current_time)
-
-    logger.info(f"✅ Данные закэшированы для страницы {page}")
 
     return templates.TemplateResponse("chats.html", {
         "request": request,
         "chats": chats_data,
         "username": username,
-        "user_id": filter_user_id,
-        "date_from": date_from,
-        "date_to": date_to,
+        "user_id": user_id,
+        "date_from": None,
+        "date_to": None,
         "has_unread": has_unread,
         "current_page": page,
         "total_pages": total_pages,
@@ -260,6 +117,7 @@ async def chats_page(
         "start_chat": start_chat,
         "end_chat": end_chat
     })
+
 
 
 @router.get("/chats/history/")
@@ -300,7 +158,10 @@ async def get_chat_history(
                 "$set": {"checked": "1"}
             }
         )
-
+        await db.chat_dialogs.update_one(
+            {"user_id": user_id},
+            {"$set": {"unread_count": 0}}
+        )
 
     # 3. Преобразуем в нужный формат
     messages_data = []
@@ -556,7 +417,24 @@ async def send_operator_message(
         }
 
         await messages_collection.insert_one(message_data)
-
+        await db.chat_dialogs.update_one(
+            {"user_id": user_id},
+            {
+                "$set": {
+                    "last_message_text": message_text[:200],
+                    "last_message_date": datetime.now(timezone.utc),
+                    "last_message_type": "text",
+                    "banned": user.get("banned", "0"),
+                    "username": user.get("username", ""),
+                    "full_name": user.get("full_name", ""),
+                },
+                "$inc": {
+                    "message_count": 1,
+                    "unread_count": 0
+                }
+            },
+            upsert=True
+        )
         return {
             "ok": True,
             "message_id": next_id,
@@ -776,23 +654,21 @@ async def delete_chat(
 
         db = get_database_bot1()
         messages_collection = db["messages"]
+        dialogs_collection = db["chat_dialogs"]
 
-        result = await messages_collection.delete_many({"from_id": user_id})
+        # --- 1. Удаляем все сообщения ---
+        msg_result = await messages_collection.delete_many({"from_id": user_id})
 
-        await messages_collection.delete_many({
-            "$or": [
-                {"from_id": user_id},
-                {"to_id": user_id}
-            ]
-        })
-
-        deleted_count = result.deleted_count
+        # --- 2. Удаляем summary чата ---
+        dialog_result = await dialogs_collection.delete_one({"user_id": user_id})
 
         return JSONResponse({
             "ok": True,
-            "message": f"Чат с пользователем {user_id} удален. Удалено сообщений: {deleted_count}"
+            "message": f"Чат с пользователем {user_id} удалён",
+            "deleted_messages": msg_result.deleted_count,
+            "dialog_removed": dialog_result.deleted_count > 0
         })
 
     except Exception as e:
-        logger.error(f"Ошибка удаления чата: {e}")
+        logger.error(f"❌ Ошибка удаления чата: {e}", exc_info=True)
         return JSONResponse({"ok": False, "error": str(e)})

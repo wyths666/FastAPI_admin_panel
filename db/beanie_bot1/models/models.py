@@ -68,6 +68,31 @@ class Messages(Document):
         ]
 
 
+
+
+class ChatDialog(Document):
+    user_id: int
+    username: str = ""
+    full_name: str = ""
+    banned: str = "0"
+
+    last_message_text: str = ""
+    last_message_date: datetime = Field(default_factory=datetime.utcnow)
+    last_message_type: str = "text"
+
+    unread_count: int = 0
+    message_count: int = 0
+
+    class Settings:
+        name = "chat_dialogs"
+        indexes = [
+            IndexModel([("user_id", ASCENDING)], unique=True),
+            IndexModel([("last_message_date", DESCENDING)]),
+            IndexModel([("username", ASCENDING)], unique=True),
+            IndexModel([("unread_count", DESCENDING)]),
+        ]
+
+
 class KonsolPayment(Document):
     """Модель для платежей konsol.pro"""
     konsol_id: Optional[str] = None

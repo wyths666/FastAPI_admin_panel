@@ -112,6 +112,7 @@ async def handle_user_message(message: Message):
             message_id=next_id
         )
 
+
         # logger.info(f"💾 Сохранено сообщение от {user_id}: {message_data['file_type']}")
 
     except Exception as e:
@@ -280,21 +281,24 @@ async def get_next_message_id() -> int:
 
 async def save_user_message(user_id: int, username: str, full_name: str,
                             message_data: dict, message_id: int):
-    """Сохраняет сообщение пользователя в MongoDB"""
+    """Сохраняет сообщение пользователя и обновляет chat_dialogs"""
 
     db = get_database_bot1()
     messages_collection = db["messages"]
     users_collection = db["users"]
+    dialogs_collection = db["chat_dialogs"]
 
-    # Сохраняем сообщение
+    now = datetime.now(timezone.utc)
+
+    # --- 1. Сохраняем сообщение ---
     message_doc = {
         "from_id": user_id,
         "message_object": message_data["message_object"],
-        "checked": "0",  # Не прочитано оператором
-        "date": datetime.now(timezone.utc),
+        "checked": "0",
+        "date": now,
         "file_id": message_data["file_id"],
         "file_type": message_data["file_type"],
-        "from_operator": "0",  # Сообщение от пользователя
+        "from_operator": "0",
         "id": message_id,
         "file_name": message_data["file_name"],
         "file_size": message_data["file_size"],
@@ -303,7 +307,7 @@ async def save_user_message(user_id: int, username: str, full_name: str,
 
     await messages_collection.insert_one(message_doc)
 
-    # Обновляем/создаем запись пользователя
+    # --- 2. Обновляем пользователя ---
     await users_collection.update_one(
         {"id": user_id},
         {
@@ -313,8 +317,26 @@ async def save_user_message(user_id: int, username: str, full_name: str,
                 "role": "user",
                 "banned": "0"
             },
-            "$setOnInsert": {
-                "id": user_id
+            "$setOnInsert": {"id": user_id}
+        },
+        upsert=True
+    )
+
+    # --- 3. ОБНОВЛЯЕМ CHAT DIALOG  ---
+    await dialogs_collection.update_one(
+        {"user_id": user_id},
+        {
+            "$set": {
+                "username": username or "",
+                "full_name": full_name or "",
+                "last_message_text": message_data["message_object"][:200],
+                "last_message_date": now,
+                "last_message_type": message_data["file_type"],
+                "banned": "0"
+            },
+            "$inc": {
+                "message_count": 1,
+                "unread_count": 1   # новое сообщение от пользователя
             }
         },
         upsert=True

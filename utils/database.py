@@ -54,10 +54,7 @@ async def init_database():
         document_models=document_models
     )
 
-    tasks = [ensure_indexes_for_model(model) for model in document_models]
-    await asyncio.gather(*tasks, return_exceptions=True)
 
-    print("✅ Проверка индексов завершена")
     _is_initialized_main = True
     print("✅ Основная база данных инициализирована")
     return database
@@ -73,8 +70,6 @@ async def init_database_bot1():
     _client_bot1 = AsyncIOMotorClient(cnf.mongo_bot1.URL)
     database = _client_bot1[cnf.mongo_bot1.NAME]
 
-    # 🔧 УДАЛЯЕМ ПРОБЛЕМНЫЕ ИНДЕКСЫ ПЕРЕД ИНИЦИАЛИЗАЦИЕЙ
-    await remove_problematic_indexes(database)
 
     await init_beanie(
         database=database,
@@ -84,7 +79,6 @@ async def init_database_bot1():
     _is_initialized_bot1 = True
     print("✅ База данных Бот-1 инициализирована")
 
-    # Проверяем загрузку данных
     from db.beanie_bot1.models import Users, Products, Messages
     users_count = await Users.count()
     products_count = await Products.count()
